@@ -72,7 +72,7 @@ function PackEntry({ c, fmt, label, dims, hint, onClick, busyFormat }) {
   )
 }
 
-function CampaignCard({ c, onUpdated }) {
+function CampaignCard({ c, onUpdated, onDeleted }) {
   const concept = c.selected_concept || {}
   // Preview preference: any finished format → cached → original presigned URL.
   const finishedAnyUrl =
@@ -254,6 +254,28 @@ function CampaignCard({ c, onUpdated }) {
     }
   }
 
+  const [deleting, setDeleting] = useState(false)
+  const handleDelete = async () => {
+    if (deleting) return
+    const label = (c.business || c.id).slice(0, 60)
+    if (!confirm(
+      `Delete campaign "${label}"?\n\n` +
+      'This removes the local record + cached files (video, Pack ' +
+      'outputs, host clip, voice preview, dubs).\n\n' +
+      'Runway-side resources (avatar id, voice id) are NOT touched ' +
+      '— they remain reusable from the Avatar Picker.'
+    )) return
+    setLocalError('')
+    setDeleting(true)
+    try {
+      await api.deleteCampaign(c.id)
+      onDeleted?.(c.id)
+    } catch (e) {
+      setLocalError(`delete: ${e}`)
+      setDeleting(false)
+    }
+  }
+
   const finishedCount = PACK_FORMATS.filter((f) => Boolean(finishedUrlFor(c, f.key))).length
 
   return (
@@ -291,6 +313,16 @@ function CampaignCard({ c, onUpdated }) {
           >
             {hasVideo ? 'video ready' : 'no video'}
           </span>
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={deleting}
+            className="text-[10px] text-zinc-500 hover:text-rose-300 px-1.5 py-0.5 disabled:opacity-50"
+            title="Local delete only — removes the campaign record + cached files. Runway-side avatars / voices are NOT touched."
+            aria-label={`delete campaign ${c.business || c.id}`}
+          >
+            {deleting ? 'deleting…' : 'delete'}
+          </button>
         </div>
       </div>
 
@@ -899,11 +931,23 @@ function CampaignCard({ c, onUpdated }) {
 
 export default function CampaignGallery({ campaigns, onRefresh }) {
   const [overrides, setOverrides] = useState({})
+  const [deletedIds, setDeletedIds] = useState(new Set())
   const handleUpdated = (updated) => {
     if (!updated?.id) return
     setOverrides((m) => ({ ...m, [updated.id]: updated }))
   }
-  const merged = (campaigns || []).map((c) => overrides[c.id] || c)
+  const handleDeleted = (id) => {
+    if (!id) return
+    setDeletedIds((s) => {
+      const next = new Set(s)
+      next.add(id)
+      return next
+    })
+    onRefresh?.()
+  }
+  const merged = (campaigns || [])
+    .filter((c) => !deletedIds.has(c.id))
+    .map((c) => overrides[c.id] || c)
 
   return (
     <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5">
@@ -922,7 +966,12 @@ export default function CampaignGallery({ campaigns, onRefresh }) {
       ) : (
         <ul className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {merged.map((c) => (
-            <CampaignCard key={c.id} c={c} onUpdated={handleUpdated} />
+            <CampaignCard
+              key={c.id}
+              c={c}
+              onUpdated={handleUpdated}
+              onDeleted={handleDeleted}
+            />
           ))}
         </ul>
       )}

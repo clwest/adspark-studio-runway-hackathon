@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 from typing import Optional
 
 import httpx
@@ -97,6 +98,63 @@ def create_campaign(
 @router.get("", response_model=CampaignList)
 def list_campaigns(store: CampaignStore = Depends(_store)) -> CampaignList:
     return CampaignList(campaigns=store.list())
+
+
+@router.delete("/{campaign_id}", response_model=dict)
+def delete_campaign(
+    campaign_id: str,
+    settings: Settings = Depends(get_settings),
+    store: CampaignStore = Depends(_store),
+) -> dict:
+    """Local delete. Removes the campaign record + every cached artefact
+    (video, Pack outputs, host clip, voice preview, per-language dubs).
+    Runway-side resources (avatar id, voice id, host avatar id) are
+    deliberately not touched — they remain reachable from the Avatar
+    Picker / account voice list. Same boundary as ``DELETE /api/characters/{id}``.
+    """
+    record = store.get(campaign_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="campaign not found")
+
+    removed_files: list[str] = []
+    data = settings.data_path
+
+    # Cached campaign video + per-format Pack outputs
+    candidates: list[Path] = [data / "videos" / f"{campaign_id}.mp4"]
+    for fmt in FORMAT_DIMS:
+        candidates.append(data / "finished" / f"{campaign_id}-finished-{fmt}.mp4")
+    # Legacy landscape filename (pre-PR-B per-format split).
+    candidates.append(data / "finished" / f"{campaign_id}-finished.mp4")
+    # Host clip
+    candidates.append(data / "host" / f"{campaign_id}.mp4")
+    # Audio: Brand Voice preview + every language slot in dubbed_audio_urls.
+    candidates.append(data / "audio" / f"{campaign_id}-voice-preview.mp3")
+    for lang in (record.dub_statuses or {}).keys():
+        candidates.append(data / "audio" / f"{campaign_id}-dub-{lang}.mp3")
+
+    for path in candidates:
+        try:
+            if path.exists():
+                path.unlink()
+                removed_files.append(path.name)
+        except OSError as exc:
+            logger.warning(
+                "delete %s: failed to remove %s: %s", campaign_id, path, exc,
+            )
+
+    if not store.delete(campaign_id):
+        # Race: record vanished between get() and delete().
+        raise HTTPException(status_code=404, detail="campaign not found")
+
+    logger.info(
+        "deleted campaign %s — removed %d cached file(s): %s",
+        campaign_id, len(removed_files), removed_files,
+    )
+    return {
+        "ok": True,
+        "id": campaign_id,
+        "removed_files": removed_files,
+    }
 
 
 @router.get("/{campaign_id}/video")

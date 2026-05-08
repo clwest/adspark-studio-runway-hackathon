@@ -59,6 +59,8 @@ export const api = {
       `/api/campaigns/${encodeURIComponent(campaignId)}/spokesperson-session/${encodeURIComponent(sessionId)}`,
       { method: 'DELETE' },
     ),
+  deleteCampaign: (campaignId) =>
+    jsonFetch(`/api/campaigns/${encodeURIComponent(campaignId)}`, { method: 'DELETE' }),
   listAvatars: () => jsonFetch('/api/runway/avatars'),
   selectAvatar: (campaignId, body) =>
     jsonFetch(

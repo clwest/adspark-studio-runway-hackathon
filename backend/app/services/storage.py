@@ -235,6 +235,24 @@ class CampaignStore:
                     return Campaign.model_validate(row)
         return None
 
+    def delete(self, campaign_id: str) -> bool:
+        """Remove the campaign record from the JSON store. Returns True
+        when a row was removed, False when no campaign matched.
+
+        Callers are responsible for cleaning up any cached files that
+        live outside this store (videos / finished / host / audio /
+        finished). Runway-side resources (avatar id, voice id, host
+        avatar id) are deliberately not touched — see the parallel
+        decision in CharacterStore.delete.
+        """
+        with _LOCK:
+            rows = self._read()
+            new_rows = [r for r in rows if r.get("id") != campaign_id]
+            if len(new_rows) == len(rows):
+                return False
+            self._write(new_rows)
+            return True
+
     def update_finish_fields(
         self,
         campaign_id: str,
