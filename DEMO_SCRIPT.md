@@ -176,3 +176,70 @@ mode adds ~12 s.
 - **Don't run the Playwright smoke during a demo session** — it'll
   pollute the gallery with `Local coffee shop` test entries.
 - **Don't push generated media** — `git status` is the truth-source.
+- **Don't explain WebRTC or Runway realtime sessions.** AdSpark uses
+  the *async* `avatar_videos` endpoint by design — it's the reliable
+  primitive that fits the existing campaign flow. Bringing up
+  realtime / WebRTC mid-demo invites questions about a feature we
+  intentionally didn't build.
+- **Don't claim Avatar Host Clip "talks back" to the user.** It's a
+  scripted spokesperson clip, not a chat session. Pitch it as a
+  reusable presenter, not a Q&A bot.
+
+---
+
+## Path D — Live Avatar Host Demo (~3 min, real credits)
+
+Use this when you want to highlight the Runway Avatar capability.
+Builds on a saved campaign — either one you already have in the gallery
+or one created via Path B beforehand.
+
+Backend stays in real mode. Mode banner readiness chip should read
+**`demo ready · concepts mocked`** (emerald). The campaign's
+*Brand Spokesperson · Runway Avatar* subsection is visible on every
+saved card.
+
+| t | Action | What the audience sees |
+|---|---|---|
+| 0:00 | Scroll to a saved campaign in the gallery | Concept title, cached video, Campaign Pack pills |
+| 0:05 | Narrate: "AdSpark turns this campaign image into a reusable AI brand spokesperson via Runway's Avatars endpoint." | Mode banner + saved card |
+| 0:15 | Click **Create Brand Spokesperson** | Button shows `Creating Brand Spokesperson…`; ~30–45 s wait |
+| 0:50 | (likely path) status flips to **failed** with "Runway rejected the reference image — typically because it does not contain a recognisable face." | Honest fallback messaging on screen |
+| 0:55 | Narrate: "The campaign hero shot doesn't have a face, so we'll use our brand stock portrait instead." | Stay calm — this is the demo story |
+| 1:00 | Click **Retry with stock portrait** | ~30–45 s wait |
+| 1:35 | Avatar processed → status `ready`, thumbnail + avatar id appear next to the source label `stock portrait` | Visible Runway Avatar identity |
+| 1:40 | Narrate: "Now we have a reusable brand spokesperson tied to this campaign." | |
+| 1:50 | Click **Present Campaign** | `Recording Host Clip…`; ~10 s wait |
+| 2:05 | Inline `<video>` plays the spokesperson speaking the scripted pitch | "Meet [Business]. [Hook]. [Caption]. [CTA]." |
+| 2:30 | Optional: open `/api/campaigns/{id}/host-video` in a new tab | Direct video URL streams the same MP4 |
+
+**Total credit spend: 1 avatar create (succeeded) + 1 avatar_video.**
+~10–15 credits all-in — well under 0.05% of the 50k pool.
+
+If you happen to be on a campaign whose reference image already has a
+face (e.g., the same campaign image generated earlier was a portrait
+shot), Phase 1 will go straight to `ready` without the failure step.
+Either path tells the story.
+
+### Fallback if Phase 2 stalls
+
+If `Present Campaign` is taking longer than 60 s mid-demo:
+- Cancel the recording, switch the backend to mock mode (Path C
+  technique), reload, and run Path D from the same campaign — Phase 2
+  in mock returns a placeholder MP4 in <2 s and the same UI works.
+- The phase split means the avatar stays cached on the campaign record
+  even after switching modes — the UI just labels new mock clips with
+  a `mock placeholder` tag.
+
+### What Path D demonstrates
+
+- Runway is the *only* third-party Adspark uses, end-to-end:
+  reference image (`gen4_image_turbo`) → ad video (`gen4.5` or
+  `gen4_turbo`) → Brand Spokesperson Avatar (`/v1/avatars`) →
+  Avatar Host Clip (`/v1/avatar_videos`).
+- The avatar is **persistent** on the campaign record — judges can see
+  the avatar id, voice preset, and image-source label staying put
+  across multiple host-clip generations.
+- The host clip is **cached locally** the same way the cached ad
+  video is — saved campaigns survive Runway's presigned URL expiry.
+- The mock fallback **mirrors both phases** so the same UX is
+  demoable without any spend.

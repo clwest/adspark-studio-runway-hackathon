@@ -1,21 +1,29 @@
 # AdSpark Studio
 
-> **Type a business idea, get a Runway-powered cinematic ad — concept,
-> reference image, video, and ready-to-post copy — in under three minutes.**
+> **Type a business idea, get a Runway-powered cinematic ad and a
+> Runway Avatar spokesperson that presents it — concept, reference
+> image, video, platform Campaign Pack, and an Avatar Host Clip —
+> in under five minutes.**
 
 A RunwayML hackathon entry. AdSpark Studio walks the user from a one-line
-business description to a full Campaign Pack: a 16:9 landscape spot, a
-9:16 Reels/TikTok cut, and a 1:1 square — every asset cached locally so a
+business description to a full Campaign Pack — a 16:9 landscape spot, a
+9:16 Reels/TikTok cut, and a 1:1 square — and then turns the same
+campaign into a reusable AI **Brand Spokesperson** with a short
+**Avatar Host Clip** that pitches the ad. Every asset cached locally so a
 saved campaign keeps working long after Runway's presigned URLs expire.
 
 - **Real Runway, end-to-end.** `gen4_image_turbo` synthesizes the
   reference image; `gen4.5` (text or image) or `gen4_turbo`
-  (image-to-video) renders the clip; local ffmpeg burns title + CTA
-  overlays into three platform-tuned MP4s.
+  (image-to-video) renders the clip; the Runway Avatars endpoint turns
+  the campaign's reference image into a Brand Spokesperson;
+  `avatar_videos` records that spokesperson speaking the campaign
+  pitch. Local ffmpeg burns title + CTA overlays into the three
+  platform-tuned MP4s.
 - **Mock-mode safe.** Without keys the same flow runs end-to-end with
-  deterministic concepts and an in-memory mock task that returns a
-  public sample MP4 in ~12 s. No third-party calls. Ideal for CI and
-  pre-demo dry runs.
+  deterministic concepts, an in-memory mock task that returns a
+  public sample MP4 in ~12 s, a synthetic mock avatar, and an
+  ffmpeg-only host placeholder. No third-party calls. Ideal for CI
+  and pre-demo dry runs.
 - **Credit-safe by design.** A model-aware backend policy validates
   every request and returns clear `400`s before any outbound HTTP. Real
   Runway calls fire only on user click.
@@ -38,10 +46,17 @@ flowchart LR
   Pack --> L["Landscape 1280×720"]
   Pack --> R["Reels 720×1280"]
   Pack --> S["Square 960×960"]
+
+  Cache -.saved.-> Saved["Saved Campaign"]
+  Saved --> Avatar["Runway Avatar<br/>(/v1/avatars)<br/>Brand Spokesperson"]
+  Avatar --> Host["Runway avatar_videos<br/>(/v1/avatar_videos)"]
+  Host --> HostClip["Avatar Host Clip<br/>backend/data/host/&lt;id&gt;.mp4"]
 ```
 
 Every step left of `Pack` can run in mock mode without a key. Everything
-right of `Cache` is fully local — no extra Runway calls per format.
+right of `Cache` (Pack + Brand Spokesperson + Host Clip) is either fully
+local or works against mock primitives — no extra third-party calls per
+format and no required spend to demo the spokesperson flow.
 
 ## TL;DR — run it locally
 
@@ -191,6 +206,70 @@ back-compat with pre-PR-B saves.
 Requires `ffmpeg` on `PATH`. macOS: `brew install ffmpeg`. The pipeline
 is fully local — no provider keys, no network calls.
 
+## Brand Spokesperson + Avatar Host Clip
+
+Every saved campaign exposes a two-step path that turns it into a
+reusable Runway Avatar narrator:
+
+1. **Create Brand Spokesperson** (`POST /api/campaigns/{id}/avatar`)
+   - Calls Runway `POST /v1/avatars`. Reference image source is chosen
+     in this order: explicit `image_url` override → the campaign's
+     own `reference_image_url` → the configured stock portrait.
+   - Local `/api/runway/image/<id>` URLs are converted to base64 data
+     URIs server-side so a generated reference image can drive the
+     avatar without needing public hosting.
+   - Polls Runway's avatar pipeline through `PROCESSING → READY`. If
+     processing fails (e.g., the campaign image has no recognisable
+     face), the campaign record stores `host_avatar_status: "failed"`
+     and `host_avatar_error: …`. The UI then offers **"Retry with
+     stock portrait"** so the demo never dead-ends.
+   - On success the avatar id, processed thumbnail URL, voice preset,
+     and image source label (`"campaign"` / `"override"` / `"stock"`)
+     are persisted on the campaign so the gallery card can show
+     "Brand Spokesperson · Runway Avatar · ready" with the
+     thumbnail next to the avatar id.
+   - **Voice presets**: 30 lowercase preset ids universally available
+     on the account (`vincent`, `victoria`, `clara`, `drew`, `skye`,
+     `max`, …). Default is `RUNWAY_HOST_VOICE_PRESET` (env, defaults
+     to `vincent`). The avatar owns the voice — Phase 2 doesn't pick
+     one.
+2. **Present Campaign** (`POST /api/campaigns/{id}/host-video`)
+   - Requires `host_avatar_status` to be `ready` or `mock` (returns
+     `409` otherwise with the Phase-1 hint).
+   - Builds a deterministic local script:
+     `Meet {business}. {hook}. {caption}. {cta}.` — capped at 300
+     chars. Body accepts `script_override` if a custom pitch is
+     desired.
+   - Calls `POST /v1/avatar_videos` with
+     `{model: "gwm1_avatars", avatar: {type: "custom", avatarId},
+     speech: {type: "text", text}}`. Polls the resulting task with
+     the same 5 s + jitter pattern used everywhere else.
+   - Downloads the presigned MP4 to
+     `backend/data/host/<campaign_id>.mp4` (gitignored, 100 MB cap,
+     content-type guarded). Streams from `GET /api/campaigns/{id}/host-video`.
+
+Output MP4 is 1088×704 h264 + AAC audio (the spokesperson actually
+speaks). Real Gen-4.5 avatar video typically completes in ~10 s for an
+8–15 word pitch; a one-time avatar create takes ~30–45 s on first call
+and is cached on the campaign record afterwards.
+
+**Mock mode mirrors both phases.** Phase 1 returns a synthetic READY
+avatar with a stdlib PNG thumbnail; Phase 2 produces a 5 s 720×720
+silent ffmpeg `lavfi` placeholder. The same two-step UI works without
+spending a single credit.
+
+The only required new env var is unchanged from the existing
+`RUNWAY_API_KEY`. Optional knobs:
+
+```env
+RUNWAY_HOST_VOICE_PRESET=vincent
+RUNWAY_HOST_PORTRAIT_URL=https://images.unsplash.com/photo-...?w=512&q=80
+```
+
+Generated host clips and the cached avatar id live entirely under
+`backend/data/host/` which is gitignored alongside `data/videos/`,
+`data/images/`, and `data/finished/`.
+
 ## Browser smoke test (Playwright)
 
 A single Chromium-driven end-to-end test exercises the full mock flow on
@@ -238,6 +317,9 @@ Test artifacts (`frontend/test-results/`, `frontend/playwright-report/`,
 | `POST` | `/api/campaigns/{id}/finish?format=...` | Build a Campaign Pack format with local ffmpeg |
 | `GET`  | `/api/campaigns/{id}/finished-video` | Legacy: serves the landscape finished MP4 |
 | `GET`  | `/api/campaigns/{id}/finished-video/{fmt}` | Per-format finished MP4 |
+| `POST` | `/api/campaigns/{id}/avatar` | **Phase 1** — create the Brand Spokesperson Runway Avatar (body `{voice_preset?, image_url?, force_recreate?}`) |
+| `POST` | `/api/campaigns/{id}/host-video` | **Phase 2** — record the Avatar Host Clip via `/v1/avatar_videos` (body `{script_override?}`); 409 if the avatar isn't ready |
+| `GET`  | `/api/campaigns/{id}/host-video` | Stream the cached host clip MP4 |
 
 ## Project layout
 
@@ -248,11 +330,12 @@ backend/
     config.py            pydantic-settings (env-driven mock flags)
     models.py            Pydantic schemas
     services/
-      concept_service.py   OpenAI + deterministic mock fallback
-      image_client.py      Runway text_to_image (real + stdlib mock PNG)
-      runway_client.py     Generation policy + image_to_video / text_to_video routing
-      finisher_service.py  Local ffmpeg Campaign Pack
-      storage.py           JSON campaign store + local video cache
+      concept_service.py        OpenAI + deterministic mock fallback
+      image_client.py           Runway text_to_image (real + stdlib mock PNG)
+      runway_client.py          Generation policy + image_to_video / text_to_video routing
+      finisher_service.py       Local ffmpeg Campaign Pack
+      character_host_client.py  Runway Avatars + avatar_videos two-phase host
+      storage.py                JSON campaign store + local video/host caches
     routers/
       concepts.py runway.py campaigns.py
   requirements.txt
