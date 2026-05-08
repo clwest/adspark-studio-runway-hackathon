@@ -28,10 +28,15 @@ app.include_router(campaigns_router)
 
 @app.get("/health")
 def health(s: Settings = Depends(get_settings)) -> dict:
+    # image_gen rides on the same Runway API key as video, so it inherits the
+    # runway mock flag today. Surfaced as its own field so the frontend banner
+    # can show a separate pill, and so a future split (e.g. an OSS image model
+    # behind its own key) is a backend-only change.
     return {
         "status": "ok",
         "service": "adspark-studio",
         "openai_mock": s.openai_mock,
         "runway_mock": s.runway_mock,
+        "image_gen_mock": s.runway_mock,
         "any_mock": s.openai_mock or s.runway_mock,
     }

@@ -17,6 +17,8 @@ export const api = {
   startRunway: (body) =>
     jsonFetch('/api/runway/generate', { method: 'POST', body: JSON.stringify(body) }),
   pollRunway: (taskId) => jsonFetch(`/api/runway/task/${encodeURIComponent(taskId)}`),
+  generateReferenceImage: (body) =>
+    jsonFetch('/api/runway/image', { method: 'POST', body: JSON.stringify(body) }),
   saveCampaign: (body) =>
     jsonFetch('/api/campaigns', { method: 'POST', body: JSON.stringify(body) }),
   listCampaigns: () => jsonFetch('/api/campaigns'),

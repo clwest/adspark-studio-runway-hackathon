@@ -31,9 +31,10 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
   // 3. Mode banner visible — verifies ModeBanner mounted and /health resolved
   const modeHeading = page.getByRole('heading', { name: /^Mode$/, level: 3 })
   await expect(modeHeading).toBeVisible()
-  // In mock mode both pills should read "mock"
+  // In mock mode all three pills should read "mock"
   await expect(page.getByText(/Concepts \(OpenAI\): mock/i)).toBeVisible()
-  await expect(page.getByText(/Runway video: mock/i)).toBeVisible()
+  await expect(page.getByText(/Image Gen \(Runway\): mock/i)).toBeVisible()
+  await expect(page.getByText(/Video Gen \(Runway\): mock/i)).toBeVisible()
   // Header MOCK MODE pill present (any_mock = true)
   await expect(page.getByText(/^MOCK MODE$/)).toBeVisible()
 
@@ -60,6 +61,16 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
 
   // 7. Explicitly select the "Daily Ritual" concept (mock recommended_index=1)
   await dailyCard.click()
+
+  // 7a. PR A UI — model selector, text-only toggle, Generate Reference Image
+  //     button must all render once the prompt panel mounts.
+  await expect(
+    page.getByRole('combobox').filter({ hasText: /Gen-4 Turbo|Gen-4\.5/i }),
+  ).toBeVisible()
+  await expect(page.getByLabel(/Use text-only video/i)).toBeVisible()
+  await expect(
+    page.getByRole('button', { name: /^Generate Reference Image$/i }),
+  ).toBeVisible()
 
   // 8. Reference Image URL — placeholder value to mirror the demo path
   await page

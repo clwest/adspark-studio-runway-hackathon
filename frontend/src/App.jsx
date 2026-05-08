@@ -10,6 +10,8 @@ import ModeBanner from './components/ModeBanner.jsx'
 const POLL_INTERVAL_MS = 5000
 const POLL_MAX_ATTEMPTS = 60
 
+const DEFAULT_MODEL = 'gen4_turbo'
+
 export default function App() {
   const [health, setHealth] = useState(null)
   const [form, setForm] = useState(null)
@@ -17,10 +19,13 @@ export default function App() {
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [prompt, setPrompt] = useState('')
   const [imageUrl, setImageUrl] = useState('')
+  const [model, setModel] = useState(DEFAULT_MODEL)
+  const [textOnly, setTextOnly] = useState(false)
+  const [generatedImage, setGeneratedImage] = useState(null) // { image_url, image_id, mock_mode, model }
   const [task, setTask] = useState(null)
   const [campaigns, setCampaigns] = useState([])
   const [savedId, setSavedId] = useState(null)
-  const [busy, setBusy] = useState({ concepts: false, runway: false })
+  const [busy, setBusy] = useState({ concepts: false, runway: false, image: false })
   const [error, setError] = useState('')
   const pollRef = useRef({ active: false, attempts: 0 })
 
@@ -39,6 +44,7 @@ export default function App() {
     setConceptResp(null)
     setTask(null)
     setSavedId(null)
+    setGeneratedImage(null)
     try {
       const resp = await api.generateConcepts(formValue)
       setConceptResp(resp)
@@ -85,18 +91,46 @@ export default function App() {
     setSavedId(null)
     try {
       const trimmedImage = imageUrl.trim()
+      const useTextOnly = model === 'gen4.5' && textOnly
       const resp = await api.startRunway({
         prompt_text: prompt,
-        prompt_image: trimmedImage || null,
+        prompt_image: useTextOnly ? null : trimmedImage || null,
         duration: 5,
         ratio: '1280:720',
+        model,
       })
-      setTask({ task_id: resp.task_id, status: resp.status, progress: 0, output: [], mock_mode: resp.mock_mode })
+      setTask({
+        task_id: resp.task_id,
+        status: resp.status,
+        progress: 0,
+        output: [],
+        mock_mode: resp.mock_mode,
+        endpoint: resp.endpoint,
+        model: resp.model,
+      })
       startPolling(resp.task_id)
     } catch (e) {
       setError(String(e))
     } finally {
       setBusy((b) => ({ ...b, runway: false }))
+    }
+  }
+
+  const handleGenerateImage = async () => {
+    if (!prompt.trim()) return
+    setError('')
+    setBusy((b) => ({ ...b, image: true }))
+    try {
+      const resp = await api.generateReferenceImage({
+        prompt_text: prompt,
+        ratio: '1280:720',
+      })
+      setGeneratedImage(resp)
+      setImageUrl(resp.image_url)
+    } catch (e) {
+      setError(String(e))
+    } finally {
+      setBusy((b) => ({ ...b, image: false }))
     }
   }
 
@@ -112,6 +146,8 @@ export default function App() {
         selected_concept: concept,
         runway_prompt: prompt,
         runway_task_id: task.task_id,
+        runway_model: task.model || model,
+        reference_image_url: imageUrl.trim() || null,
         video_url: task.output?.[0] || null,
         social_post: {
           caption: concept.caption,
@@ -128,6 +164,11 @@ export default function App() {
 
   const mockBadge = health?.any_mock
   const concepts = conceptResp?.concepts
+  // requireImage: only enforce for image-required models AND when text-only is off.
+  const isImageRequiredModel = model !== 'gen4.5'
+  const requireImage = health
+    ? health.runway_mock === false && (isImageRequiredModel || !textOnly)
+    : false
 
   return (
     <div className="min-h-full max-w-5xl mx-auto p-6 space-y-6">
@@ -174,11 +215,28 @@ export default function App() {
           prompt={prompt}
           onChange={setPrompt}
           imageUrl={imageUrl}
-          onImageUrlChange={setImageUrl}
-          requireImage={health ? health.runway_mock === false : false}
+          onImageUrlChange={(v) => {
+            setImageUrl(v)
+            // user typed a different URL — drop the cached generated-image badge
+            if (generatedImage && v !== generatedImage.image_url) {
+              setGeneratedImage(null)
+            }
+          }}
+          requireImage={requireImage}
           onGenerate={handleGenerateVideo}
           busy={busy.runway || (task && !['SUCCEEDED', 'FAILED', 'CANCELED'].includes(task.status))}
           disabled={busy.runway}
+          model={model}
+          onModelChange={(m) => {
+            setModel(m)
+            // text-only is only valid for gen4.5 — collapse if model changes off it
+            if (m !== 'gen4.5') setTextOnly(false)
+          }}
+          textOnly={textOnly}
+          onTextOnlyChange={setTextOnly}
+          onGenerateImage={handleGenerateImage}
+          imageBusy={busy.image}
+          imageMockMode={generatedImage?.mock_mode}
         />
       )}
 
