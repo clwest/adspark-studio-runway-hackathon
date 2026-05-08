@@ -170,6 +170,13 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
     newestCard.getByRole('button', { name: /^Create Brand Spokesperson$/i }),
   ).toBeVisible()
 
+  // 13b.2 — Avatar picker (PR I+) renders with the four mock presets.
+  await expect(newestCard.getByText(/^Choose Existing Runway Avatar$/)).toBeVisible()
+  await expect(newestCard.getByText(/^mock presets$/)).toBeVisible()
+  await expect(
+    newestCard.getByRole('button', { name: /Music Superstar/i }),
+  ).toBeVisible()
+
   // 13c. PR H — Audio Pack section + Brand Voice button.
   await expect(newestCard.getByText(/^Audio Pack$/)).toBeVisible()
   await expect(newestCard.getByText(/^Runway Voices$/)).toBeVisible()

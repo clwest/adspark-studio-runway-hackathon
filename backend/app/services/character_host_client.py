@@ -63,6 +63,27 @@ SUPPORTED_VOICE_PRESETS: tuple[str, ...] = (
 _LOCAL_IMAGE_PREFIX = "/api/runway/image/"
 
 
+def active_avatar_id(campaign: Campaign) -> Optional[str]:
+    """Resolve which avatar id to use for downstream tasks.
+
+    The picker (``selected_avatar_id``) takes precedence over the
+    per-campaign custom Brand Spokesperson (``host_avatar_id``),
+    falling back when no explicit selection was made.  Returns
+    ``None`` only when the campaign has neither.
+    """
+    return campaign.selected_avatar_id or campaign.host_avatar_id
+
+
+def active_avatar_status(campaign: Campaign) -> Optional[str]:
+    """Status of the active avatar.  When a picker selection is in
+    play we trust it is READY (the picker only surfaces READY ones);
+    otherwise fall through to the campaign's host_avatar_status.
+    """
+    if campaign.selected_avatar_id:
+        return "ready"
+    return campaign.host_avatar_status
+
+
 # ---- result dataclasses ---------------------------------------------
 
 @dataclass
@@ -364,7 +385,9 @@ def _generate_real(
     *,
     script_override: Optional[str],
 ) -> HostResult:
-    if not campaign.host_avatar_id or campaign.host_avatar_status != "ready":
+    avatar_id = active_avatar_id(campaign)
+    avatar_status = active_avatar_status(campaign)
+    if not avatar_id or avatar_status != "ready":
         raise HostError(
             "Brand Spokesperson Avatar must be READY before generating a host clip."
         )
@@ -374,7 +397,7 @@ def _generate_real(
 
     body = {
         "model": _AVATAR_VIDEO_MODEL,
-        "avatar": {"type": "custom", "avatarId": campaign.host_avatar_id},
+        "avatar": {"type": "custom", "avatarId": avatar_id},
         "speech": {"type": "text", "text": script},
     }
     url = f"{settings.runway_api_base}/v1/avatar_videos"
@@ -446,7 +469,7 @@ def _generate_mock(
     script_override: Optional[str],
 ) -> HostResult:
     """Synthesize a 5 s placeholder MP4 with ffmpeg lavfi."""
-    if not campaign.host_avatar_id or campaign.host_avatar_status not in {"ready", "mock"}:
+    if not active_avatar_id(campaign) or active_avatar_status(campaign) not in {"ready", "mock"}:
         return HostResult(
             status="failed",
             error="Brand Spokesperson Avatar must exist before generating a host clip.",

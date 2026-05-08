@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { api } from '../api'
+import AvatarPicker from './AvatarPicker.jsx'
 import RealtimeSpokesperson from './RealtimeSpokesperson.jsx'
 
 const PACK_FORMATS = [
@@ -93,9 +94,17 @@ function CampaignCard({ c, onUpdated }) {
   const voiceFailed = c.brand_voice_status === 'failed'
   const voiceMock = c.brand_voice_status === 'mock'
 
-  const avatarReady = ['ready', 'mock'].includes(c.host_avatar_status || '') && Boolean(c.host_avatar_id)
-  const avatarFailed = c.host_avatar_status === 'failed'
-  const avatarMock = c.host_avatar_status === 'mock'
+  // PR I+ — picker selection unlocks downstream features the same way
+  // a created custom avatar does. Falls back to host_avatar_id when
+  // no selection is in play.
+  const hasSelection = Boolean(c.selected_avatar_id)
+  const customReady = ['ready', 'mock'].includes(c.host_avatar_status || '') && Boolean(c.host_avatar_id)
+  const avatarReady = hasSelection || customReady
+  const avatarFailed = !hasSelection && c.host_avatar_status === 'failed'
+  const avatarMock = (
+    (hasSelection && String(c.selected_avatar_id || '').startsWith('mock-')) ||
+    (!hasSelection && c.host_avatar_status === 'mock')
+  )
   const hostReady = c.host_status === 'ok' && Boolean(c.host_video_url)
   const hostFailed = c.host_status === 'failed'
   const hostUnavailable = c.host_status === 'unavailable'
@@ -339,7 +348,7 @@ function CampaignCard({ c, onUpdated }) {
               }`}
               title={avatarMock ? 'mock avatar (no real Runway call)' : 'Avatar processed and READY'}
             >
-              {avatarMock ? 'mock ready' : 'ready'}
+              {hasSelection ? (avatarMock ? 'selected · mock' : 'selected · ready') : (avatarMock ? 'mock ready' : 'ready')}
             </span>
           )}
           {avatarFailed && (
@@ -349,39 +358,64 @@ function CampaignCard({ c, onUpdated }) {
           )}
         </div>
 
+        {/* PR I+ — Picker. If you select an existing avatar here, the
+            "Create Custom Brand Spokesperson" flow below becomes
+            optional — selected_avatar_id wins downstream. */}
+        <AvatarPicker campaign={c} onUpdated={onUpdated} />
+
         {/* Phase 1 visual — current avatar identity */}
         {avatarReady ? (
           <div className="flex items-start gap-3">
-            {c.host_avatar_image_url && (
+            {(hasSelection ? c.selected_avatar_thumbnail_url : c.host_avatar_image_url) && (
               <img
-                src={c.host_avatar_image_url}
-                alt="Brand spokesperson avatar"
+                src={hasSelection ? c.selected_avatar_thumbnail_url : c.host_avatar_image_url}
+                alt={hasSelection ? c.selected_avatar_name || 'Selected Runway avatar' : 'Brand spokesperson avatar'}
                 className="w-16 h-16 rounded-md border border-zinc-800 object-cover bg-zinc-950"
               />
             )}
             <div className="text-[11px] text-zinc-400 space-y-0.5 min-w-0">
-              <div className="font-mono text-zinc-200 truncate" title={c.host_avatar_id || ''}>
-                avatar id: {String(c.host_avatar_id).slice(0, 12)}…
-              </div>
-              <div>
-                source:{' '}
-                <span className="text-zinc-300">
-                  {c.host_avatar_image_source === 'campaign'
-                    ? 'this campaign’s reference image'
-                    : c.host_avatar_image_source === 'override'
-                    ? 'user-provided image'
-                    : 'stock portrait'}
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => handleCreateSpokesperson({ force_recreate: true })}
-                disabled={avatarBusy}
-                className="text-[10px] text-zinc-500 hover:text-zinc-300 disabled:opacity-50"
-                title="Discard the cached avatar and create a fresh one"
-              >
-                {avatarBusy ? 'Re-creating…' : 'Re-create spokesperson'}
-              </button>
+              {hasSelection ? (
+                <>
+                  <div className="font-mono text-zinc-200 truncate" title={c.selected_avatar_id || ''}>
+                    {c.selected_avatar_name || 'Selected Runway Avatar'}
+                  </div>
+                  <div>
+                    source:{' '}
+                    <span className="text-zinc-300">
+                      {c.selected_avatar_source === 'preset'
+                        ? 'Preset Character'
+                        : c.selected_avatar_source === 'custom'
+                        ? 'Custom Avatar'
+                        : c.selected_avatar_source || 'unknown'}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="font-mono text-zinc-200 truncate" title={c.host_avatar_id || ''}>
+                    avatar id: {String(c.host_avatar_id).slice(0, 12)}…
+                  </div>
+                  <div>
+                    source:{' '}
+                    <span className="text-zinc-300">
+                      {c.host_avatar_image_source === 'campaign'
+                        ? 'this campaign’s reference image'
+                        : c.host_avatar_image_source === 'override'
+                        ? 'user-provided image'
+                        : 'stock portrait'}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleCreateSpokesperson({ force_recreate: true })}
+                    disabled={avatarBusy}
+                    className="text-[10px] text-zinc-500 hover:text-zinc-300 disabled:opacity-50"
+                    title="Discard the cached avatar and create a fresh one"
+                  >
+                    {avatarBusy ? 'Re-creating…' : 'Re-create spokesperson'}
+                  </button>
+                </>
+              )}
             </div>
           </div>
         ) : (
@@ -407,7 +441,12 @@ function CampaignCard({ c, onUpdated }) {
               {avatarFailed && (
                 <button
                   type="button"
-                  onClick={() => handleCreateSpokesperson({ force_recreate: true })}
+                  onClick={() =>
+                    handleCreateSpokesperson({
+                      force_recreate: true,
+                      image_source: 'stock',
+                    })
+                  }
                   disabled={avatarBusy}
                   className="rounded-md border border-zinc-700 hover:border-spark text-[10px] px-2 py-1 text-zinc-300 disabled:opacity-50"
                   title="Try again using the configured stock portrait instead"

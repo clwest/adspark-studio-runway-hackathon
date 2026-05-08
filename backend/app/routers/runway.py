@@ -13,6 +13,7 @@ from ..models import (
     RunwayGenerateResponse,
     RunwayTaskResponse,
 )
+from ..services.avatar_listing_client import list_avatars
 from ..services.image_client import (
     ImageGenerationError,
     generate_prompt_image,
@@ -115,6 +116,15 @@ def get_generated_image(
     if not path.exists():
         raise HTTPException(status_code=404, detail="image not found")
     return FileResponse(str(path), media_type="image/png", filename=f"{image_id}.png")
+
+
+@router.get("/avatars")
+def get_avatars(settings: Settings = Depends(get_settings)) -> dict:
+    """List avatars available to the picker.  Curated, secret-free
+    projection of Runway's ``GET /v1/avatars`` (in real mode) or four
+    hard-coded mock entries (in mock mode).
+    """
+    return {"data": list_avatars(settings), "mock_mode": settings.runway_mock}
 
 
 @router.get("/provider-status")

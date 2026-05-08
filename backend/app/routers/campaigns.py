@@ -16,6 +16,8 @@ from ..services.audio_client import (
 )
 from ..services.character_host_client import (
     SUPPORTED_VOICE_PRESETS,
+    active_avatar_id as host_active_avatar_id,
+    active_avatar_status as host_active_avatar_status,
     create_or_reuse_avatar,
     generate_host_video,
     path_for as host_path_for,
@@ -231,6 +233,58 @@ def get_finished_video_format(
 # ---- PR F — Brand Spokesperson Avatar + Avatar Host Clip ------------
 
 
+class SelectAvatarBody(BaseModel):
+    avatar_id: Optional[str] = Field(
+        default=None,
+        description=(
+            "Runway avatar id to use for Avatar Host Clip and realtime "
+            "Spokesperson session.  Pass null/empty to clear the "
+            "selection and revert to the per-campaign custom avatar."
+        ),
+    )
+    avatar_name: Optional[str] = Field(default=None, max_length=200)
+    avatar_source: Optional[str] = Field(default=None, max_length=40)
+    thumbnail_url: Optional[str] = Field(default=None, max_length=4000)
+
+
+@router.post("/{campaign_id}/select-avatar", response_model=Campaign)
+def post_select_avatar(
+    campaign_id: str,
+    body: SelectAvatarBody,
+    store: CampaignStore = Depends(_store),
+) -> Campaign:
+    """Persist the picker selection. The Avatar Host Clip and
+    realtime Spokesperson session prefer this field over
+    ``host_avatar_id`` when set.
+    """
+    record = store.get(campaign_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="campaign not found")
+    avatar_id = (body.avatar_id or "").strip() or None
+    avatar_source = (body.avatar_source or "").strip() or None
+    if avatar_source and avatar_source not in {
+        "preset", "custom", "stock", "campaign", "unknown",
+    }:
+        raise HTTPException(
+            status_code=400,
+            detail=f"unsupported avatar_source '{avatar_source}'",
+        )
+    updated = store.update_selected_avatar_fields(
+        campaign_id,
+        selected_avatar_id=avatar_id,
+        selected_avatar_name=(body.avatar_name or "").strip() or None,
+        selected_avatar_source=avatar_source,
+        selected_avatar_thumbnail_url=(body.thumbnail_url or "").strip() or None,
+    )
+    if not updated:
+        raise HTTPException(status_code=404, detail="campaign not found")
+    logger.info(
+        "selected avatar campaign=%s avatar_id=%s source=%s",
+        campaign_id, avatar_id, avatar_source,
+    )
+    return updated
+
+
 class CreateAvatarBody(BaseModel):
     voice_preset: Optional[str] = Field(
         default=None, description="lowercase preset id (e.g. 'vincent')"
@@ -241,6 +295,16 @@ class CreateAvatarBody(BaseModel):
             "override reference image URL for the avatar. If omitted, "
             "uses the campaign's reference_image_url; otherwise falls "
             "back to the configured stock portrait."
+        ),
+    )
+    image_source: Optional[str] = Field(
+        default=None,
+        description=(
+            "explicit image source preference. 'stock' bypasses the "
+            "campaign reference image and uses the configured stock "
+            "portrait directly — the recovery path the UI's "
+            "'Retry with stock portrait' button takes when the "
+            "campaign image fails Runway's face check."
         ),
     )
     force_recreate: bool = Field(
@@ -273,7 +337,16 @@ def post_create_avatar(
 
     voice_preset = body.voice_preset if body else None
     image_url_override = body.image_url if body else None
+    image_source_pref = body.image_source if body else None
     force_recreate = bool(body.force_recreate) if body else False
+
+    # If the caller explicitly asks for the stock portrait, route the
+    # configured Unsplash URL through as an override. The image-source
+    # label resolves as "override" inside create_or_reuse_avatar; the
+    # stored campaign field still distinguishes it from a manual
+    # image_url override since the UI surfaces the source verbatim.
+    if image_source_pref == "stock" and not image_url_override:
+        image_url_override = settings.runway_host_portrait_url
 
     if voice_preset and voice_preset.lower() not in SUPPORTED_VOICE_PRESETS:
         raise HTTPException(
@@ -335,12 +408,16 @@ def post_host_video(
     record = store.get(campaign_id)
     if not record:
         raise HTTPException(status_code=404, detail="campaign not found")
-    if not record.host_avatar_id or record.host_avatar_status not in {"ready", "mock"}:
+    if (
+        not host_active_avatar_id(record)
+        or host_active_avatar_status(record) not in {"ready", "mock"}
+    ):
         raise HTTPException(
             status_code=409,
             detail=(
-                "Brand Spokesperson Avatar must be created first. "
-                "POST /api/campaigns/{id}/avatar."
+                "A Brand Spokesperson Avatar (custom or selected) is "
+                "required first. Pick one from the avatar list or "
+                "POST /api/campaigns/{id}/avatar to create a new one."
             ),
         )
 
@@ -541,16 +618,17 @@ def post_spokesperson_session(
     if not record:
         raise HTTPException(status_code=404, detail="campaign not found")
     if (
-        not record.host_avatar_id
-        or record.host_avatar_status not in {"ready"}
+        not host_active_avatar_id(record)
+        or host_active_avatar_status(record) not in {"ready"}
     ):
-        # Mock avatars are explicitly not allowed here — they're not real
-        # Runway resources.  Avatar must be created first via PR F V2.
+        # Mock avatars are explicitly not allowed here — they're not
+        # real Runway resources.  An avatar must be created via
+        # /v1/avatars or selected from the picker first.
         raise HTTPException(
             status_code=409,
             detail=(
-                "Brand Spokesperson Avatar must be ready in real mode. "
-                "POST /api/campaigns/{id}/avatar (real Runway key required)."
+                "A ready Runway Avatar (custom or selected) is required "
+                "before starting a realtime session."
             ),
         )
     try:

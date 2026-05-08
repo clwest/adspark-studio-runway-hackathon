@@ -106,6 +106,30 @@ class CampaignStore:
                     return Campaign.model_validate(row)
         return None
 
+    def update_selected_avatar_fields(
+        self,
+        campaign_id: str,
+        selected_avatar_id: Optional[str],
+        selected_avatar_name: Optional[str] = None,
+        selected_avatar_source: Optional[str] = None,
+        selected_avatar_thumbnail_url: Optional[str] = None,
+    ) -> Optional[Campaign]:
+        """PR I+ — persist the picker selection on the campaign. Pass
+        ``selected_avatar_id=None`` to clear the selection (re-enable
+        the host_avatar_id fallback path).
+        """
+        with _LOCK:
+            rows = self._read()
+            for row in rows:
+                if row.get("id") == campaign_id:
+                    row["selected_avatar_id"] = selected_avatar_id
+                    row["selected_avatar_name"] = selected_avatar_name
+                    row["selected_avatar_source"] = selected_avatar_source
+                    row["selected_avatar_thumbnail_url"] = selected_avatar_thumbnail_url
+                    self._write(rows)
+                    return Campaign.model_validate(row)
+        return None
+
     def update_brand_voice_fields(
         self,
         campaign_id: str,

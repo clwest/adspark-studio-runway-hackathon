@@ -116,6 +116,13 @@ class Campaign(CampaignCreate):
     host_error: Optional[str] = None
     host_task_id: Optional[str] = None
     host_mock_mode: Optional[bool] = None
+    # PR I+ — Avatar Picker. When set, takes precedence over
+    # host_avatar_id for both the Avatar Host Clip and the realtime
+    # Spokesperson session. Falls back to host_avatar_id when null.
+    selected_avatar_id: Optional[str] = None
+    selected_avatar_name: Optional[str] = None
+    selected_avatar_source: Optional[Literal["preset", "custom", "stock", "campaign", "unknown"]] = None
+    selected_avatar_thumbnail_url: Optional[str] = None
     # PR H — Brand Voice Studio + Multilingual Dub Pack
     brand_voice_id: Optional[str] = None
     brand_voice_status: Optional[Literal["pending", "ready", "failed", "mock"]] = None

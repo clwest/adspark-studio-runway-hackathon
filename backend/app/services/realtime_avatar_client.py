@@ -28,6 +28,7 @@ import httpx
 
 from ..config import Settings
 from ..models import Campaign
+from .character_host_client import active_avatar_id, active_avatar_status
 
 logger = logging.getLogger(__name__)
 
@@ -77,20 +78,20 @@ def create_session(campaign: Campaign, settings: Settings) -> RealtimeSession:
         raise RealtimeUnavailableError(
             "Realtime is unavailable in mock mode. Set RUNWAY_API_KEY to enable."
         )
-    if (
-        not campaign.host_avatar_id
-        or campaign.host_avatar_status not in {"ready"}
-    ):
-        # Note: we deliberately exclude "mock" here. A mock avatar id
-        # is not a valid Runway resource and would fail upstream.
+    avatar_id = active_avatar_id(campaign)
+    avatar_status = active_avatar_status(campaign)
+    if not avatar_id or avatar_status != "ready":
+        # Mock avatars and not-yet-ready customs are deliberately
+        # excluded — they're not valid Runway resources for realtime.
         raise RealtimeUnavailableError(
-            "Brand Spokesperson Avatar must be ready before starting a "
-            "realtime session. POST /api/campaigns/{id}/avatar."
+            "A ready Runway Avatar is required before starting a "
+            "realtime session. Pick one from the avatar list or run "
+            "POST /api/campaigns/{id}/avatar."
         )
 
     body = {
         "model": _REALTIME_MODEL,
-        "avatar": {"type": "custom", "avatarId": campaign.host_avatar_id},
+        "avatar": {"type": "custom", "avatarId": avatar_id},
     }
     create_url = f"{settings.runway_api_base}/v1/realtime_sessions"
     with httpx.Client(timeout=20.0) as client:
@@ -145,7 +146,7 @@ def create_session(campaign: Campaign, settings: Settings) -> RealtimeSession:
         session_id=session_id,
         session_key=session_key,
         expires_at=payload.get("expiresAt"),
-        avatar_id=campaign.host_avatar_id,
+        avatar_id=avatar_id,
     )
 
 
