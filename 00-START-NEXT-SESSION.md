@@ -11,8 +11,14 @@ Spokesperson Avatar)
   Host Clip (PR F V2 reframe).
 - **PR F probe + V1 commits:** `dea96f9` (initial host video), reframed
   in `2d5688e` to the visible two-step flow.
-- **Last submission tag:** `hackathon-submission` at `7ed949e` on
-  `main` (PR E). PR F + G are *post-submission additions*.
+- **Submission tags:**
+  - `hackathon-submission` → `7ed949e` (PR E head). The
+    **pre-avatar baseline** as originally submitted — concept → image
+    → video → Campaign Pack only. Already pushed to origin.
+  - `hackathon-submission-v2` (recommended on next merge) → `e55af2f`
+    (PR G head). Adds the Brand Spokesperson Avatar + Avatar Host Clip
+    feature. Not yet created — the merge guidance below shows the
+    exact commands.
 - **GitHub remote:** https://github.com/clwest/adspark-studio-runway-hackathon
   (private). Pushes happen only on explicit user approval.
 
@@ -25,8 +31,16 @@ Spokesperson Avatar)
 | `feature/pr-f-character-host-v1` (HEAD) | `2d5688e` (V2 refactor on top of `dea96f9` V1) | Brand Spokesperson + Avatar Host Clip + PR G docs |
 
 PR F V2 not yet pushed to origin. Recommended order when ready:
-fast-forward `main` to `feature/pr-f-character-host-v1`, optionally
-re-tag, push.
+
+```bash
+git checkout main
+git merge --ff-only feature/pr-f-character-host-v1
+git tag -a hackathon-submission-v2 -m "AdSpark Studio — RunwayML hackathon submission, with Brand Spokesperson Avatar"
+# Existing `hackathon-submission` tag at 7ed949e is left in place as the
+# pre-avatar baseline.
+git push origin main
+git push origin hackathon-submission-v2
+```
 
 ## What is implemented
 

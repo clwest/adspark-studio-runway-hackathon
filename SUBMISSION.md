@@ -282,3 +282,10 @@ the corresponding PR commit messages.
   Pack) → C (settings validation) → D (demo hardening + hero-run) → E
   (submission polish, tagged `hackathon-submission`) → F (Brand
   Spokesperson Avatar + Avatar Host Clip) → G (this docs update).
+- **Submission tags**:
+  - `hackathon-submission` at PR-E commit `7ed949e` — pre-avatar
+    baseline (Concept → Image → Video → Campaign Pack).
+  - `hackathon-submission-v2` (recommended) at PR-G commit `e55af2f`
+    — adds Brand Spokesperson Avatar + Avatar Host Clip. Both tags are
+    intended to coexist so each version is reproducible from `git
+    checkout`.
