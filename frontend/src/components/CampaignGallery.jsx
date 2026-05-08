@@ -1,6 +1,18 @@
 function CampaignCard({ c }) {
   const concept = c.selected_concept || {}
-  const hasVideo = Boolean(c.video_url)
+  // Prefer the locally cached file (stable; never expires) over the
+  // presigned Runway URL (expires within ~7 days).
+  const videoSrc = c.cached_video_url || c.video_url || null
+  const hasVideo = Boolean(videoSrc)
+  const isCached = Boolean(c.cached_video_url)
+  const cacheFailed = c.cache_status === 'failed'
+  const cacheStatusLabel = isCached
+    ? 'cached locally'
+    : cacheFailed
+    ? 'cache failed'
+    : c.video_url
+    ? 'external URL may expire'
+    : null
   return (
     <li className="rounded-xl border border-zinc-800 p-4 bg-zinc-950/40 space-y-3">
       <div className="flex items-start justify-between gap-2">
@@ -48,23 +60,40 @@ function CampaignCard({ c }) {
       {hasVideo && (
         <div className="space-y-1">
           <video
-            src={c.video_url}
+            src={videoSrc}
             controls
             preload="metadata"
             className="w-full rounded-lg border border-zinc-800"
           />
-          <div className="flex items-center justify-between text-xs">
+          <div className="flex items-center justify-between text-xs gap-2 flex-wrap">
             <a
-              href={c.video_url}
+              href={videoSrc}
               target="_blank"
               rel="noreferrer"
               className="text-spark hover:underline"
             >
               open video ↗
             </a>
-            <span className="text-zinc-500" title="Runway artifact URLs are presigned and expire (~days). Cache locally for long-lived demos.">
-              URL may expire
-            </span>
+            {cacheStatusLabel && (
+              <span
+                className={
+                  isCached
+                    ? 'text-emerald-300'
+                    : cacheFailed
+                    ? 'text-rose-300'
+                    : 'text-zinc-500'
+                }
+                title={
+                  isCached
+                    ? 'Backend downloaded the video to backend/data/videos and is serving it from /api/campaigns/{id}/video. Stable forever.'
+                    : cacheFailed
+                    ? `Caching failed: ${c.cache_error || 'unknown error'}. Falling back to the original Runway URL, which expires in ~days.`
+                    : 'Runway artifact URLs are presigned and expire (~days). Cache failed or skipped — fallback to the original URL.'
+                }
+              >
+                {cacheStatusLabel}
+              </span>
+            )}
           </div>
         </div>
       )}

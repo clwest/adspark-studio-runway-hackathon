@@ -152,6 +152,34 @@ Pick any public image URL (product photo, storefront photo, campaign hero
 image). The text prompt describes the motion and feel; the image anchors
 the look.
 
+## Saved campaigns cache videos locally
+
+Runway returns presigned CloudFront URLs that expire after about a week.
+To make saved campaigns durable, the backend caches every saved video
+locally as soon as `POST /api/campaigns` runs:
+
+- File path: `backend/data/videos/<campaign_id>.mp4` (gitignored).
+- Stable serve route: `GET /api/campaigns/{campaign_id}/video` —
+  streams the cached MP4 with `content-type: video/mp4`.
+- Campaign records carry three new fields: `cached_video_url` (the
+  serve route, when caching succeeds), `cache_status`
+  (`ok | failed | skipped`), and `cache_error` (a short reason on
+  failure).
+- The frontend `CampaignGallery` prefers the cached URL over the
+  presigned Runway URL and surfaces a small badge:
+  - `cached locally` (green) — durable, never expires.
+  - `cache failed` (rose) — falls back to the presigned URL with the
+    failure reason in a tooltip.
+  - `external URL may expire` (zinc) — older saves from before this
+    feature, or campaigns without a video.
+- Failures are non-fatal: caching errors do not block the save. Cap is
+  100 MB per asset; downloads must report `content-type: video/*` to
+  avoid persisting unexpected payloads.
+
+This works for both real Runway artifacts and the mock-mode demo MP4 —
+no schema migration is required for older saves; missing cache fields
+are treated as `external URL may expire`.
+
 ## Browser smoke test (Playwright)
 
 A single Chromium-driven end-to-end test exercises the polished mock flow

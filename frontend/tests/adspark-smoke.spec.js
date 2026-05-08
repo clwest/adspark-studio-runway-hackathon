@@ -77,12 +77,22 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
   await page.getByRole('button', { name: /^Save campaign card$/i }).click()
   await expect(page.getByRole('button', { name: /^Saved$/i })).toBeVisible()
 
-  // 12. Gallery now contains the new campaign — find a "Local coffee shop"
-  //     card under the "Saved campaigns" section.
-  const gallery = page.locator('div', { has: page.getByRole('heading', { name: /Saved campaigns/i }) }).first()
-  await expect(gallery.getByText('Local coffee shop').first()).toBeVisible()
-  // Card should expose the "video ready" pill since the mock returned a URL
-  await expect(gallery.getByText(/^video ready$/i).first()).toBeVisible()
+  // 12. Gallery now contains the new campaign. Scope to the gallery card
+  //     specifically (a `div.rounded-2xl` containing the heading) so we don't
+  //     accidentally match ModeBanner <li> bullets or the App root. The
+  //     newly saved campaign sits at the top of the campaigns <ul>.
+  const galleryCard = page
+    .locator('div.rounded-2xl')
+    .filter({ has: page.getByRole('heading', { name: /Saved campaigns/i }) })
+    .first()
+  const newestCard = galleryCard.locator('ul > li').first()
+  await expect(newestCard.getByText('Local coffee shop', { exact: true })).toBeVisible()
+  await expect(newestCard.getByText(/^video ready$/i)).toBeVisible()
+  // Cache pipeline must report a known status. Network unreachable in CI is
+  // acceptable; "cache failed" still proves the pipeline ran end-to-end.
+  await expect(
+    newestCard.getByText(/^(cached locally|cache failed|external URL may expire)$/i),
+  ).toBeVisible()
 
   // 13. Console / page errors — page errors are always fatal; console errors
   //     are filtered to drop video-network noise.

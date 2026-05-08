@@ -69,9 +69,15 @@ class CampaignCreate(BaseModel):
     social_post: CampaignSocialPost
 
 
+CacheStatus = Literal["ok", "failed", "skipped"]
+
+
 class Campaign(CampaignCreate):
     id: str
     created_at: datetime
+    cached_video_url: Optional[str] = None
+    cache_status: Optional[CacheStatus] = None
+    cache_error: Optional[str] = None
 
 
 class CampaignList(BaseModel):

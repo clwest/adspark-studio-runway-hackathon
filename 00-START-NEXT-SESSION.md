@@ -1,6 +1,6 @@
 # START NEXT SESSION — AdSpark Studio
 
-**Last touched:** 2026-05-08 (Session 002 — submission packaging)
+**Last touched:** 2026-05-08 (Session 003 — artifact caching)
 
 ## Where things stand
 - Backend + frontend scaffolded, polished, and verified end-to-end.
@@ -56,7 +56,8 @@ single-shot.
 ## Current commits
 ```
 (local + remote, oldest at bottom; ⊕ = local-only)
-⊕ <pending>  docs: add hackathon submission package
+⊕ <pending>  feat: cache saved campaign videos
+e175ea5  docs: add hackathon submission package
 8ef3b89  docs: document Playwright smoke workflow
 396814b  test: add Playwright smoke test for hackathon demo flow
 6d0e14d  feat: polish hackathon demo flow
@@ -66,21 +67,22 @@ a18e3d7  feat: require reference image for Runway real mode
 ```
 
 ## Suggested next steps (in priority order)
-1. **Approve the Session 002 push** — bumps the remote to include
-   `SUBMISSION.md` and the judge-friendly README hero.
-2. **Cache the existing real-mode artifact** before its JWT expires
-   (~2026-05-15). The saved Session 001e campaign card will go dark
-   once the CloudFront URL is past its `exp`. Either re-download the
-   MP4 manually now, or build the backend caching feature (Option A
-   from the next-phase report).
-3. **Decide on a recorded demo video.** Mock mode covers everything but
+1. **Approve the Session 003 push** — adds the artifact cache, the
+   `cached locally` UI, and the new `/api/campaigns/{id}/video` route.
+2. **Decide on a recorded demo video.** Mock mode covers everything but
    the live Runway shot; one approved real generation gives you the
-   money clip for a 60–90 s screen recording.
-4. **Optional public deploy.** Vercel for the frontend, Render/Fly for
+   money clip for a 60–90 s screen recording. The cache will preserve
+   it indefinitely once saved.
+3. **Optional public deploy.** Vercel for the frontend, Render/Fly for
    the backend, Runway key as an env var. Clickable URL for judges.
+4. **Bundle a local mock MP4** so the mock-mode demo doesn't depend on
+   any third-party sample URL. Serve from
+   `backend/data/videos/_mock.mp4` (or ship a tiny MP4 in `backend/`
+   directly since `data/` is gitignored).
 5. **(Stretch)** ffmpeg caption + CTA burn-in over the Runway clip
-   (Option B), or a small pytest suite for `routers/runway.py` to lock
-   in the real-mode 400 guard.
+   (Option B), or a small pytest suite for `routers/runway.py` and
+   `services/storage.py` to lock in the real-mode 400 guard and the
+   cache pipeline against future regressions.
 
 ## Hard rules for any future session
 - Do not modify `unified-donkey-betz` (read-only inspection only).
@@ -104,4 +106,5 @@ a18e3d7  feat: require reference image for Runway real mode
 - `docs/WHAT_IT_IS.md` — concept + stack + mock-vs-real
 - `docs/INVENTORY.md` — what's real / mocked / incomplete
 - `docs/handoffs/SESSION_001_BOOTSTRAP.md` — bootstrap + 001b–001g notes
-- `docs/handoffs/SESSION_002_SUBMISSION_PACKAGING.md` — this session
+- `docs/handoffs/SESSION_002_SUBMISSION_PACKAGING.md` — submission
+- `docs/handoffs/SESSION_003_ARTIFACT_CACHING.md` — this session

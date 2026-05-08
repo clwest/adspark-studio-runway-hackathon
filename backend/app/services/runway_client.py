@@ -41,9 +41,7 @@ class _MockRunwayStore:
 
 
 _MOCK_STORE = _MockRunwayStore()
-_DEMO_VIDEO_URL = (
-    "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
-)
+_DEMO_VIDEO_URL = "https://download.samplelib.com/mp4/sample-5s.mp4"
 
 
 def _mock_status(task: _MockTask) -> RunwayTaskResponse:

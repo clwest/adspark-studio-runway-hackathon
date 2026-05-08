@@ -87,9 +87,14 @@ Partial mock is supported — e.g. mock concepts + real Runway is the
 typical hackathon configuration.
 
 ## Future work (post-hackathon)
-- **Asset caching** — Runway returns presigned CloudFront URLs that
-  expire after ~7 days. Backend should download MP4s on save and serve
-  them locally (`backend/data/videos/<task-id>.mp4`).
+- **~~Asset caching~~** — *implemented* in Session 003. Backend now
+  downloads each saved campaign's video to
+  `backend/data/videos/<campaign_id>.mp4` and serves it from
+  `GET /api/campaigns/{id}/video`. Saves include `cached_video_url`,
+  `cache_status` (`ok | failed | skipped`), and `cache_error`; the
+  gallery prefers the cached file and shows a clear status badge.
+  Verified against the existing real Runway artifact (Session 001e)
+  and the mock-mode demo MP4 — no new Runway calls required.
 - **Finishing pipeline** — DaVinci Resolve / ffmpeg overlay step to burn
   the caption + CTA into the Runway clip and produce a brand-aligned
   export.
