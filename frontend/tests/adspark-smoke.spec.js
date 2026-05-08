@@ -93,6 +93,16 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
   await expect(settings.getByText('5s', { exact: true })).toBeVisible()
   await expect(settings.getByText('reference image')).toBeVisible()
 
+  // 7b.5. PR K — Character Studio panel renders above the gallery.
+  await expect(page.getByRole('heading', { name: /Character Studio/i })).toBeVisible()
+  await expect(
+    page.getByRole('button', { name: /^\+ Create Character$/i }),
+  ).toBeVisible()
+  // The empty-state copy is visible until a character is created
+  // (existing characters.json may already have entries from prior
+  // runs; in that case the panel shows the library grid instead).
+  // Do not assert empty state explicitly to keep the test resilient.
+
   // 7c. PR D — settings persistence. Switch to Reels (720:1280) and reload;
   //     the dropdown must come back with the new value, not the default.
   await ratioSelect.selectOption('720:1280')

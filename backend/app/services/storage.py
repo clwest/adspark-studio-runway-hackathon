@@ -106,6 +106,24 @@ class CampaignStore:
                     return Campaign.model_validate(row)
         return None
 
+    def update_character_attachment(
+        self,
+        campaign_id: str,
+        character_id: Optional[str],
+    ) -> Optional[Campaign]:
+        """PR K — attach or detach a Character. ``character_id=None``
+        clears the attachment; the avatar resolution chain falls
+        back to selected_avatar_id / host_avatar_id.
+        """
+        with _LOCK:
+            rows = self._read()
+            for row in rows:
+                if row.get("id") == campaign_id:
+                    row["character_id"] = character_id
+                    self._write(rows)
+                    return Campaign.model_validate(row)
+        return None
+
     def update_selected_avatar_fields(
         self,
         campaign_id: str,

@@ -13,6 +13,7 @@ import PromptPreview from './components/PromptPreview.jsx'
 import RunwayPanel from './components/RunwayPanel.jsx'
 import CampaignGallery from './components/CampaignGallery.jsx'
 import ModeBanner from './components/ModeBanner.jsx'
+import CharacterStudio from './components/CharacterStudio.jsx'
 
 const POLL_INTERVAL_MS = 5000
 const POLL_MAX_ATTEMPTS = 60
@@ -294,6 +295,8 @@ export default function App() {
       )}
 
       <RunwayPanel task={task} onSave={handleSaveCampaign} savedId={savedId} />
+
+      <CharacterStudio onCharactersChanged={refreshCampaigns} />
 
       <CampaignGallery campaigns={campaigns} onRefresh={refreshCampaigns} />
 

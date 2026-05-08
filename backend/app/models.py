@@ -123,6 +123,11 @@ class Campaign(CampaignCreate):
     selected_avatar_name: Optional[str] = None
     selected_avatar_source: Optional[Literal["preset", "custom", "stock", "campaign", "unknown"]] = None
     selected_avatar_thumbnail_url: Optional[str] = None
+    # PR K — Character Studio. When set, takes precedence over
+    # selected_avatar_id and host_avatar_id. Resolution order:
+    # character.runway_avatar_id > selected_avatar_id > host_avatar_id.
+    character_id: Optional[str] = None
+    generated_character_prompt: Optional[str] = None
     # PR H — Brand Voice Studio + Multilingual Dub Pack
     brand_voice_id: Optional[str] = None
     brand_voice_status: Optional[Literal["pending", "ready", "failed", "mock"]] = None
@@ -136,3 +141,57 @@ class Campaign(CampaignCreate):
 
 class CampaignList(BaseModel):
     campaigns: list[Campaign]
+
+
+# ---- PR K — Character Studio --------------------------------------
+
+CharacterTemplate = Literal["mascot", "founder", "coach", "local_guide"]
+CharacterAvatarStatus = Literal["pending", "ready", "failed", "mock"]
+PortraitSource = Literal["generated", "uploaded", "stock", "mock"]
+
+
+class Character(BaseModel):
+    id: str
+    slug: str
+    name: str
+    template: CharacterTemplate = "mascot"
+    subject: Optional[str] = None
+    style: Optional[str] = None
+
+    personality: Optional[str] = None
+    catchphrases: list[str] = []
+    voice_preset: str = "vincent"
+
+    # Portrait — local cache lives at backend/data/characters/<id>-portrait.png
+    portrait_url: Optional[str] = None  # /api/characters/{id}/portrait
+    portrait_source: Optional[PortraitSource] = None
+    portrait_prompt: Optional[str] = None
+
+    # Runway avatar binding
+    runway_avatar_id: Optional[str] = None
+    runway_avatar_status: Optional[CharacterAvatarStatus] = None
+    runway_avatar_thumbnail_url: Optional[str] = None
+    runway_avatar_error: Optional[str] = None
+
+    # Provenance
+    source_campaign_id: Optional[str] = None
+    mock_mode: Optional[bool] = None
+    metadata: dict = {}
+
+    created_at: datetime
+    updated_at: datetime
+
+
+class CharacterCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=80)
+    template: CharacterTemplate = "mascot"
+    subject: Optional[str] = Field(default=None, max_length=300)
+    style: Optional[str] = Field(default=None, max_length=300)
+    personality: Optional[str] = Field(default=None, max_length=600)
+    catchphrases: list[str] = []
+    voice_preset: Optional[str] = None
+    source_campaign_id: Optional[str] = None
+
+
+class CharacterList(BaseModel):
+    characters: list[Character]

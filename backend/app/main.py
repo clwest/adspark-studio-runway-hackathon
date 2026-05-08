@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import Settings, get_settings
 from .routers.campaigns import router as campaigns_router
+from .routers.characters import router as characters_router
 from .routers.concepts import router as concepts_router
 from .routers.runway import router as runway_router
 
@@ -24,6 +25,7 @@ app.add_middleware(
 app.include_router(concepts_router)
 app.include_router(runway_router)
 app.include_router(campaigns_router)
+app.include_router(characters_router)
 
 
 @app.get("/health")

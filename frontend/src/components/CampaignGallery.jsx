@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { api } from '../api'
 import AvatarPicker from './AvatarPicker.jsx'
+import CharacterCard from './CharacterCard.jsx'
 import RealtimeSpokesperson from './RealtimeSpokesperson.jsx'
 
 const PACK_FORMATS = [
@@ -89,22 +90,52 @@ function CampaignCard({ c, onUpdated }) {
   const [voiceBusy, setVoiceBusy] = useState(false)
   const [busyDubLang, setBusyDubLang] = useState(null)
   const [localError, setLocalError] = useState('')
+  // PR K — Character attach picker. Lazy-loaded; only shown when the
+  // user clicks "Attach Character".
+  const [attachPickerOpen, setAttachPickerOpen] = useState(false)
+  const [characterLibrary, setCharacterLibrary] = useState([])
+  const [characterLibraryLoaded, setCharacterLibraryLoaded] = useState(false)
+  const [attachBusyId, setAttachBusyId] = useState(null)
 
   const voiceReady = ['ready', 'mock'].includes(c.brand_voice_status || '')
   const voiceFailed = c.brand_voice_status === 'failed'
   const voiceMock = c.brand_voice_status === 'mock'
 
+  // PR K — character attachment wins over picker selection.
   // PR I+ — picker selection unlocks downstream features the same way
   // a created custom avatar does. Falls back to host_avatar_id when
   // no selection is in play.
+  const hasCharacter = Boolean(c.character_id)
   const hasSelection = Boolean(c.selected_avatar_id)
   const customReady = ['ready', 'mock'].includes(c.host_avatar_status || '') && Boolean(c.host_avatar_id)
-  const avatarReady = hasSelection || customReady
-  const avatarFailed = !hasSelection && c.host_avatar_status === 'failed'
+  const [character, setCharacter] = useState(null)
+  const characterAvatarReady = character && ['ready', 'mock'].includes(character.runway_avatar_status || '')
+  const avatarReady = characterAvatarReady || hasSelection || customReady
+  const avatarFailed = !characterAvatarReady && !hasSelection && c.host_avatar_status === 'failed'
   const avatarMock = (
-    (hasSelection && String(c.selected_avatar_id || '').startsWith('mock-')) ||
-    (!hasSelection && c.host_avatar_status === 'mock')
+    (characterAvatarReady && character.runway_avatar_status === 'mock') ||
+    (!characterAvatarReady && hasSelection && String(c.selected_avatar_id || '').startsWith('mock-')) ||
+    (!characterAvatarReady && !hasSelection && c.host_avatar_status === 'mock')
   )
+
+  // Lazy-load the attached character record. We avoid pulling all
+  // characters globally — each card fetches its own.
+  useEffect(() => {
+    let cancelled = false
+    if (!c.character_id) {
+      setCharacter(null)
+      return undefined
+    }
+    api
+      .listCharacters()
+      .then((resp) => {
+        if (cancelled) return
+        const found = (resp.characters || []).find((x) => x.id === c.character_id) || null
+        setCharacter(found)
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [c.character_id])
   const hostReady = c.host_status === 'ok' && Boolean(c.host_video_url)
   const hostFailed = c.host_status === 'failed'
   const hostUnavailable = c.host_status === 'unavailable'
@@ -129,6 +160,45 @@ function CampaignCard({ c, onUpdated }) {
       setLocalError(`${fmt}: ${e}`)
     } finally {
       setBusyFormat(null)
+    }
+  }
+
+  const handleDetachCharacter = async () => {
+    setLocalError('')
+    try {
+      const updated = await api.attachCharacter(c.id, null)
+      onUpdated?.(updated)
+      setCharacter(null)
+    } catch (e) {
+      setLocalError(`detach character: ${e}`)
+    }
+  }
+
+  const openAttachPicker = async () => {
+    setAttachPickerOpen(true)
+    if (characterLibraryLoaded) return
+    try {
+      const resp = await api.listCharacters()
+      setCharacterLibrary(resp.characters || [])
+      setCharacterLibraryLoaded(true)
+    } catch (e) {
+      setLocalError(`load characters: ${e}`)
+    }
+  }
+
+  const handleAttachCharacter = async (target) => {
+    if (!target) return
+    setLocalError('')
+    setAttachBusyId(target.id)
+    try {
+      const updated = await api.attachCharacter(c.id, target.id)
+      onUpdated?.(updated)
+      setCharacter(target)
+      setAttachPickerOpen(false)
+    } catch (e) {
+      setLocalError(`attach character: ${e}`)
+    } finally {
+      setAttachBusyId(null)
     }
   }
 
@@ -358,13 +428,95 @@ function CampaignCard({ c, onUpdated }) {
           )}
         </div>
 
+        {/* PR K — Character attachment. Wins over picker + custom. */}
+        {hasCharacter && character && (
+          <div className="rounded-md border border-pink-400/40 bg-pink-500/5 p-2 space-y-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[11px] font-semibold text-pink-300">
+                Attached Character
+              </span>
+              <button
+                type="button"
+                onClick={handleDetachCharacter}
+                className="text-[10px] text-zinc-500 hover:text-pink-300"
+                title="Detach the character — falls back to selected avatar / custom Brand Spokesperson"
+              >
+                detach
+              </button>
+            </div>
+            <div className="flex items-start gap-2">
+              {character.portrait_url && (
+                <img
+                  src={character.portrait_url}
+                  alt={character.name}
+                  className="w-12 h-12 rounded-md border border-pink-400/40 object-cover bg-zinc-950"
+                />
+              )}
+              <div className="text-[11px] text-zinc-300 min-w-0">
+                <div className="font-medium truncate">{character.name}</div>
+                <div className="text-zinc-500 font-mono text-[9px]">
+                  {character.template} · {character.voice_preset} ·
+                  avatar {character.runway_avatar_status || 'pending'}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* PR K — Attach-character affordance. Always available when
+            no character is currently attached to this campaign. */}
+        {!hasCharacter && (
+          <div className="space-y-1">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[11px] text-zinc-400">
+                <span className="text-pink-300">Attach Character</span>
+                {' — '}reuse a Character Studio identity for Host Clip + Realtime
+              </span>
+              <button
+                type="button"
+                onClick={() => attachPickerOpen ? setAttachPickerOpen(false) : openAttachPicker()}
+                className="text-[10px] text-zinc-500 hover:text-pink-300"
+              >
+                {attachPickerOpen ? 'cancel' : 'attach character'}
+              </button>
+            </div>
+            {attachPickerOpen && (
+              <div>
+                {characterLibrary.length === 0 ? (
+                  <p className="text-[10px] text-zinc-500 italic py-2">
+                    {characterLibraryLoaded
+                      ? 'No characters yet. Use Character Studio above to create one.'
+                      : 'Loading…'}
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {characterLibrary.map((ch) => (
+                      <CharacterCard
+                        key={ch.id}
+                        character={ch}
+                        compact
+                        onAttach={handleAttachCharacter}
+                        busyAction={attachBusyId === ch.id ? 'attach' : null}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* PR I+ — Picker. If you select an existing avatar here, the
             "Create Custom Brand Spokesperson" flow below becomes
-            optional — selected_avatar_id wins downstream. */}
-        <AvatarPicker campaign={c} onUpdated={onUpdated} />
+            optional — selected_avatar_id wins downstream.  Only
+            show the picker when no character is attached (character
+            is the higher-precedence pin). */}
+        {!hasCharacter && <AvatarPicker campaign={c} onUpdated={onUpdated} />}
 
-        {/* Phase 1 visual — current avatar identity */}
-        {avatarReady ? (
+        {/* Phase 1 visual — current avatar identity (only shown when
+            no Character is attached; the Character block above is the
+            primary identity surface in that case) */}
+        {!hasCharacter && avatarReady ? (
           <div className="flex items-start gap-3">
             {(hasSelection ? c.selected_avatar_thumbnail_url : c.host_avatar_image_url) && (
               <img
@@ -418,12 +570,15 @@ function CampaignCard({ c, onUpdated }) {
               )}
             </div>
           </div>
-        ) : (
+        ) : !hasCharacter ? (
           <div className="space-y-1.5">
             <p className="text-[10px] text-zinc-500 leading-relaxed">
               Creates a reusable Runway Avatar from this campaign’s reference
               image (or a stock portrait fallback when the campaign image
-              has no recognisable face).
+              has no recognisable face).{' '}
+              <span className="text-pink-300">
+                Or attach a Character from Character Studio above.
+              </span>
             </p>
             <div className="flex items-center gap-2 flex-wrap">
               <button
@@ -461,7 +616,7 @@ function CampaignCard({ c, onUpdated }) {
               </p>
             )}
           </div>
-        )}
+        ) : null}
 
         {/* Phase 2 — Avatar Host Clip — only available once Phase 1 is ready. */}
         {avatarReady && (

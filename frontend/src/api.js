@@ -65,4 +65,25 @@ export const api = {
       `/api/campaigns/${encodeURIComponent(campaignId)}/select-avatar`,
       { method: 'POST', body: JSON.stringify(body) },
     ),
+  // PR K — Character Studio
+  listCharacters: () => jsonFetch('/api/characters'),
+  createCharacter: (body) =>
+    jsonFetch('/api/characters', { method: 'POST', body: JSON.stringify(body) }),
+  generateCharacterPortrait: (characterId, body = {}) =>
+    jsonFetch(
+      `/api/characters/${encodeURIComponent(characterId)}/generate-portrait`,
+      { method: 'POST', body: JSON.stringify(body) },
+    ),
+  createCharacterAvatar: (characterId, body = {}) =>
+    jsonFetch(
+      `/api/characters/${encodeURIComponent(characterId)}/create-avatar`,
+      { method: 'POST', body: JSON.stringify(body) },
+    ),
+  deleteCharacter: (characterId) =>
+    jsonFetch(`/api/characters/${encodeURIComponent(characterId)}`, { method: 'DELETE' }),
+  attachCharacter: (campaignId, characterId) =>
+    jsonFetch(
+      `/api/campaigns/${encodeURIComponent(campaignId)}/attach-character`,
+      { method: 'POST', body: JSON.stringify({ character_id: characterId }) },
+    ),
 }

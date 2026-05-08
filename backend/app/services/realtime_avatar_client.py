@@ -78,8 +78,8 @@ def create_session(campaign: Campaign, settings: Settings) -> RealtimeSession:
         raise RealtimeUnavailableError(
             "Realtime is unavailable in mock mode. Set RUNWAY_API_KEY to enable."
         )
-    avatar_id = active_avatar_id(campaign)
-    avatar_status = active_avatar_status(campaign)
+    avatar_id = active_avatar_id(campaign, settings)
+    avatar_status = active_avatar_status(campaign, settings)
     if not avatar_id or avatar_status != "ready":
         # Mock avatars and not-yet-ready customs are deliberately
         # excluded — they're not valid Runway resources for realtime.

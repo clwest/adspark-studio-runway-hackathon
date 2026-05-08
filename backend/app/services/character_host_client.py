@@ -63,22 +63,52 @@ SUPPORTED_VOICE_PRESETS: tuple[str, ...] = (
 _LOCAL_IMAGE_PREFIX = "/api/runway/image/"
 
 
-def active_avatar_id(campaign: Campaign) -> Optional[str]:
-    """Resolve which avatar id to use for downstream tasks.
-
-    The picker (``selected_avatar_id``) takes precedence over the
-    per-campaign custom Brand Spokesperson (``host_avatar_id``),
-    falling back when no explicit selection was made.  Returns
-    ``None`` only when the campaign has neither.
+def _character_avatar_for(campaign: Campaign, settings: Settings) -> tuple[Optional[str], Optional[str]]:
+    """If the campaign has an attached character, look up its
+    ``runway_avatar_id`` and ``runway_avatar_status``. Returns
+    ``(None, None)`` for unattached campaigns or unknown character ids.
     """
+    if not campaign.character_id:
+        return None, None
+    # Lazy local import to avoid circular dependency between this module
+    # and character_store; both are leaf modules that share Settings.
+    from .character_store import CharacterStore  # noqa: WPS433
+
+    try:
+        store = CharacterStore(settings.data_path)
+        record = store.get(campaign.character_id)
+    except Exception:  # pragma: no cover — defensive
+        return None, None
+    if not record:
+        return None, None
+    return record.runway_avatar_id, record.runway_avatar_status
+
+
+def active_avatar_id(campaign: Campaign, settings: Optional[Settings] = None) -> Optional[str]:
+    """Resolve which avatar id to use for downstream tasks (PR K).
+
+    Resolution order (locked in CHARACTER_STUDIO_SPIKE.md §4):
+        character.runway_avatar_id  >  selected_avatar_id  >  host_avatar_id
+
+    ``settings`` is optional for backward compat — callers that don't
+    pass it skip the character-store lookup and fall back to the
+    pre-PR-K resolution. New call sites should always pass it.
+    """
+    if settings is not None:
+        char_id, char_status = _character_avatar_for(campaign, settings)
+        if char_id and char_status in {"ready", "mock"}:
+            return char_id
     return campaign.selected_avatar_id or campaign.host_avatar_id
 
 
-def active_avatar_status(campaign: Campaign) -> Optional[str]:
-    """Status of the active avatar.  When a picker selection is in
-    play we trust it is READY (the picker only surfaces READY ones);
-    otherwise fall through to the campaign's host_avatar_status.
+def active_avatar_status(campaign: Campaign, settings: Optional[Settings] = None) -> Optional[str]:
+    """Status of the active avatar. Mirrors the resolution order in
+    ``active_avatar_id``.
     """
+    if settings is not None:
+        char_id, char_status = _character_avatar_for(campaign, settings)
+        if char_id and char_status in {"ready", "mock"}:
+            return char_status
     if campaign.selected_avatar_id:
         return "ready"
     return campaign.host_avatar_status
@@ -385,8 +415,8 @@ def _generate_real(
     *,
     script_override: Optional[str],
 ) -> HostResult:
-    avatar_id = active_avatar_id(campaign)
-    avatar_status = active_avatar_status(campaign)
+    avatar_id = active_avatar_id(campaign, settings)
+    avatar_status = active_avatar_status(campaign, settings)
     if not avatar_id or avatar_status != "ready":
         raise HostError(
             "Brand Spokesperson Avatar must be READY before generating a host clip."
@@ -469,7 +499,10 @@ def _generate_mock(
     script_override: Optional[str],
 ) -> HostResult:
     """Synthesize a 5 s placeholder MP4 with ffmpeg lavfi."""
-    if not active_avatar_id(campaign) or active_avatar_status(campaign) not in {"ready", "mock"}:
+    if (
+        not active_avatar_id(campaign, settings)
+        or active_avatar_status(campaign, settings) not in {"ready", "mock"}
+    ):
         return HostResult(
             status="failed",
             error="Brand Spokesperson Avatar must exist before generating a host clip.",

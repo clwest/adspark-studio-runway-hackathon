@@ -22,6 +22,7 @@ from ..services.character_host_client import (
     generate_host_video,
     path_for as host_path_for,
 )
+from ..services.character_store import CharacterStore
 from ..services.realtime_avatar_client import (
     RealtimeUnavailableError,
     create_session as realtime_create_session,
@@ -409,15 +410,16 @@ def post_host_video(
     if not record:
         raise HTTPException(status_code=404, detail="campaign not found")
     if (
-        not host_active_avatar_id(record)
-        or host_active_avatar_status(record) not in {"ready", "mock"}
+        not host_active_avatar_id(record, settings)
+        or host_active_avatar_status(record, settings) not in {"ready", "mock"}
     ):
         raise HTTPException(
             status_code=409,
             detail=(
-                "A Brand Spokesperson Avatar (custom or selected) is "
-                "required first. Pick one from the avatar list or "
-                "POST /api/campaigns/{id}/avatar to create a new one."
+                "A Brand Spokesperson Avatar (custom, selected, or "
+                "via attached Character) is required first. Pick one "
+                "from the avatar list, attach a Character, or POST "
+                "/api/campaigns/{id}/avatar to create a new one."
             ),
         )
 
@@ -601,6 +603,55 @@ def post_dub_voice(
     return updated or record
 
 
+# ---- PR K — Character Studio attachment ---------------------------
+
+
+def _character_store(settings: Settings = Depends(get_settings)) -> CharacterStore:
+    return CharacterStore(settings.data_path)
+
+
+class AttachCharacterBody(BaseModel):
+    character_id: Optional[str] = Field(
+        default=None,
+        description=(
+            "Character to attach to this campaign. Pass null/empty "
+            "to detach. When attached, the character's "
+            "runway_avatar_id wins over selected_avatar_id and "
+            "host_avatar_id for downstream features."
+        ),
+    )
+
+
+@router.post("/{campaign_id}/attach-character", response_model=Campaign)
+def post_attach_character(
+    campaign_id: str,
+    body: AttachCharacterBody,
+    store: CampaignStore = Depends(_store),
+    char_store: CharacterStore = Depends(_character_store),
+) -> Campaign:
+    record = store.get(campaign_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="campaign not found")
+
+    cid = (body.character_id or "").strip() or None
+    if cid is not None:
+        # Verify the character exists before persisting the attach.
+        if not char_store.get(cid):
+            raise HTTPException(
+                status_code=404,
+                detail=f"character {cid!r} not found",
+            )
+
+    updated = store.update_character_attachment(campaign_id, cid)
+    if not updated:
+        raise HTTPException(status_code=404, detail="campaign not found")
+    logger.info(
+        "campaign %s character_id %s",
+        campaign_id, cid if cid else "(detached)",
+    )
+    return updated
+
+
 # ---- PR I — Realtime Brand Spokesperson session broker -------------
 
 
@@ -618,17 +669,18 @@ def post_spokesperson_session(
     if not record:
         raise HTTPException(status_code=404, detail="campaign not found")
     if (
-        not host_active_avatar_id(record)
-        or host_active_avatar_status(record) not in {"ready"}
+        not host_active_avatar_id(record, settings)
+        or host_active_avatar_status(record, settings) not in {"ready"}
     ):
         # Mock avatars are explicitly not allowed here — they're not
         # real Runway resources.  An avatar must be created via
-        # /v1/avatars or selected from the picker first.
+        # /v1/avatars, selected from the picker, or attached via a
+        # Character before realtime can fire.
         raise HTTPException(
             status_code=409,
             detail=(
-                "A ready Runway Avatar (custom or selected) is required "
-                "before starting a realtime session."
+                "A ready Runway Avatar (custom, selected, or via attached "
+                "Character) is required before starting a realtime session."
             ),
         )
     try:
