@@ -157,6 +157,49 @@ Fix for the 001c blocker (Runway 400 because `promptImage` is required):
 - Frontend `vite build` clean.
 - **Zero real Runway generation calls** were made this session.
 
+## Session 001e — first successful real Runway generation 🎉
+
+After the 001d fix, one controlled real Runway image-to-video call succeeded
+end-to-end.
+
+**Request** (sanitized — Authorization Bearer key never appears in body):
+- endpoint: `POST /api/runway/generate` (one call, no retries)
+- `prompt_text`: cinematic 5-second social ad, warm morning light, coffee
+  cup on counter, inviting atmosphere, subtle camera push-in, no text
+  overlays
+- `prompt_image`: `https://images.unsplash.com/photo-1594297270189-4056091ab583?w=1280&q=80&fm=jpg`
+  (verified `image/jpeg`, 176 KB, before sending)
+- `duration`: 5
+- `ratio`: `1280:720`
+- model (server-side default): `gen4_turbo`
+
+**Result**:
+- Backend response: `200 {"task_id":"a6ae8ee0-1307-484b-87c9-636eaf37f0e7","status":"PENDING","mock_mode":false}`
+- Polling at 5–8s with jitter, 12-attempt cap. **Reached SUCCEEDED on poll 2**
+  (~8.1s wall time). Two polls total: `RUNNING progress=0.55` then
+  `SUCCEEDED progress=1.0`.
+- Output URL: a Runway CloudFront artifact
+  (`https://dnznrvs05pmza.cloudfront.net/<uuid>.mp4?_jwt=…`). The signed-URL
+  JWT carries `exp: 1778383102` (≈ 2026-05-15) — **the URL expires in about a
+  week**, so saved campaigns should ideally cache the asset rather than rely
+  on the URL long-term. (Filed as a follow-up; not blocking for the demo.)
+- Verified the URL resolves: `HTTP/2 200`, `content-type: video/mp4`,
+  `content-length: 2,668,486` (~2.7 MB).
+- Credits: real task succeeded, so **credits were definitely consumed** —
+  one short Gen-4 Turbo image-to-video at duration 5s.
+
+**Adjacent sanity check after the real call**:
+- `POST /api/campaigns` with the real task id and CloudFront URL → saved
+  (`63c07f53668b`). `GET /api/campaigns` count = 3. JSON store unaffected.
+
+**Conclusion**: AdSpark Studio's full real-mode pipeline (request →
+queue → poll → SUCCEEDED → save campaign) works against the live Runway
+`/v1/image_to_video` endpoint. The 001d guard saved one round-trip of
+Runway quota during the prior empty-image attempt.
+
+**No additional Runway calls made** — exactly one real generation this
+session.
+
 ## Open follow-ups
 - Decide whether the form should support an optional reference image upload —
   Runway's image-to-video path benefits from one.
