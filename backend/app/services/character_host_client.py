@@ -1,32 +1,40 @@
-"""Runway Character Host (PR F).
+"""Brand Spokesperson Avatar + Avatar Host Clip (PR F V2).
 
-Generates a short spokesperson MP4 for a saved campaign by:
+Two visible phases for the demo:
 
-1. Ensuring a curated host Avatar exists (created once, cached on disk
-   under ``backend/data/host/avatar.json``). Avatar processing requires
-   a face — we use a configurable Unsplash portrait URL for V1.
-2. Posting a `/v1/avatar_videos` task with a script templated from the
-   campaign's ``selected_concept``.
-3. Polling the resulting task with the same 5 s + jitter pattern the
-   rest of the app uses.
-4. Downloading the presigned MP4 to ``backend/data/host/<campaign_id>.mp4``
-   so it survives URL expiry.
+    1. ``create_or_reuse_avatar(campaign, settings, ...)``
+       - Per-campaign Runway Avatar created from the campaign's own
+         reference image when usable; otherwise falls back to a
+         curated stock portrait.
+       - Polls Runway's avatar processing pipeline to READY/FAILED.
+       - Returns an ``AvatarResult`` describing the avatar id, the
+         processed thumbnail URL, the image source we ended up using,
+         and the persisted status.
 
-Mock mode synthesizes a 5 s placeholder MP4 via local ffmpeg
-(``-f lavfi -i color`` + ``drawtext "Mock Host"``) — no third-party
-calls. ffmpeg is already a dependency for the Campaign Pack so this
-introduces no new system requirements.
+    2. ``generate_host_video(campaign, settings, ...)``
+       - Requires the campaign's ``host_avatar_id`` to already be
+         READY.  Posts ``/v1/avatar_videos`` with a templated script
+         from ``selected_concept`` and downloads the resulting MP4 to
+         ``backend/data/host/<campaign_id>.mp4``.
 
-Never raises in normal operation — callers receive a structured
-``HostResult`` and decide what to surface.
+Mock mode mirrors both phases — a stdlib PNG stands in for the
+processed avatar thumbnail, and an ffmpeg ``lavfi`` placeholder MP4
+stands in for the host clip. Same ffmpeg dependency we already require
+for the Campaign Pack; no new third-party deps.
+
+Never raises in normal operation — both phases return structured
+result dataclasses and the routers map them to HTTP responses.
 """
 from __future__ import annotations
 
-import json
+import base64
 import logging
 import shutil
+import struct
 import subprocess
 import time
+import uuid
+import zlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -39,12 +47,11 @@ from ..models import Campaign
 logger = logging.getLogger(__name__)
 
 _AVATAR_VIDEO_MODEL = "gwm1_avatars"
-_MAX_HOST_BYTES = 100 * 1024 * 1024  # 100 MB cap, same as Campaign cache
+_MAX_HOST_BYTES = 100 * 1024 * 1024
 _MAX_SCRIPT_CHARS = 300
 
 # Lower-case preset ids enumerated by the Runway validator during the
-# probe. Kept here so the router can validate user-supplied overrides
-# before round-tripping to Runway.
+# probe (see docs/research/RUNWAY_CHARACTER_HOST_SPIKE.md §12).
 SUPPORTED_VOICE_PRESETS: tuple[str, ...] = (
     "victoria", "vincent", "clara", "drew", "skye", "max",
     "morgan", "felix", "mia", "marcus", "summer", "ruby",
@@ -53,22 +60,35 @@ SUPPORTED_VOICE_PRESETS: tuple[str, ...] = (
     "petra", "adam", "zach", "violet", "roman", "luna",
 )
 
+_LOCAL_IMAGE_PREFIX = "/api/runway/image/"
+
+
+# ---- result dataclasses ---------------------------------------------
+
+@dataclass
+class AvatarResult:
+    status: str  # "ready" | "failed" | "mock"
+    avatar_id: Optional[str] = None
+    image_url: Optional[str] = None  # processed thumbnail from Runway
+    image_source: Optional[str] = None  # "campaign" | "stock" | "override"
+    error: Optional[str] = None
+    mock_mode: bool = False
+
 
 @dataclass
 class HostResult:
     status: str  # "ok" | "failed" | "unavailable"
     output_path: Optional[Path] = None
     task_id: Optional[str] = None
-    avatar_id: Optional[str] = None
     error: Optional[str] = None
     mock_mode: bool = False
 
 
 class HostError(RuntimeError):
-    """Raised internally when the Runway path can't proceed; caught by
-    the caller and surfaced as a structured ``HostResult``.
-    """
+    """Internal — caught by the public entry points."""
 
+
+# ---- shared helpers --------------------------------------------------
 
 def is_ffmpeg_available() -> bool:
     return shutil.which("ffmpeg") is not None
@@ -82,14 +102,39 @@ def _runway_headers(settings: Settings) -> dict[str, str]:
     }
 
 
-def build_script(campaign: Campaign, override: Optional[str] = None) -> str:
-    """Deterministic local templating from the saved concept. No
-    third-party LLM. Truncates to ``_MAX_SCRIPT_CHARS`` to stay inside
-    Runway's avatar_videos script bounds.
+def _host_dir(settings: Settings) -> Path:
+    d = settings.data_path / "host"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def path_for(settings: Settings, campaign_id: str) -> Path:
+    return _host_dir(settings) / f"{campaign_id}.mp4"
+
+
+def _solid_png_data_uri() -> str:
+    """Local stdlib mock avatar thumbnail. Same primitive used by
+    ``image_client.py`` for the mock reference image — no new deps.
     """
+
+    def chunk(typ: bytes, data: bytes) -> bytes:
+        crc = zlib.crc32(typ + data) & 0xFFFFFFFF
+        return struct.pack(">I", len(data)) + typ + data + struct.pack(">I", crc)
+
+    sig = b"\x89PNG\r\n\x1a\n"
+    width = height = 320
+    ihdr = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
+    row = bytes([0]) + bytes((30, 50, 70)) * width
+    raw = row * height
+    idat = zlib.compress(raw, level=9)
+    payload = sig + chunk(b"IHDR", ihdr) + chunk(b"IDAT", idat) + chunk(b"IEND", b"")
+    return "data:image/png;base64," + base64.b64encode(payload).decode("ascii")
+
+
+def build_script(campaign: Campaign, override: Optional[str] = None) -> str:
+    """Deterministic local templating from the saved concept. No LLM."""
     if override and override.strip():
         return override.strip()[:_MAX_SCRIPT_CHARS]
-
     concept = campaign.selected_concept
     parts = [
         f"Meet {campaign.business}." if campaign.business else "",
@@ -101,56 +146,57 @@ def build_script(campaign: Campaign, override: Optional[str] = None) -> str:
     return script[:_MAX_SCRIPT_CHARS]
 
 
-# ---- avatar caching ---------------------------------------------------
-
-def _host_dir(settings: Settings) -> Path:
-    d = settings.data_path / "host"
-    d.mkdir(parents=True, exist_ok=True)
-    return d
-
-
-def _avatar_record_path(settings: Settings) -> Path:
-    return _host_dir(settings) / "avatar.json"
-
-
-def _read_cached_avatar(settings: Settings) -> Optional[dict]:
-    p = _avatar_record_path(settings)
-    if not p.exists():
-        return None
-    try:
-        return json.loads(p.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return None
-
-
-def _write_cached_avatar(settings: Settings, record: dict) -> None:
-    p = _avatar_record_path(settings)
-    tmp = p.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(record, indent=2), encoding="utf-8")
-    tmp.replace(p)
-
-
-def _ensure_real_avatar(
-    settings: Settings, voice_preset: Optional[str] = None
-) -> str:
-    """Idempotently produce an Avatar id usable by `/v1/avatar_videos`.
-
-    Cached on disk so we don't recreate on every host-video request.
+def _resolve_image_for_runway(image_url: str, settings: Settings) -> str:
+    """Convert local ``/api/runway/image/<id>`` URLs to base64 data URIs
+    so Runway can ingest them.  External URLs and existing data URIs
+    pass through unchanged.
     """
-    cached = _read_cached_avatar(settings)
-    if cached and cached.get("status") == "READY" and cached.get("id"):
-        return cached["id"]
+    if not image_url:
+        return image_url
+    if not image_url.startswith(_LOCAL_IMAGE_PREFIX):
+        return image_url
+    image_id = image_url[len(_LOCAL_IMAGE_PREFIX):]
+    if "/" in image_id or ".." in image_id:
+        return image_url
+    local = settings.data_path / "images" / f"{image_id}.png"
+    if not local.exists():
+        return image_url
+    data = local.read_bytes()
+    b64 = base64.b64encode(data).decode("ascii")
+    return f"data:image/png;base64,{b64}"
 
-    voice = (voice_preset or settings.runway_host_voice_preset).lower()
-    if voice not in SUPPORTED_VOICE_PRESETS:
-        raise HostError(
-            f"unsupported voice preset '{voice}'. supported: {sorted(SUPPORTED_VOICE_PRESETS)}"
-        )
 
+def _pick_source(
+    campaign: Campaign,
+    override: Optional[str],
+    settings: Settings,
+) -> tuple[str, str]:
+    """Returns (image_to_send_to_runway, source_label).
+
+    Preference order: explicit override → campaign reference image →
+    configured stock portrait.
+    """
+    if override and override.strip():
+        return override.strip(), "override"
+    if campaign.reference_image_url and campaign.reference_image_url.strip():
+        return campaign.reference_image_url.strip(), "campaign"
+    return settings.runway_host_portrait_url, "stock"
+
+
+# ---- phase 1: create or reuse avatar ---------------------------------
+
+def _create_avatar_real(
+    image_url: str,
+    voice_preset: str,
+    settings: Settings,
+) -> dict:
+    """POST /v1/avatars and poll until READY/FAILED. Raises HostError
+    with a structured message on any non-200 status or terminal FAILED.
+    """
     body = {
-        "name": "AdSpark Host",
-        "referenceImage": settings.runway_host_portrait_url,
-        "voice": {"type": "runway-live-preset", "presetId": voice},
+        "name": "AdSpark Brand Spokesperson",
+        "referenceImage": _resolve_image_for_runway(image_url, settings),
+        "voice": {"type": "runway-live-preset", "presetId": voice_preset},
         "personality": "Concise, friendly product spokesperson.",
     }
     create_url = f"{settings.runway_api_base}/v1/avatars"
@@ -165,48 +211,125 @@ def _ensure_real_avatar(
     if not avatar_id:
         raise HostError(f"avatar create response missing id: {avatar}")
 
-    # Poll PROCESSING -> READY (~30-45s typical based on probe)
     deadline = time.time() + 180
-    interval = 5.0
     detail_url = f"{settings.runway_api_base}/v1/avatars/{avatar_id}"
-    final_status = avatar.get("status") or ""
+    final_status = (avatar.get("status") or "").upper()
     with httpx.Client(timeout=20.0) as client:
-        while time.time() < deadline:
+        while time.time() < deadline and final_status not in {"READY", "FAILED"}:
+            time.sleep(5)
             r = client.get(detail_url, headers=_runway_headers(settings))
             r.raise_for_status()
             avatar = r.json()
             final_status = (avatar.get("status") or "").upper()
-            if final_status in {"READY", "FAILED"}:
-                break
-            time.sleep(interval)
-
-    if final_status != "READY":
-        # Don't cache the failed record — let the next request retry.
+    if final_status == "FAILED":
         raise HostError(
-            f"avatar processing did not reach READY (final: {final_status})"
+            "Runway rejected the reference image — typically because it "
+            "does not contain a recognisable face."
+        )
+    if final_status != "READY":
+        raise HostError(f"avatar processing did not reach READY (final: {final_status})")
+    avatar["_finalStatus"] = final_status
+    return avatar
+
+
+def create_or_reuse_avatar(
+    campaign: Campaign,
+    settings: Settings,
+    *,
+    voice_preset: Optional[str] = None,
+    image_url_override: Optional[str] = None,
+    force_recreate: bool = False,
+) -> AvatarResult:
+    """Public entry point for **Phase 1 — Create Brand Spokesperson**.
+
+    Reuses an existing READY avatar on the campaign unless
+    ``force_recreate=True``.  When creating, picks the source image
+    (override → campaign reference → stock portrait), tries that, and
+    on failure surfaces the failure honestly — the caller (router)
+    decides whether to expose a "Try again with stock portrait"
+    follow-up to the user.
+
+    Mock mode produces a synthetic READY avatar with a stdlib PNG
+    thumbnail so the UI flow works identically.
+    """
+    voice = (voice_preset or settings.runway_host_voice_preset).lower()
+    if voice not in SUPPORTED_VOICE_PRESETS:
+        return AvatarResult(
+            status="failed",
+            error=(
+                f"unsupported voice preset '{voice}'. supported: "
+                f"{sorted(SUPPORTED_VOICE_PRESETS)}"
+            ),
+            mock_mode=settings.runway_mock,
         )
 
-    _write_cached_avatar(settings, {
-        "id": avatar_id,
-        "status": "READY",
-        "voice_preset": voice,
-        "portrait": settings.runway_host_portrait_url,
-        "processed_image_uri": avatar.get("processedImageUri"),
-    })
-    logger.info("cached host avatar id=%s voice=%s", avatar_id, voice)
-    return avatar_id
+    # Reuse path
+    if (
+        not force_recreate
+        and campaign.host_avatar_id
+        and (campaign.host_avatar_status in {"ready", "mock"})
+    ):
+        return AvatarResult(
+            status=campaign.host_avatar_status or "ready",
+            avatar_id=campaign.host_avatar_id,
+            image_url=campaign.host_avatar_image_url,
+            image_source=campaign.host_avatar_image_source,
+            mock_mode=campaign.host_avatar_status == "mock",
+        )
+
+    # Pick the source image
+    chosen_url, source_label = _pick_source(campaign, image_url_override, settings)
+
+    if settings.runway_mock:
+        avatar_id = f"mock_avatar_{uuid.uuid4().hex[:10]}"
+        return AvatarResult(
+            status="mock",
+            avatar_id=avatar_id,
+            image_url=_solid_png_data_uri(),
+            image_source=source_label,
+            mock_mode=True,
+        )
+
+    try:
+        avatar = _create_avatar_real(chosen_url, voice, settings)
+    except HostError as exc:
+        logger.warning(
+            "avatar create failed campaign=%s source=%s: %s",
+            campaign.id, source_label, exc,
+        )
+        return AvatarResult(
+            status="failed",
+            image_source=source_label,
+            error=str(exc)[:300],
+            mock_mode=False,
+        )
+    except httpx.HTTPError as exc:
+        logger.warning("avatar create http error: %s", exc)
+        return AvatarResult(
+            status="failed",
+            image_source=source_label,
+            error=f"http error: {exc!s}"[:300],
+            mock_mode=False,
+        )
+    except Exception as exc:  # pragma: no cover — defensive
+        logger.exception("avatar create unexpected")
+        return AvatarResult(
+            status="failed",
+            image_source=source_label,
+            error=f"unexpected: {exc!s}"[:300],
+            mock_mode=False,
+        )
+
+    return AvatarResult(
+        status="ready",
+        avatar_id=avatar.get("id"),
+        image_url=avatar.get("processedImageUri") or avatar.get("referenceImageUri"),
+        image_source=source_label,
+        mock_mode=False,
+    )
 
 
-# ---- video generation ------------------------------------------------
-
-def _path_for(settings: Settings, campaign_id: str) -> Path:
-    return _host_dir(settings) / f"{campaign_id}.mp4"
-
-
-def path_for(settings: Settings, campaign_id: str) -> Path:
-    """Public alias used by routers."""
-    return _path_for(settings, campaign_id)
-
+# ---- phase 2: avatar_videos ------------------------------------------
 
 def _download(url: str, target: Path, timeout: float = 60.0) -> int:
     tmp = target.with_suffix(".mp4.tmp")
@@ -239,17 +362,19 @@ def _generate_real(
     campaign: Campaign,
     settings: Settings,
     *,
-    voice_preset: Optional[str],
     script_override: Optional[str],
 ) -> HostResult:
-    avatar_id = _ensure_real_avatar(settings, voice_preset)
+    if not campaign.host_avatar_id or campaign.host_avatar_status != "ready":
+        raise HostError(
+            "Brand Spokesperson Avatar must be READY before generating a host clip."
+        )
     script = build_script(campaign, script_override)
     if not script:
         raise HostError("empty script — campaign concept fields all blank")
 
     body = {
         "model": _AVATAR_VIDEO_MODEL,
-        "avatar": {"type": "custom", "avatarId": avatar_id},
+        "avatar": {"type": "custom", "avatarId": campaign.host_avatar_id},
         "speech": {"type": "text", "text": script},
     }
     url = f"{settings.runway_api_base}/v1/avatar_videos"
@@ -264,7 +389,6 @@ def _generate_real(
     if not task_id:
         raise HostError(f"avatar_videos missing task id: {created}")
 
-    # Poll the task — same 5s + jitter pattern as elsewhere, sync.
     deadline = time.time() + 360
     final = None
     with httpx.Client(timeout=20.0) as client:
@@ -286,7 +410,6 @@ def _generate_real(
     if not final:
         raise HostError(f"avatar_videos task {task_id} timed out after 6 min")
 
-    # Extract first output URL
     output = final.get("output")
     out_url: Optional[str] = None
     if isinstance(output, list):
@@ -302,17 +425,16 @@ def _generate_real(
     if not out_url:
         raise HostError(f"avatar_videos task {task_id} produced no output url")
 
-    target = _path_for(settings, campaign.id)
+    target = path_for(settings, campaign.id)
     size = _download(out_url, target)
     logger.info(
         "host video saved campaign=%s bytes=%d avatar=%s task=%s",
-        campaign.id, size, avatar_id, task_id,
+        campaign.id, size, campaign.host_avatar_id, task_id,
     )
     return HostResult(
         status="ok",
         output_path=target,
         task_id=task_id,
-        avatar_id=avatar_id,
         mock_mode=False,
     )
 
@@ -323,27 +445,25 @@ def _generate_mock(
     *,
     script_override: Optional[str],
 ) -> HostResult:
-    """Synthesize a 5 s silent placeholder MP4 with ffmpeg lavfi.
-
-    Stays mock-safe: no third-party calls. ffmpeg already required by
-    the Campaign Pack pipeline so we don't add a new dependency.
-    """
+    """Synthesize a 5 s placeholder MP4 with ffmpeg lavfi."""
+    if not campaign.host_avatar_id or campaign.host_avatar_status not in {"ready", "mock"}:
+        return HostResult(
+            status="failed",
+            error="Brand Spokesperson Avatar must exist before generating a host clip.",
+            mock_mode=True,
+        )
     if not is_ffmpeg_available():
         return HostResult(
             status="unavailable",
             error="ffmpeg not found on PATH",
             mock_mode=True,
         )
-    script = build_script(campaign, script_override)
-    target = _path_for(settings, campaign.id)
-    tmp = target.with_suffix(".mp4.tmp")
     raw_label = (
         campaign.selected_concept.title or campaign.business or "Mock Host"
     )[:60]
-    # Strip apostrophes (drawtext text='...' would break) and escape colons
-    # (drawtext option separator).
     label = raw_label.replace("'", "").replace(":", "\\:")
-
+    target = path_for(settings, campaign.id)
+    tmp = target.with_suffix(".mp4.tmp")
     cmd = [
         "ffmpeg",
         "-y",
@@ -392,13 +512,11 @@ def _generate_mock(
             mock_mode=True,
         )
     tmp.replace(target)
-    logger.info("mock host video written for campaign %s (%d bytes)", campaign.id, target.stat().st_size)
-    _ = script  # script unused in mock; logged via campaign label above
+    _ = script_override  # accepted but ignored in mock — script is implied by label
     return HostResult(
         status="ok",
         output_path=target,
-        task_id="mock_host",
-        avatar_id="mock_avatar",
+        task_id=f"mock_host_{uuid.uuid4().hex[:8]}",
         mock_mode=True,
     )
 
@@ -407,21 +525,13 @@ def generate_host_video(
     campaign: Campaign,
     settings: Settings,
     *,
-    voice_preset: Optional[str] = None,
     script_override: Optional[str] = None,
 ) -> HostResult:
-    """Public entry point. Mock-safe; never raises HostError above this
-    boundary — the structured HostResult is the only failure surface.
-    """
+    """Public entry point for **Phase 2 — Present Campaign**."""
     try:
         if settings.runway_mock:
             return _generate_mock(campaign, settings, script_override=script_override)
-        return _generate_real(
-            campaign,
-            settings,
-            voice_preset=voice_preset,
-            script_override=script_override,
-        )
+        return _generate_real(campaign, settings, script_override=script_override)
     except HostError as exc:
         logger.warning("host generation failed: %s", exc)
         return HostResult(
@@ -436,7 +546,7 @@ def generate_host_video(
             error=f"http error: {exc!s}"[:300],
             mock_mode=settings.runway_mock,
         )
-    except Exception as exc:
+    except Exception as exc:  # pragma: no cover — defensive
         logger.exception("host generation unexpected")
         return HostResult(
             status="failed",

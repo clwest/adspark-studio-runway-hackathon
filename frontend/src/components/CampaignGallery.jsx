@@ -69,9 +69,13 @@ function CampaignCard({ c, onUpdated }) {
   const cacheFailed = c.cache_status === 'failed'
 
   const [busyFormat, setBusyFormat] = useState(null) // null | "landscape" | "reels" | "square"
+  const [avatarBusy, setAvatarBusy] = useState(false)
   const [hostBusy, setHostBusy] = useState(false)
   const [localError, setLocalError] = useState('')
 
+  const avatarReady = ['ready', 'mock'].includes(c.host_avatar_status || '') && Boolean(c.host_avatar_id)
+  const avatarFailed = c.host_avatar_status === 'failed'
+  const avatarMock = c.host_avatar_status === 'mock'
   const hostReady = c.host_status === 'ok' && Boolean(c.host_video_url)
   const hostFailed = c.host_status === 'failed'
   const hostUnavailable = c.host_status === 'unavailable'
@@ -96,6 +100,19 @@ function CampaignCard({ c, onUpdated }) {
       setLocalError(`${fmt}: ${e}`)
     } finally {
       setBusyFormat(null)
+    }
+  }
+
+  const handleCreateSpokesperson = async (opts = {}) => {
+    setLocalError('')
+    setAvatarBusy(true)
+    try {
+      const updated = await api.createSpokesperson(c.id, opts)
+      onUpdated?.(updated)
+    } catch (e) {
+      setLocalError(`avatar: ${e}`)
+    } finally {
+      setAvatarBusy(false)
     }
   }
 
@@ -253,89 +270,191 @@ function CampaignCard({ c, onUpdated }) {
         </div>
       )}
 
-      {/* PR F — AI Host. Always available once a campaign exists; doesn't
-          require a cached video like the Campaign Pack does. */}
-      <div className="border-t border-zinc-800 pt-3 space-y-2">
+      {/* PR F — Brand Spokesperson Avatar (Phase 1) + Avatar Host Clip (Phase 2). */}
+      <div className="border-t border-zinc-800 pt-3 space-y-3">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-zinc-300">AI Host</span>
+            <span className="text-xs font-semibold text-zinc-300">
+              Brand Spokesperson
+            </span>
             <span
-              className="text-[10px] text-zinc-500"
-              title="Runway avatar video — a short spokesperson clip that narrates the campaign concept."
+              className="text-[10px] text-zinc-500 font-mono"
+              title="Runway Avatar created from this campaign's reference image (or a stock portrait fallback)."
             >
-              Runway avatar video
+              Runway Avatar
             </span>
           </div>
-          {hostReady && (
-            <span className="text-[10px] rounded-full bg-sky-500/20 text-sky-300 px-2 py-0.5">
-              ready
+          {avatarReady && (
+            <span
+              className={`text-[10px] rounded-full px-2 py-0.5 font-mono ${
+                avatarMock
+                  ? 'bg-amber-500/20 text-amber-300'
+                  : 'bg-emerald-500/20 text-emerald-300'
+              }`}
+              title={avatarMock ? 'mock avatar (no real Runway call)' : 'Avatar processed and READY'}
+            >
+              {avatarMock ? 'mock ready' : 'ready'}
             </span>
           )}
-          {hostUnavailable && (
-            <span className="text-[10px] text-amber-300">
-              ffmpeg unavailable for mock host
+          {avatarFailed && (
+            <span className="text-[10px] rounded-full bg-rose-500/20 text-rose-300 px-2 py-0.5 font-mono">
+              failed
             </span>
           )}
         </div>
-        {hostReady ? (
-          <div className="space-y-1.5">
-            <video
-              key={c.host_video_url}
-              src={c.host_video_url}
-              controls
-              preload="metadata"
-              className="w-full max-w-xs rounded-lg border border-zinc-800"
-            />
-            <div className="flex items-center gap-3 text-xs">
-              <a
-                href={c.host_video_url}
-                target="_blank"
-                rel="noreferrer"
-                className="text-spark hover:underline"
-              >
-                open host clip ↗
-              </a>
-              {c.host_mock_mode === true && (
-                <span className="text-[10px] text-amber-300">
-                  mock placeholder
+
+        {/* Phase 1 visual — current avatar identity */}
+        {avatarReady ? (
+          <div className="flex items-start gap-3">
+            {c.host_avatar_image_url && (
+              <img
+                src={c.host_avatar_image_url}
+                alt="Brand spokesperson avatar"
+                className="w-16 h-16 rounded-md border border-zinc-800 object-cover bg-zinc-950"
+              />
+            )}
+            <div className="text-[11px] text-zinc-400 space-y-0.5 min-w-0">
+              <div className="font-mono text-zinc-200 truncate" title={c.host_avatar_id || ''}>
+                avatar id: {String(c.host_avatar_id).slice(0, 12)}…
+              </div>
+              <div>
+                source:{' '}
+                <span className="text-zinc-300">
+                  {c.host_avatar_image_source === 'campaign'
+                    ? 'this campaign’s reference image'
+                    : c.host_avatar_image_source === 'override'
+                    ? 'user-provided image'
+                    : 'stock portrait'}
                 </span>
-              )}
+              </div>
               <button
                 type="button"
-                onClick={handlePresent}
-                disabled={hostBusy}
+                onClick={() => handleCreateSpokesperson({ force_recreate: true })}
+                disabled={avatarBusy}
                 className="text-[10px] text-zinc-500 hover:text-zinc-300 disabled:opacity-50"
-                title="Generate a fresh host clip (replaces the current one)"
+                title="Discard the cached avatar and create a fresh one"
               >
-                regenerate
+                {avatarBusy ? 'Re-creating…' : 'Re-create spokesperson'}
               </button>
             </div>
           </div>
         ) : (
-          <div className="space-y-1">
-            <p className="text-[10px] text-zinc-500">
-              Creates a short spokesperson clip for this campaign.
+          <div className="space-y-1.5">
+            <p className="text-[10px] text-zinc-500 leading-relaxed">
+              Creates a reusable Runway Avatar from this campaign’s reference
+              image (or a stock portrait fallback when the campaign image
+              has no recognisable face).
             </p>
-            <button
-              type="button"
-              onClick={handlePresent}
-              disabled={hostBusy}
-              className="rounded-md bg-sky-500/80 hover:bg-sky-500 text-zinc-100 text-xs px-2 py-1 disabled:opacity-50"
-              title="Use Runway avatar_videos to generate a short spokesperson narration"
-            >
-              {hostBusy
-                ? 'Recording host…'
-                : hostFailed
-                ? 'Retry Present Campaign'
-                : 'Present Campaign with AI Host'}
-            </button>
-            {hostFailed && c.host_error && (
-              <p
-                className="text-[10px] text-rose-300"
-                title={c.host_error}
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => handleCreateSpokesperson()}
+                disabled={avatarBusy}
+                className="rounded-md bg-sky-500/80 hover:bg-sky-500 text-zinc-100 text-xs px-2 py-1 disabled:opacity-50"
               >
-                last host attempt failed — see backend log
+                {avatarBusy
+                  ? 'Creating Brand Spokesperson…'
+                  : avatarFailed
+                  ? 'Retry Create Brand Spokesperson'
+                  : 'Create Brand Spokesperson'}
+              </button>
+              {avatarFailed && (
+                <button
+                  type="button"
+                  onClick={() => handleCreateSpokesperson({ force_recreate: true })}
+                  disabled={avatarBusy}
+                  className="rounded-md border border-zinc-700 hover:border-spark text-[10px] px-2 py-1 text-zinc-300 disabled:opacity-50"
+                  title="Try again using the configured stock portrait instead"
+                >
+                  Retry with stock portrait
+                </button>
+              )}
+            </div>
+            {avatarFailed && c.host_avatar_error && (
+              <p className="text-[10px] text-rose-300" title={c.host_avatar_error}>
+                {c.host_avatar_error}
               </p>
+            )}
+          </div>
+        )}
+
+        {/* Phase 2 — Avatar Host Clip — only available once Phase 1 is ready. */}
+        {avatarReady && (
+          <div className="border-t border-zinc-800/60 pt-2 space-y-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold text-zinc-300">
+                Avatar Host Clip
+              </span>
+              {hostReady && (
+                <span
+                  className={`text-[10px] rounded-full px-2 py-0.5 font-mono ${
+                    c.host_mock_mode
+                      ? 'bg-amber-500/20 text-amber-300'
+                      : 'bg-violet-500/20 text-violet-300'
+                  }`}
+                >
+                  {c.host_mock_mode ? 'mock ready' : 'ready'}
+                </span>
+              )}
+              {hostUnavailable && (
+                <span className="text-[10px] text-amber-300">
+                  ffmpeg unavailable
+                </span>
+              )}
+            </div>
+            {hostReady ? (
+              <div className="space-y-1.5">
+                <video
+                  key={c.host_video_url}
+                  src={c.host_video_url}
+                  controls
+                  preload="metadata"
+                  className="w-full max-w-xs rounded-lg border border-zinc-800"
+                />
+                <div className="flex items-center gap-3 text-xs">
+                  <a
+                    href={c.host_video_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-spark hover:underline"
+                  >
+                    open host clip ↗
+                  </a>
+                  <button
+                    type="button"
+                    onClick={handlePresent}
+                    disabled={hostBusy}
+                    className="text-[10px] text-zinc-500 hover:text-zinc-300 disabled:opacity-50"
+                    title="Generate a fresh clip with the same Brand Spokesperson"
+                  >
+                    {hostBusy ? 'Recording…' : 'regenerate'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <p className="text-[10px] text-zinc-500">
+                  Uses the Brand Spokesperson Avatar above to record a short
+                  campaign pitch.
+                </p>
+                <button
+                  type="button"
+                  onClick={handlePresent}
+                  disabled={hostBusy}
+                  className="rounded-md bg-violet-500/80 hover:bg-violet-500 text-zinc-100 text-xs px-2 py-1 disabled:opacity-50"
+                >
+                  {hostBusy
+                    ? 'Recording Host Clip…'
+                    : hostFailed
+                    ? 'Retry Present Campaign'
+                    : 'Present Campaign'}
+                </button>
+                {hostFailed && c.host_error && (
+                  <p className="text-[10px] text-rose-300" title={c.host_error}>
+                    {c.host_error}
+                  </p>
+                )}
+              </div>
             )}
           </div>
         )}

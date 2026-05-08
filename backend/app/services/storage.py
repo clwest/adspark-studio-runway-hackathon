@@ -83,19 +83,40 @@ class CampaignStore:
                     return Campaign.model_validate(row)
         return None
 
-    def update_host_fields(
+    def update_host_avatar_fields(
+        self,
+        campaign_id: str,
+        host_avatar_id: Optional[str],
+        host_avatar_status: Optional[str],
+        host_avatar_image_url: Optional[str],
+        host_avatar_image_source: Optional[str],
+        host_avatar_error: Optional[str],
+    ) -> Optional[Campaign]:
+        """PR F — persist Phase 1 (Brand Spokesperson Avatar) fields."""
+        with _LOCK:
+            rows = self._read()
+            for row in rows:
+                if row.get("id") == campaign_id:
+                    row["host_avatar_id"] = host_avatar_id
+                    row["host_avatar_status"] = host_avatar_status
+                    row["host_avatar_image_url"] = host_avatar_image_url
+                    row["host_avatar_image_source"] = host_avatar_image_source
+                    row["host_avatar_error"] = host_avatar_error
+                    self._write(rows)
+                    return Campaign.model_validate(row)
+        return None
+
+    def update_host_video_fields(
         self,
         campaign_id: str,
         host_video_url: Optional[str],
         host_status: Optional[str],
         host_error: Optional[str],
-        host_avatar_id: Optional[str] = None,
         host_task_id: Optional[str] = None,
         host_mock_mode: Optional[bool] = None,
     ) -> Optional[Campaign]:
-        """PR F — persist Character Host fields. ``host_avatar_id`` is set
-        on the first successful generation and reused so the gallery can
-        show the cached host portrait if desired.
+        """PR F — persist Phase 2 (Avatar Host Clip) fields. The avatar
+        identity persists across host-clip operations.
         """
         with _LOCK:
             rows = self._read()
@@ -104,8 +125,6 @@ class CampaignStore:
                     row["host_video_url"] = host_video_url
                     row["host_status"] = host_status
                     row["host_error"] = host_error
-                    if host_avatar_id is not None:
-                        row["host_avatar_id"] = host_avatar_id
                     if host_task_id is not None:
                         row["host_task_id"] = host_task_id
                     if host_mock_mode is not None:

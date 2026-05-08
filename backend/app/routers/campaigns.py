@@ -9,6 +9,7 @@ from ..config import Settings, get_settings
 from ..models import Campaign, CampaignCreate, CampaignList
 from ..services.character_host_client import (
     SUPPORTED_VOICE_PRESETS,
+    create_or_reuse_avatar,
     generate_host_video,
     path_for as host_path_for,
 )
@@ -215,34 +216,53 @@ def get_finished_video_format(
     )
 
 
-# ---- PR F — Character Host ------------------------------------------
+# ---- PR F — Brand Spokesperson Avatar + Avatar Host Clip ------------
 
 
-class HostVideoBody(BaseModel):
+class CreateAvatarBody(BaseModel):
     voice_preset: Optional[str] = Field(
         default=None, description="lowercase preset id (e.g. 'vincent')"
     )
+    image_url: Optional[str] = Field(
+        default=None,
+        description=(
+            "override reference image URL for the avatar. If omitted, "
+            "uses the campaign's reference_image_url; otherwise falls "
+            "back to the configured stock portrait."
+        ),
+    )
+    force_recreate: bool = Field(
+        default=False,
+        description="discard the cached avatar id and create a new one",
+    )
+
+
+class HostVideoBody(BaseModel):
     script_override: Optional[str] = Field(
         default=None, max_length=300, description="overrides the templated script"
     )
 
 
-@router.post("/{campaign_id}/host-video", response_model=Campaign)
-def post_host_video(
+@router.post("/{campaign_id}/avatar", response_model=Campaign)
+def post_create_avatar(
     campaign_id: str,
-    body: Optional[HostVideoBody] = None,
+    body: Optional[CreateAvatarBody] = None,
     settings: Settings = Depends(get_settings),
     store: CampaignStore = Depends(_store),
 ) -> Campaign:
-    """Generate a Runway avatar spokesperson clip for the campaign and
-    cache it locally. User click only — never auto-fired.
+    """Phase 1 — Create the Brand Spokesperson Avatar for the campaign.
+
+    Calls Runway ``POST /v1/avatars`` (or a mock equivalent), polls to
+    READY, and persists the avatar identity onto the campaign record.
     """
     record = store.get(campaign_id)
     if not record:
         raise HTTPException(status_code=404, detail="campaign not found")
 
-    voice_preset = (body.voice_preset if body else None)
-    script_override = (body.script_override if body else None)
+    voice_preset = body.voice_preset if body else None
+    image_url_override = body.image_url if body else None
+    force_recreate = bool(body.force_recreate) if body else False
+
     if voice_preset and voice_preset.lower() not in SUPPORTED_VOICE_PRESETS:
         raise HTTPException(
             status_code=400,
@@ -252,23 +272,78 @@ def post_host_video(
             ),
         )
 
-    result = generate_host_video(
+    result = create_or_reuse_avatar(
         record,
         settings,
         voice_preset=voice_preset,
-        script_override=script_override,
+        image_url_override=image_url_override,
+        force_recreate=force_recreate,
     )
+
+    if result.status in {"ready", "mock"}:
+        logger.info(
+            "avatar %s campaign=%s id=%s source=%s",
+            result.status, campaign_id, result.avatar_id, result.image_source,
+        )
+        updated = store.update_host_avatar_fields(
+            campaign_id,
+            host_avatar_id=result.avatar_id,
+            host_avatar_status=result.status,
+            host_avatar_image_url=result.image_url,
+            host_avatar_image_source=result.image_source,
+            host_avatar_error=None,
+        )
+    else:
+        logger.warning(
+            "avatar %s campaign=%s source=%s err=%s",
+            result.status, campaign_id, result.image_source, result.error,
+        )
+        updated = store.update_host_avatar_fields(
+            campaign_id,
+            host_avatar_id=None,
+            host_avatar_status=result.status,
+            host_avatar_image_url=None,
+            host_avatar_image_source=result.image_source,
+            host_avatar_error=result.error,
+        )
+    return updated or record
+
+
+@router.post("/{campaign_id}/host-video", response_model=Campaign)
+def post_host_video(
+    campaign_id: str,
+    body: Optional[HostVideoBody] = None,
+    settings: Settings = Depends(get_settings),
+    store: CampaignStore = Depends(_store),
+) -> Campaign:
+    """Phase 2 — Generate the Avatar Host Clip for the campaign.
+
+    Requires the campaign's Brand Spokesperson Avatar to be READY.
+    """
+    record = store.get(campaign_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="campaign not found")
+    if not record.host_avatar_id or record.host_avatar_status not in {"ready", "mock"}:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Brand Spokesperson Avatar must be created first. "
+                "POST /api/campaigns/{id}/avatar."
+            ),
+        )
+
+    script_override = body.script_override if body else None
+    result = generate_host_video(record, settings, script_override=script_override)
     if result.status == "ok":
         logger.info(
             "host video ok campaign=%s mock=%s task=%s",
             campaign_id, result.mock_mode, result.task_id,
         )
-        updated = store.update_host_fields(
+        updated = store.update_host_video_fields(
             campaign_id,
             host_video_url=f"/api/campaigns/{campaign_id}/host-video",
             host_status="ok",
             host_error=None,
-            host_avatar_id=result.avatar_id,
             host_task_id=result.task_id,
             host_mock_mode=result.mock_mode,
         )
@@ -277,12 +352,11 @@ def post_host_video(
             "host video %s for campaign=%s: %s",
             result.status, campaign_id, result.error,
         )
-        updated = store.update_host_fields(
+        updated = store.update_host_video_fields(
             campaign_id,
             host_video_url=None,
             host_status=result.status,
             host_error=result.error,
-            host_avatar_id=result.avatar_id,
             host_task_id=result.task_id,
             host_mock_mode=result.mock_mode,
         )

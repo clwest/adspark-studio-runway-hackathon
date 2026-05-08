@@ -104,11 +104,16 @@ class Campaign(CampaignCreate):
     finished_videos: dict[str, str] = {}  # PR B: per-format URLs
     finish_status: Optional[FinishStatus] = None  # status of the most recent finish op
     finish_error: Optional[str] = None  # error from the most recent finish op
-    # PR F — Character Host
+    # PR F — Brand Spokesperson Avatar (per-campaign Runway Avatar) +
+    # Avatar Host Clip (avatar_videos task output).
+    host_avatar_id: Optional[str] = None
+    host_avatar_status: Optional[Literal["pending", "ready", "failed", "mock"]] = None
+    host_avatar_image_url: Optional[str] = None  # processed thumbnail from Runway
+    host_avatar_image_source: Optional[Literal["campaign", "stock", "override"]] = None
+    host_avatar_error: Optional[str] = None
     host_video_url: Optional[str] = None
     host_status: Optional[HostStatus] = None
     host_error: Optional[str] = None
-    host_avatar_id: Optional[str] = None
     host_task_id: Optional[str] = None
     host_mock_mode: Optional[bool] = None
 
