@@ -4,22 +4,35 @@
 **AdSpark Studio**
 
 ## One-line pitch
-Type a business idea, get a Runway-powered Campaign Pack **plus a
-reusable AI Brand Spokesperson, a multilingual voice, and a live
-"Talk to your spokesperson" call** — every artefact cached locally —
-in under five minutes.
+**AI Campaign + Character Studio.** Type a business idea, get a
+Runway-powered Campaign Pack **plus a reusable AI brand character**
+(mascot / founder / coach / local guide) you can attach to every
+campaign, host clip, voiceover, and live "Talk to your spokesperson"
+call — every artefact cached locally — in under five minutes.
 
 ## Why this matters
 
-Brands don't just need ads — they need **campaign assets, reusable
-spokespeople, multilingual voice delivery, and an interactive
-presence**. Production teams normally cobble these together from four
-or five tools and a Premiere session. AdSpark Studio collapses them
-into a single click-driven flow built on top of Runway's API:
-campaign assets, platform-tuned creative, a custom Brand Voice with
-29-language dubs, a reusable Brand Spokesperson Avatar, an Avatar
-Host Clip, and a live realtime conversation surface — all from one
-business brief.
+Brands don't just need ads — they need **a reusable identity,
+campaign assets, multilingual voice delivery, and an interactive
+presence**. Production teams normally cobble these together from
+four or five tools and a Premiere session, and the *identity* — the
+mascot or spokesperson — gets re-shot every time. AdSpark Studio
+collapses everything into a single click-driven flow built on top of
+Runway's API: a generated brand character that becomes a Runway
+Avatar, platform-tuned ad creative, a custom Brand Voice with
+29-language dubs, an Avatar Host Clip, and a live realtime
+conversation surface — all from one business brief, all bound to one
+durable character record.
+
+The shift in PR K is the headline:
+
+> **A business that runs through AdSpark doesn't just leave with one
+> ad. It leaves with a reusable AI mascot or founder spokesperson it
+> can keep using across every campaign that follows.**
+
+This is the difference between an ad-generation tool (commodity,
+one-shot output) and a brand-asset platform (durable identity,
+multi-campaign reuse).
 
 ## Problem
 
@@ -46,22 +59,25 @@ campaigns survive Runway's URL expiry.
 - ✅ **Reference image** — Runway `gen4_image_turbo` from the recommended concept
 - ✅ **Runway video** — `gen4.5` text-or-image, or `gen4_turbo` image-to-video
 - ✅ **Platform Campaign Pack** — Landscape 1280×720, Reels 720×1280, Square 960×960
-- ✅ **Brand Spokesperson Avatar** — reusable Runway Avatar created from the campaign image (or stock portrait fallback)
-- ✅ **Avatar Picker** — reuse any avatar your account has already created without paying for a new one
-- ✅ **Avatar Host Clip** — short spoken pitch via Runway `avatar_videos`
+- ✅ **Reusable Brand Character** — generate a mascot/founder/coach/local-guide portrait via `gen4_image_turbo`, bind it to a Runway Avatar, attach it to any campaign. The character lives outside any single campaign and can be reused indefinitely.
+- ✅ **Brand Spokesperson Avatar** — per-campaign Runway Avatar created from the campaign image (or stock portrait fallback). Falls back when no Character is attached.
+- ✅ **Avatar Picker** — reuse any avatar your account has already created (incl. character avatars) without paying for a new one
+- ✅ **Avatar Host Clip** — short spoken pitch via Runway `avatar_videos`. Uses the resolution chain `character > selected > host` so the right identity always wins.
 - ✅ **Brand Voice** — custom voice designed via Runway `voices` text-design
 - ✅ **Multilingual Dub Pack** — 29-language dubs via Runway `voice_dubbing`
-- ✅ **Realtime Spokesperson** — live 5-min WebRTC conversation via Runway `realtime_sessions`
+- ✅ **Realtime Spokesperson** — live 5-min WebRTC conversation via Runway `realtime_sessions` with the active character/avatar
 
 ## How Runway is used (end-to-end)
 
 | Stage | Endpoint | Model | Notes |
 |---|---|---|---|
 | Reference image | `POST /v1/text_to_image` | `gen4_image_turbo` | Seeds with a flat-colour reference (Runway requires ≥1); prompt is the dominant signal |
+| **Character portrait** | `POST /v1/text_to_image` | `gen4_image_turbo` | **PR K** — locked template prompt (mascot / founder / coach / local guide) → 1280×720 portrait shaped for `/v1/avatars`. Cached at `backend/data/characters/<id>-portrait.png`. |
 | Video — image-to-video | `POST /v1/image_to_video` | `gen4_turbo` (default) or `gen4.5` | 5 s for Gen-4 Turbo; 5/8/10 s for Gen-4.5 |
 | Video — text-to-video | `POST /v1/text_to_video` | `gen4.5` | When the user enables "Use text-only video" |
-| **Brand Spokesperson Avatar** | `POST /v1/avatars` | — | Per-campaign Runway Avatar; reference-image fallback (override → campaign → stock). 30 universal voice presets. PROCESSING → READY in ~30–45 s. |
-| **Avatar list (picker)** | `GET /v1/avatars` | — | Lists the account's custom avatars. Curated to a safe shape (id, name, status, source, thumbnail, voice preset). 4 mock presets in mock mode. |
+| **Character → Runway Avatar** | `POST /v1/avatars` | — | **PR K** — reads the cached character portrait, embeds as data URI (≤5 MB), creates a reusable avatar bound to the character record. PROCESSING → READY in ~30–45 s. 30 universal voice presets. |
+| **Brand Spokesperson Avatar** | `POST /v1/avatars` | — | Per-campaign fallback when no character is attached. Reference-image fallback (override → campaign → stock). PROCESSING → READY in ~30–45 s. |
+| **Avatar list (picker)** | `GET /v1/avatars` | — | Lists the account's custom avatars (incl. PR K character avatars). Curated to a safe shape (id, name, status, source, thumbnail, voice preset). 4 mock presets in mock mode. |
 | **Avatar Host Clip** | `POST /v1/avatar_videos` | `gwm1_avatars` | `avatar:{type:"custom",avatarId}` + `speech:{type:"text",text}`. ~10 s for an 8-word pitch. h264 1088×704 + AAC. |
 | **Brand Voice** | `POST /v1/voices` | `eleven_multilingual_ttv_v2` | Text-design produces a custom voice; CloudFront `previewUrl` MP3 cached locally. |
 | **Multilingual Dub** | `POST /v1/voice_dubbing` | `eleven_voice_dubbing` | `audioUri` + 29-language `targetLang` enum. ~25 s per language. Source = Brand Voice preview MP3 as data URI. |
@@ -89,85 +105,101 @@ Runway. The realtime client connects directly to Runway via the
 
 ## Key differentiators
 
-1. **End-to-end Runway pipeline.** AdSpark generates the reference
-   image, animates it, turns the same image into a reusable
-   spokesperson, designs a custom brand voice, dubs it into 29
-   languages, and offers a live conversation surface — *all in the
-   same session, on the same campaign record*. No "upload your own
-   photo," no separate avatar tool, no human voiceover booking, no
-   separate dubbing service.
-2. **Campaign Pack output.** One click per format produces three
+1. **Reusable brand characters as first-class resources.** The
+   headline PR K capability. AdSpark generates a brand mascot or
+   founder portrait via `gen4_image_turbo`, binds it to a Runway
+   Avatar, and lets the same character drive every campaign's host
+   clip, audio pack, and realtime conversation. Characters outlive
+   any single campaign — the same Brewster the Bear can show up in
+   every cold-brew campaign for the next year.
+2. **End-to-end Runway pipeline.** AdSpark generates the reference
+   image, animates it, generates a brand-character portrait, turns
+   that portrait into a reusable spokesperson, designs a custom
+   brand voice, dubs it into 29 languages, and offers a live
+   conversation surface — *all in the same session, all from one
+   business brief*. No "upload your own photo," no separate avatar
+   tool, no human voiceover booking, no separate dubbing service.
+3. **Campaign Pack output.** One click per format produces three
    platform-tuned MP4s with the correct aspect ratio, burned-in
    title + CTA overlays, and `+faststart` for streaming friendliness.
-3. **Avatar reuse.** The Avatar Picker (`GET /v1/avatars` proxy)
-   lets users pick from any avatar their account has already paid to
-   create — instead of forcing every campaign through a fresh
-   `/v1/avatars` call.
-4. **Brand Spokesperson capability is visible, not hidden.** The
+4. **Avatar reuse.** The Avatar Picker (`GET /v1/avatars` proxy)
+   lets users pick from any avatar their account has already paid
+   to create — including the character avatars created via Phase K.
+   The picker auto-surfaces every character avatar without any
+   manual sync.
+5. **Avatar resolution chain.** `character.runway_avatar_id >
+   selected_avatar_id > host_avatar_id`. Whichever identity has the
+   strongest signal wins, so attaching a character to a campaign
+   automatically replaces the per-campaign spokesperson everywhere
+   downstream.
+6. **Brand Spokesperson capability is visible, not hidden.** The
    flow is split into two clicks judges can see: *Create Brand
-   Spokesperson* creates the Runway Avatar identity (with the avatar
-   id, processed thumbnail, and image source label persisted on the
-   campaign), and *Present Campaign* records the Avatar Host Clip
-   using that identity.
-5. **Honest fallbacks.** Runway rejects the campaign reference image
+   Spokesperson* (or *Create Runway Avatar* on a Character) creates
+   the Runway Avatar identity (with the avatar id, processed
+   thumbnail, and image source label persisted), and *Present
+   Campaign* records the Avatar Host Clip using that identity.
+7. **Honest fallbacks.** Runway rejects the campaign reference image
    for avatar use when it has no recognisable face. AdSpark surfaces
    the failure honestly and offers a one-click "Retry with stock
-   portrait" instead of silently swapping sources.
-6. **Realtime is brokered, not bolted on.** A FastAPI broker mints a
+   portrait" instead of silently swapping sources. Character
+   portraits use a locked template prompt that consistently produces
+   front-facing faces.
+8. **Realtime is brokered, not bolted on.** A FastAPI broker mints a
    short-lived `sessionKey` server-side; the React app never sees
    the Runway API secret. The `<AvatarCall>` component is
    lazy-loaded so SDK errors stay isolated and the rest of the
    gallery keeps working.
-7. **Demoable without keys.** Mock mode runs the same UI flow with
-   deterministic concepts, stdlib-generated mock assets, in-memory
-   tasks that succeed in seconds, ffmpeg-only audio placeholders, 4
-   mock preset entries in the avatar picker, and a clearly disabled
-   realtime button. This is what Playwright drives in CI.
-8. **Credit-safe.** A model-aware policy validates every request and
-   returns `HTTP 400` *before* any outbound HTTP. We caught real
-   schema mismatches during PR-A, PR-F, PR-H, and PR-I probes
-   (text_to_image's required `referenceImages`, avatars' `custom`
-   discriminator, voice_dubbing's `audioUri`/`targetLang` shape,
-   realtime sessions' `sessionKey`-in-GET pattern) — each surfaced
-   in milliseconds via Runway's validator without spending credits
-   twice.
-9. **Local cache.** Saved campaigns survive presigned URL expiry.
-   The gallery prefers cached files; finished Campaign Pack files,
-   host clips, voice previews, and dubs are independent of the
-   source clip once built.
+9. **Demoable without keys.** Mock mode runs the same UI flow with
+   deterministic concepts, stdlib-generated mock assets (incl.
+   character portraits), in-memory tasks that succeed in seconds,
+   ffmpeg-only audio placeholders, 4 mock preset entries in the
+   avatar picker, and a clearly disabled realtime button. This is
+   what Playwright drives in CI.
+10. **Credit-safe.** A model-aware policy validates every request
+    and returns `HTTP 400` *before* any outbound HTTP. We caught
+    real schema mismatches during PR-A, PR-F, PR-H, PR-I, and PR-K
+    probes (text_to_image's required `referenceImages`, avatars'
+    `custom` discriminator + data-URI size cap, voice_dubbing's
+    `audioUri`/`targetLang` shape, realtime sessions'
+    `sessionKey`-in-GET pattern) — each surfaced in milliseconds
+    via Runway's validator without spending credits twice.
+11. **Local cache.** Saved campaigns survive presigned URL expiry.
+    The gallery prefers cached files; finished Campaign Pack files,
+    host clips, voice previews, dubs, and character portraits are
+    independent of the source clip once built.
 
 ## Demo script (≈4–5 minutes live)
 
 Full ordered click-by-click guide lives in
-[`DEMO_SCRIPT.md`](./DEMO_SCRIPT.md) (five paths: mock, live,
-fallback, **realtime spokesperson**, and **avatar picker + realtime**).
-Short version:
+[`DEMO_SCRIPT.md`](./DEMO_SCRIPT.md) (six paths: mock, live, fallback,
+host clip, picker + realtime, and **Character Studio full demo**).
+Short headline version (Path F — the v5 hero):
 
 1. **Mode banner check** — readiness chip should read `demo ready ·
    concepts mocked` (typical) or `demo ready · all live`.
-2. **Form** — `Donkey Betz Coffee` / `Reels-ready cold brew` / `warm
-   cinematic` / `morning commuters`.
-3. **Generate Ad Concepts** → pick the recommended `Daily Ritual`.
-4. **Settings** — Model `Gen-4.5`, Source ratio `Reels / TikTok
-   720×1280`, Duration `5 s`.
-5. **Generate Reference Image** — ~25 s real `gen4_image_turbo`.
-6. **Generate Video** — ~2 min for Gen-4.5, status pill animates.
-7. **Save campaign card** — cache pill flips to `cached locally`.
-8. **Build Reels → Build Landscape → Build Square** — pack pill 1/3
-   → 2/3 → 3/3.
-9. **Choose Existing Runway Avatar** OR **Create Brand Spokesperson** —
-   either pick from the avatar picker or create a fresh per-campaign
-   spokesperson with the stock portrait fallback.
-10. **Present Campaign** — Avatar Host Clip records via
-    `avatar_videos`. ~10 s. Inline `<video>` plays the spokesperson
-    speaking the campaign pitch.
-11. **Design Brand Voice** — Runway `/v1/voices` text-design produces
-    a custom voice; preview MP3 plays inline.
-12. **Dub** — Spanish + French (or any of the 29 supported languages)
-    in ~25 s each.
-13. **Talk to Brand Spokesperson** — Start Conversation → mic
-    permission → live WebRTC call with the avatar speaking your
-    chosen voice. End Conversation tears down cleanly.
+2. **Open Character Studio.** Click `+ Create Character`. Name
+   `Brewster the Bear`, template `mascot`, voice `max`, subject
+   `a friendly grizzly bear barista mascot`. Submit.
+3. **Watch the portrait auto-generate** (~14 s real / instant mock).
+   Click `Create Runway Avatar` → ~30–45 s for `/v1/avatars` to
+   process the portrait into a reusable identity.
+4. **Form** — `Donkey Betz Coffee` / `Reels-ready cold brew` / `warm
+   cinematic` / `morning commuters`. Generate Ad Concepts → pick
+   `Daily Ritual` → Generate Reference Image → Generate Video →
+   Save campaign card.
+5. **Click `Use Brewster`** under the campaign's Brand Spokesperson
+   section. The character avatar wins the resolution chain.
+6. **Present Campaign** — Avatar Host Clip records via
+   `avatar_videos`. ~10 s. Inline `<video>` plays Brewster speaking
+   the campaign pitch.
+7. **Design Brand Voice** + **Dub** to Spanish + French — ~25 s each.
+8. **Talk to Brand Spokesperson** — Start Conversation → mic
+   permission → live WebRTC call with Brewster speaking. End
+   Conversation tears down cleanly.
+
+That's one character driving an ad clip, a host clip, a brand voice
++ dub, and a live realtime conversation — all from one Runway
+account, all bound to one durable Character record.
 
 ## Technical architecture
 
@@ -177,15 +209,18 @@ Frontend (React 18 + Vite 5 + Tailwind 3, single-page,
           @runwayml/avatars-react lazy-loaded for realtime)
   ↕
 Backend (FastAPI 0.115 + Pydantic v2 + httpx, single uvicorn worker,
-         28 routes total)
+         36 routes total)
   ├── concept_service               OpenAI gpt-4o-mini (optional) + deterministic mock fallback
   ├── image_client                  Runway text_to_image (real path) + stdlib zlib PNG (mock path)
   ├── runway_client                 Per-model GENERATION_POLICY; routes image_to_video / text_to_video
   ├── finisher_service              Local ffmpeg scale-cover + crop + drawtext for the Campaign Pack
   ├── character_host_client         Runway Avatars + avatar_videos two-phase host
+  │                                 active_avatar_id() resolves character > selected > host
   ├── avatar_listing_client         Curated GET /v1/avatars proxy + 4 mock presets
   ├── realtime_avatar_client        /v1/realtime_sessions broker (sessionKey only)
   ├── audio_client                  Runway voices + voice_dubbing two-phase audio
+  ├── character_studio_client       PR K — locked-template portrait + /v1/avatars binding
+  ├── character_store               PR K — JSON-file Character store with threading.Lock
   └── storage                       JSON campaign store + atomic local caches per artefact type
   ↕
 Runway API (api.dev.runwayml.com)  +  Local filesystem (backend/data/*, gitignored)
@@ -280,8 +315,8 @@ placeholders.
 
 ## Verified end-to-end against real Runway
 
-Multiple credit-spend hero-runs across PR-D / PR-F V2 / PR-H / PR-I
-were performed during development, all on campaign `9a717c675ec6`:
+Multiple credit-spend hero-runs across PR-D / PR-F V2 / PR-H / PR-I /
+**PR-K** were performed during development:
 
 **PR-D verification (campaign creation + Pack):**
 - Reference image (`gen4_image_turbo` @ 720:1280) → 720×1280 PNG
@@ -320,6 +355,27 @@ were performed during development, all on campaign `9a717c675ec6`:
 - Selection cleared at end of probe so canonical demo state is
   preserved
 
+**PR-K verification (Character Studio — `Brewster the Bear`,
+mascot template, voice `max`):**
+- Portrait generation (`gen4_image_turbo`, ratio 1280:720) → 605 KB
+  PNG cached at `backend/data/characters/<id>-portrait.png` in 14 s
+- `POST /v1/avatars` from cached portrait → `runway_avatar_id
+  f00b39e2-e8b5-4a8a-91d5-eca4ab57c4a8`, status `ready`, processed
+  thumbnail URL populated, in 34 s
+- Brewster appears at the top of `GET /v1/avatars` alongside the
+  account's existing avatars — Avatar Picker auto-surfaces the
+  character without any manual sync
+- Attach to campaign `de3f19094b79` via `POST
+  /api/campaigns/{id}/attach-character` persisted in <1 s
+- `POST /api/campaigns/{id}/host-video` afterwards used Brewster's
+  avatar id (resolution chain wins) — confirmed in backend logs
+- Detach + delete cleaned up portrait file + JSON entry; Runway-side
+  avatar persists for reuse from the picker
+- Backend log secret scan: zero `rwk_` / `stk_` / `sessionKey`
+  bytes leaked
+- Total spend per character: ~5 credits + ~50 s wall-clock — matches
+  spike estimate
+
 ## Repository
 
 - GitHub (private): https://github.com/clwest/adspark-studio-runway-hackathon
@@ -329,15 +385,19 @@ were performed during development, all on campaign `9a717c675ec6`:
   F (Brand Spokesperson Avatar + Avatar Host Clip,
   `hackathon-submission-v2`) → G (docs refresh) → H (Brand Voice +
   Dubs, `hackathon-submission-v3`) → I (Realtime Spokesperson +
-  Avatar Picker, **`hackathon-submission-v4`**) → J (this docs
-  refresh).
+  Avatar Picker, `hackathon-submission-v4`) → J (docs refresh) →
+  K (Character Studio V1, **`hackathon-submission-v5`**) → L (this
+  docs refresh).
 - **Submission tags** (all on origin):
   - `hackathon-submission` at `7ed949e` — pre-avatar baseline.
   - `hackathon-submission-v2` at `e6ca02b` — adds Brand Spokesperson
     Avatar + Avatar Host Clip.
   - `hackathon-submission-v3` at `515701f` — adds Brand Voice + 29-
     language Multilingual Dubs.
-  - **`hackathon-submission-v4`** at `89918c3` — **canonical full
-    submission.** Adds Realtime Brand Spokesperson + Avatar Picker.
-    `git checkout hackathon-submission-v4` reproduces the entire
-    feature stack.
+  - `hackathon-submission-v4` at `89918c3` — adds Realtime Brand
+    Spokesperson + Avatar Picker.
+  - **`hackathon-submission-v5`** at `0cddb96` — **canonical full
+    submission.** Adds Character Studio V1 — reusable brand
+    characters with generated portraits, Runway Avatar binding, and
+    per-campaign attachment. `git checkout hackathon-submission-v5`
+    reproduces the entire feature stack.

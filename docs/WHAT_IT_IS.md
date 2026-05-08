@@ -1,10 +1,12 @@
 # AdSpark Studio — What It Is
 
-A RunwayML hackathon build. A user enters a business / product / tone
-/ audience and gets a complete cinematic ad package — **plus a
-reusable AI Brand Spokesperson, a custom Brand Voice with 29-language
-dubs, and a live "Talk to your spokesperson" call** — all powered by
-Runway's API.
+A RunwayML hackathon build. AdSpark is **AI Campaign + Character
+Studio** — a user enters a business / product / tone / audience and
+gets a complete cinematic ad package, **plus a reusable AI brand
+character** (mascot / founder / coach / local guide) that becomes a
+Runway Avatar and can be reused across every campaign, host clip,
+voiceover, and live "Talk to your spokesperson" call — all powered
+by Runway's API.
 
 ## What AdSpark generates per campaign
 
@@ -21,34 +23,48 @@ Runway's API.
 6. **Campaign Pack** — three platform-tuned MP4s built by local
    ffmpeg: Landscape 1280×720, Reels 720×1280, Square 960×960, with
    title + CTA overlays.
-7. **Brand Spokesperson Avatar** — per-campaign Runway Avatar
+7. **Reusable Brand Character (PR K)** — first-class resource living
+   in its own JSON store. `gen4_image_turbo` generates a portrait
+   from one of four locked templates (`mascot`, `founder`, `coach`,
+   `local_guide`); `/v1/avatars` binds the cached portrait into a
+   Runway Avatar. Attach the same character to any campaign;
+   detach is a single null-write.
+8. **Brand Spokesperson Avatar** — per-campaign Runway Avatar
    created from the campaign's reference image (or stock-portrait
    fallback). Persisted on the campaign with thumbnail + image-source
-   label.
-8. **Avatar Picker** — `GET /v1/avatars` proxy (with 4 mock-mode
+   label. Falls back when no character is attached.
+9. **Avatar Picker** — `GET /v1/avatars` proxy (with 4 mock-mode
    presets) lets users reuse any avatar their account has already
-   paid to create. Selection wins over per-campaign custom avatars.
-9. **Avatar Host Clip** — short MP4 of the spokesperson speaking the
-   campaign pitch via Runway `avatar_videos`. Cached locally.
-10. **Brand Voice** — custom voice designed via Runway `voices`
+   paid to create — including the avatars created via Phase K
+   characters. Selection wins over per-campaign custom avatars.
+10. **Avatar Host Clip** — short MP4 of the spokesperson speaking the
+    campaign pitch via Runway `avatar_videos`. Resolution chain:
+    `character.runway_avatar_id > selected_avatar_id >
+    host_avatar_id`. Cached locally.
+11. **Brand Voice** — custom voice designed via Runway `voices`
     text-design. Preview MP3 cached locally.
-11. **Multilingual Dub Pack** — Brand Voice preview re-voiced into
+12. **Multilingual Dub Pack** — Brand Voice preview re-voiced into
     one of 29 ISO 639-1 languages via Runway `voice_dubbing`.
-12. **Realtime Spokesperson** — live 5-min WebRTC conversation with
-    the selected/created avatar via Runway `realtime_sessions`.
+13. **Realtime Spokesperson** — live 5-min WebRTC conversation with
+    the active avatar (same resolution chain) via Runway
+    `realtime_sessions`.
 
 ## Stack
 
 - **Backend**: FastAPI + Pydantic v2 + httpx
 - **Frontend**: React 18 + Vite 5 + Tailwind 3 +
   `@runwayml/avatars-react` (lazy-loaded) for realtime
-- **Storage**: JSON file at `backend/data/campaigns.json` (single-process)
+- **Storage**: JSON files at `backend/data/campaigns.json` and
+  `backend/data/characters.json` (single-process, threading.Lock,
+  atomic writes via `.tmp` suffix + `replace`)
 - **Local-only cache** (every artefact gitignored, never committed):
   - `backend/data/images/` — generated reference images
   - `backend/data/videos/` — saved campaign videos
   - `backend/data/finished/` — Campaign Pack outputs
   - `backend/data/host/` — Avatar Host Clips
   - `backend/data/audio/` — Brand Voice previews + per-language dubs
+  - `backend/data/characters/` — character portrait PNGs
+    (`<id>-portrait.png`)
 - **Finishing**: ffmpeg 7.1 (scale-cover + crop + drawtext for the
   Campaign Pack; lavfi-anullsrc / color + drawtext for mock audio +
   host-video placeholders)
@@ -76,12 +92,14 @@ The app **runs without any keys** in deterministic mock mode:
 | Concepts | Deterministic mock derived from inputs | `gpt-4o-mini` JSON-mode response |
 | Reference image | Stdlib zlib PNG written locally | `gen4_image_turbo` task + downloaded PNG |
 | Video task | In-memory mock; succeeds in ~12 s with public sample MP4 | Real `image_to_video` / `text_to_video` |
+| Character portrait | Stdlib zlib PNG written locally (sha256-derived flat colour) | Real `gen4_image_turbo` 1280×720 portrait via locked template prompt |
+| Character → Runway Avatar | Synthetic `mock_char_avatar_…` id + cached portrait reused as thumbnail data URI | Real `POST /v1/avatars` from cached portrait (data URI, ≤5 MB), poll READY |
 | Brand Spokesperson Avatar | Synthetic READY avatar + stdlib PNG thumbnail | Real `/v1/avatars` create + processing-poll to READY |
-| Avatar Picker | 4 hard-coded preset entries with stdlib data-URI thumbnails | Real `GET /v1/avatars` (account customs only) |
-| Avatar Host Clip | ffmpeg lavfi 5 s 720×720 silent placeholder | Real `/v1/avatar_videos` + downloaded MP4 |
+| Avatar Picker | 4 hard-coded preset entries with stdlib data-URI thumbnails | Real `GET /v1/avatars` (account customs incl. character avatars) |
+| Avatar Host Clip | ffmpeg lavfi 5 s 720×720 silent placeholder | Real `/v1/avatar_videos` + downloaded MP4 (uses character > selected > host avatar) |
 | Brand Voice | ffmpeg lavfi 3 s silent MP3 placeholder | Real `/v1/voices` text-design + downloaded preview MP3 |
 | Multilingual Dub | ffmpeg lavfi 3 s silent MP3 placeholder per lang | Real `/v1/voice_dubbing` + downloaded MP3 |
-| Realtime Spokesperson | HTTP 503 from broker; UI button disabled with copy | Real `/v1/realtime_sessions` broker; client-safe `sessionKey` returned |
+| Realtime Spokesperson | HTTP 503 from broker; UI button disabled with copy | Real `/v1/realtime_sessions` broker; client-safe `sessionKey` returned (uses same resolution chain) |
 | Campaign Pack | Same local ffmpeg in both modes (no provider call needed) | Same |
 
 Mock state surfaces in `GET /health` (`openai_mock`, `runway_mock`,

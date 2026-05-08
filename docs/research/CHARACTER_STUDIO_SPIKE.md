@@ -6,6 +6,20 @@
 **Status:** RESEARCH ONLY — one short live probe, no product code,
 no media committed. Recommends a Phase K V1 build to follow.
 
+> **2026-05-08 update — Phase K V1 shipped.** This research document
+> remains the locked design reference; the V1 implementation tracks
+> §§4–9 exactly. Real-mode hero-run on `Brewster the Bear` (mascot,
+> voice `max`) confirmed the full pipeline:
+> portrait `gen4_image_turbo` (14 s) → `/v1/avatars` (34 s, READY,
+> avatar id `f00b39e2-e8b5-4a8a-91d5-eca4ab57c4a8`) → attach to
+> campaign → Avatar Host Clip uses character avatar via the
+> `character > selected > host` resolution chain.
+>
+> Tagged on origin as `hackathon-submission-v5` (`0cddb96`).
+> See `docs/handoffs/SESSION_008_CHARACTER_STUDIO.md` and
+> `docs/handoffs/SESSION_009_CHARACTER_STUDIO_FINAL.md` for the
+> implementation + docs-refresh handoffs.
+
 > Two prior research notes are direct prerequisites:
 > `RUNWAY_CHARACTER_HOST_SPIKE.md` (PR F avatar create + avatar_videos
 > schema), `RUNWAY_API_CAPABILITY_MAP.md` Appendix D (Phase H/I locked
