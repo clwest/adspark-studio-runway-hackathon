@@ -1,259 +1,221 @@
 # AdSpark Studio
 
 > **Type a business idea, get a Runway-powered cinematic ad — concept,
-> prompt, video, and ready-to-post copy — in under a minute.**
+> reference image, video, and ready-to-post copy — in under three minutes.**
 
-A RunwayML hackathon entry. The flow: short form → 3 ad concepts → editable
-Runway video prompt → one image-to-video generation on user click →
-polled progress → inline video preview → saved campaign card with
-caption + CTA + social copy.
+A RunwayML hackathon entry. AdSpark Studio walks the user from a one-line
+business description to a full Campaign Pack: a 16:9 landscape spot, a
+9:16 Reels/TikTok cut, and a 1:1 square — every asset cached locally so a
+saved campaign keeps working long after Runway's presigned URLs expire.
 
-- ⚡ **Demo-ready in mock mode without any API keys** — every step
-  works with deterministic mock concepts and an in-memory mock Runway
-  task.
-- 🎬 **Real Runway integration** verified end-to-end (`gen4_turbo`,
-  `image_to_video`, 1280:720, 5 s).
-- 🛡 **Credit-safe by design** — backend rejects misconfigured requests
-  with a 400 *before* hitting Runway; no auto-generation on page load.
-- 🧪 **Browser smoke test** (Playwright + Chromium) drives the full mock
-  flow on every change.
+- **Real Runway, end-to-end.** `gen4_image_turbo` synthesizes the
+  reference image; `gen4.5` (text or image) or `gen4_turbo`
+  (image-to-video) renders the clip; local ffmpeg burns title + CTA
+  overlays into three platform-tuned MP4s.
+- **Mock-mode safe.** Without keys the same flow runs end-to-end with
+  deterministic concepts and an in-memory mock task that returns a
+  public sample MP4 in ~12 s. No third-party calls. Ideal for CI and
+  pre-demo dry runs.
+- **Credit-safe by design.** A model-aware backend policy validates
+  every request and returns clear `400`s before any outbound HTTP. Real
+  Runway calls fire only on user click.
+- **Browser smoke test** drives the full mock flow on every change with
+  Playwright + Chromium.
 
-📄 **Submission write-up:** [`SUBMISSION.md`](./SUBMISSION.md) — pitch,
-problem/solution, what's real vs mocked, future work, safety notes.
-🎯 **Live demo script:** see [Hackathon demo script](#hackathon-demo-script-3-minutes-live)
-below.
+📄 **Submission write-up:** [`SUBMISSION.md`](./SUBMISSION.md)
+🎬 **Screen-recording script:** [`DEMO_SCRIPT.md`](./DEMO_SCRIPT.md)
+🧭 **Next-session handoff:** [`00-START-NEXT-SESSION.md`](./00-START-NEXT-SESSION.md)
+
+## Architecture at a glance
+
+```mermaid
+flowchart LR
+  Form["Business idea form"] --> Concepts["3 mock or OpenAI concepts"]
+  Concepts -->|"selected concept's prompt"| Image["Runway gen4_image_turbo<br/>(/v1/text_to_image)"]
+  Image -->|"data URI"| Video["Runway gen4.5 / gen4_turbo<br/>(/v1/image_to_video or text_to_video)"]
+  Video -->|"presigned MP4"| Cache["Local cache<br/>backend/data/videos/&lt;id&gt;.mp4"]
+  Cache --> Pack["Local ffmpeg<br/>scale-cover + crop + drawtext"]
+  Pack --> L["Landscape 1280×720"]
+  Pack --> R["Reels 720×1280"]
+  Pack --> S["Square 960×960"]
+```
+
+Every step left of `Pack` can run in mock mode without a key. Everything
+right of `Cache` is fully local — no extra Runway calls per format.
 
 ## TL;DR — run it locally
+
 ```bash
-# Terminal 1 — backend
+# Terminal 1 — backend (uvicorn on :8000)
 cd backend && python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 
-# Terminal 2 — frontend
-cd frontend && npm install && npm run dev   # http://localhost:5173
-```
-Open `http://localhost:5173`. With no keys set, you're in mock mode and
-can drive the full flow immediately. Drop a `RUNWAY_API_KEY` into the
-**repo-root** `.env` to flip Runway into real mode.
-
-## Quick start
-
-### Backend
-```bash
-cd backend
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example ../.env    # repo-root .env is the single source of secrets;
-                           # leave keys blank to stay in mock mode
-uvicorn app.main:app --reload --port 8000
+# Terminal 2 — frontend (Vite on :5173, /api + /health proxied to :8000)
+cd frontend && npm install && npm run dev
 ```
 
-Backend lives at `http://localhost:8000`. Health check: `GET /health`.
-OpenAPI docs: `http://localhost:8000/docs`.
+Open `http://localhost:5173`. With **no** `RUNWAY_API_KEY` set, you're in
+mock mode and can drive the full flow immediately. Drop a real key into
+the **repo-root** `.env` to flip Runway into real mode.
 
-### Frontend
-```bash
-cd frontend
-npm install
-npm run dev
-```
+## Required + optional env vars
 
-Open `http://localhost:5173`. Vite proxies `/api` and `/health` to the
-backend on port 8000.
-
-## Hackathon demo script (≈3 minutes live)
-
-This is the path that's been smoke-tested end-to-end against real Runway.
-Have a public reference image URL ready before you start.
-
-1. **Start backend** in one terminal:
-   ```bash
-   cd backend && source .venv/bin/activate
-   uvicorn app.main:app --reload --port 8000
-   ```
-   The Mode banner in the app reads `/health` to label each provider.
-2. **Start frontend** in a second terminal:
-   ```bash
-   cd frontend && npm run dev
-   ```
-   Open `http://localhost:5173`. Note the Mode banner — `Concepts: mock`
-   and `Runway: real` is the typical hackathon configuration.
-3. **Generate concepts.** Fill the form (e.g. business `Local coffee shop`,
-   product `Morning blend`, tone `cinematic`, audience `morning commuters`)
-   and click **Generate Ad Concepts**. Three cards appear; one is flagged
-   `recommended`. The recommended Runway prompt drops into the prompt box.
-4. **Pick a different concept if you want.** Clicking another card swaps
-   selection (the prompt box stays editable).
-5. **Paste a public image URL** into the Reference Image URL field. A
-   product photo or storefront shot works. The field is required because
-   Runway is in real `image_to_video` mode.
-6. **Click Generate Video.** The Runway panel appears with a status pill
-   and progress bar. Polling is automatic (≥5s + jitter, capped at 5 min).
-   Real Gen-4 Turbo at duration 5 typically finishes in 8–30 seconds.
-7. **Preview the video.** When status hits `SUCCEEDED`, the panel renders
-   an inline `<video>` element with a Download link.
-8. **Save the campaign.** Click **Save campaign card**. The Saved
-   campaigns gallery below picks up the new card with the inline video
-   preview, the prompt (collapsed under a `prompt` disclosure), and a
-   small "URL may expire" tag — Runway artifact URLs are presigned and
-   expire after ~a week, so demoing the same saved card the next morning
-   may show a broken video. Re-generate or cache the asset for longer
-   demos.
-
-If anything misbehaves mid-demo, stop the Generate flow and switch the
-Mode banner to fully mocked: remove `RUNWAY_API_KEY` from the repo-root
-`.env`, restart `uvicorn`, and the same UI works on the in-memory mock
-task with the public sample MP4.
-
-## Demo mode (no keys)
-
-With `RUNWAY_API_KEY` and `OPENAI_API_KEY` blank/missing:
-
-- `/api/concepts` returns deterministic mock concepts derived from your inputs.
-- `/api/runway/generate` returns a `mock_<id>` task that "completes" in ~12s
-  with a public sample MP4 (Big Buck Bunny).
-- The UI shows a **MOCK MODE** badge in the header.
-
-This is the intended demo path. Nothing reaches a third-party API in mock mode.
-
-## Adding real keys
-
-Drop them into the **repo-root** `.env` (single source of local secrets):
+The repo-root `.env` (gitignored) is the single source of secrets. The
+backend reads it at startup via `pydantic-settings`. Copy
+`backend/.env.example` to the repo root and fill what you need:
 
 ```env
-RUNWAY_API_KEY=rwk_...           # https://dev.runwayml.com
-RUNWAY_API_VERSION=2024-11-06    # required header
-RUNWAY_MODEL=gen4_turbo          # or gen4.5
-OPENAI_API_KEY=sk-...            # optional, only for concept generation
+# REQUIRED for real Runway image + video generation
+RUNWAY_API_KEY=rwk_...
+
+# OPTIONAL — defaults sufficient for the hackathon build
+RUNWAY_API_BASE=https://api.dev.runwayml.com
+RUNWAY_API_VERSION=2024-11-06
+RUNWAY_MODEL=gen4_turbo                # default video model when one isn't chosen in the UI
+
+# OPTIONAL — leave blank to keep concepts mocked (deterministic and demo-safe)
+OPENAI_API_KEY=sk-...
 OPENAI_MODEL=gpt-4o-mini
+
+# OPTIONAL — defaults already match dev
+ALLOWED_ORIGINS=http://localhost:5173
+DATA_DIR=./data
 ```
 
-Restart `uvicorn`. The MOCK MODE badge disappears only when both keys are set;
-if only Runway is set, the badge stays (concepts are still mocked).
+### Mock mode (no keys, no spend)
 
-> **Heads-up:** real Runway calls cost credits. The app never auto-generates —
-> it only hits Runway when the user clicks **Generate Video**.
+With both keys blank or missing:
 
-### Runway is image-to-video — `prompt_image` is required in real mode
+- `/api/concepts` returns deterministic mock concepts derived from the form.
+- `/api/runway/image` writes a small, deterministic local PNG (no provider call).
+- `/api/runway/generate` returns a `mock_<id>` task that "succeeds" in ~12 s
+  with a public sample MP4.
+- The MOCK MODE pill + Mode banner show real/mock state per provider and
+  a top-level readiness chip ("demo mode" / "demo ready · concepts mocked"
+  / "demo ready · all live").
 
-Runway's `/v1/image_to_video` endpoint needs a public image URL to drive the
-motion. The app enforces this:
+To force mock mode without editing `.env`, override the keys at shell
+launch time:
 
-- **Real mode** (`RUNWAY_API_KEY` set): the backend returns
-  `400 prompt_image is required for Runway image_to_video real mode` if you
-  call `POST /api/runway/generate` without `prompt_image`. The UI shows the
-  reference-image field as **required**.
-- **Mock mode** (no key): `prompt_image` is optional; the in-memory mock
-  task ignores it and still "succeeds" with the sample MP4.
+```bash
+RUNWAY_API_KEY= OPENAI_API_KEY= uvicorn app.main:app --port 8000
+```
 
-Pick any public image URL (product photo, storefront photo, campaign hero
-image). The text prompt describes the motion and feel; the image anchors
-the look.
+Empty-string env vars override `.env` values via pydantic-settings.
+
+## Demo flow (≈3 minutes)
+
+1. **Mode banner check.** Confirms backend health and which providers
+   are real.
+2. **Generate concepts.** Form → 3 ad concepts with one flagged
+   `recommended` and an editable Runway prompt.
+3. **Pick a concept.** Selecting another card swaps the prompt; the
+   text remains editable.
+4. **Generate Reference Image** (Runway `gen4_image_turbo`).
+   Synthesizes a 16:9 / 9:16 / 1:1 PNG matching the chosen Source ratio
+   and caches it under `backend/data/images/<id>.png`. Click is
+   required — no auto-generation.
+5. **Generate Video** (Runway `gen4.5` text-or-image, or `gen4_turbo`
+   image-to-video). Polled status with progress bar. Inline `<video>`
+   preview when `SUCCEEDED`.
+6. **Save campaign card.** Backend downloads the presigned Runway MP4 to
+   `backend/data/videos/<id>.mp4` so the saved card keeps working
+   forever.
+7. **Build Campaign Pack.** Three buttons in the saved card: Landscape
+   (1280×720), Reels (720×1280), Square (960×960). Each runs a single
+   local ffmpeg pass — `scale=W:H:force_original_aspect_ratio=increase,
+   crop=W:H` to cover-fit + center-crop without distortion, then
+   `drawtext` overlays for title + CTA.
+
+The exact clicks for a 60–90 s screen recording live in
+[`DEMO_SCRIPT.md`](./DEMO_SCRIPT.md).
+
+## Generation settings
+
+The prompt panel exposes:
+
+- **Model** — Gen-4 Turbo (image-to-video) or Gen-4.5 (text or image).
+- **Source ratio** — Landscape 1280:720, Reels 720:1280, Square 960:960.
+  Match the source ratio to your target Campaign Pack format to reduce
+  cropping.
+- **Duration** — 5 / 8 / 10 s. Locked at 5 s when Gen-4 Turbo is
+  selected (single supported value at this scope).
+- **Use text-only video** — checkbox enabled only for Gen-4.5; routes
+  the request to `/v1/text_to_video` and skips the reference image.
+
+Backend enforces the same per-model policy and returns a clear `400` on
+any unsupported combination. The frontend persists every choice in
+`localStorage` under `adspark.settings.v1` so a reload during the demo
+preserves the configuration.
 
 ## Saved campaigns cache videos locally
 
 Runway returns presigned CloudFront URLs that expire after about a week.
-To make saved campaigns durable, the backend caches every saved video
-locally as soon as `POST /api/campaigns` runs:
+To make saved campaigns durable, the backend caches every saved video as
+soon as `POST /api/campaigns` runs:
 
 - File path: `backend/data/videos/<campaign_id>.mp4` (gitignored).
-- Stable serve route: `GET /api/campaigns/{campaign_id}/video` —
-  streams the cached MP4 with `content-type: video/mp4`.
-- Campaign records carry three new fields: `cached_video_url` (the
-  serve route, when caching succeeds), `cache_status`
-  (`ok | failed | skipped`), and `cache_error` (a short reason on
-  failure).
-- The frontend `CampaignGallery` prefers the cached URL over the
-  presigned Runway URL and surfaces a small badge:
-  - `cached locally` (green) — durable, never expires.
-  - `cache failed` (rose) — falls back to the presigned URL with the
-    failure reason in a tooltip.
-  - `external URL may expire` (zinc) — older saves from before this
-    feature, or campaigns without a video.
-- Failures are non-fatal: caching errors do not block the save. Cap is
-  100 MB per asset; downloads must report `content-type: video/*` to
-  avoid persisting unexpected payloads.
+- Stable serve route: `GET /api/campaigns/{id}/video`.
+- Campaign records carry `cached_video_url`, `cache_status` (`ok | failed
+  | skipped`), and `cache_error`.
+- Frontend gallery prefers the cached URL over the presigned Runway URL
+  and shows a status badge: `cached locally` (green) / `cache failed`
+  (rose) / `external URL may expire` (zinc).
+- Failures are non-fatal. Cap is 100 MB per asset; downloads must report
+  `content-type: video/*`.
 
-This works for both real Runway artifacts and the mock-mode demo MP4 —
-no schema migration is required for older saves; missing cache fields
-are treated as `external URL may expire`.
+## Campaign Pack — local ffmpeg finishing
 
-## Finish Ad — local ffmpeg overlay pipeline
+Once a campaign has a cached video, the gallery's Campaign Pack section
+shows three Build buttons. Each click runs a local ffmpeg pass — no extra
+provider call:
 
-Once a campaign has a cached video, click **Finish Ad** in the gallery
-to produce a branded MP4 with text overlays burned in via local ffmpeg
-— no third-party API calls.
+| Format | Dimensions | Filename | Use |
+|---|---|---|---|
+| Landscape | 1280×720 | `<id>-finished.mp4` (legacy filename) | YouTube, web |
+| Reels | 720×1280 | `<id>-finished-reels.mp4` | TikTok, Reels, Shorts |
+| Square | 960×960 | `<id>-finished-square.mp4` | Instagram feed |
 
-- **Trigger:** `POST /api/campaigns/{campaign_id}/finish` (user click only;
-  never automatic).
-- **Source:** the cached MP4 at `backend/data/videos/<campaign_id>.mp4`.
-- **Output:** `backend/data/finished/<campaign_id>-finished.mp4` (gitignored).
-- **Stable serve route:** `GET /api/campaigns/{campaign_id}/finished-video`.
-- **Overlays:** the selected concept's title across the top, CTA (or
-  caption fallback) across the bottom — semi-transparent black box,
-  white text, sized relative to the video height.
-- **Encode:** libx264 / `veryfast` / CRF 23, audio copied through,
-  `+faststart` for streaming friendliness.
-- **Campaign record fields:** `finished_video_url`, `finish_status`
-  (`ok | failed | unavailable`), `finish_error`. The gallery prefers
-  the finished video over the cached video and shows a violet
-  `finished ad` badge.
-- **Failure handling:** `finish_status: "unavailable"` if ffmpeg is
-  missing on the server (the route also returns HTTP 503 on the first
-  attempt so the UI can surface a brew-install hint); `finish_status:
-  "failed"` with truncated stderr if ffmpeg returns non-zero.
-- **DaVinci Resolve / richer finishing** is future work — the `Finish
-  Ad` route is structured so a Resolve provider can swap in behind
-  the same endpoint without a frontend change.
+The ffmpeg filter chain:
+```
+scale=W:H:force_original_aspect_ratio=increase,crop=W:H,
+drawtext=<title>,drawtext=<cta>
+```
+plus `libx264` / `veryfast` / CRF 23 / `+faststart` and `-c:a copy`.
+
+Per-format URLs land in `Campaign.finished_videos[fmt]`; the legacy
+`finished_video_url` field continues to mirror the landscape result for
+back-compat with pre-PR-B saves.
 
 Requires `ffmpeg` on `PATH`. macOS: `brew install ffmpeg`. The pipeline
 is fully local — no provider keys, no network calls.
 
 ## Browser smoke test (Playwright)
 
-A single Chromium-driven end-to-end test exercises the polished mock flow
-in a real browser. It loads the app at `:5173`, asserts the ModeBanner
-mounts, fills the form, walks through Generate Concepts → Generate Video
-(mock task) → Save → gallery, and asserts no uncaught page errors and
-no unfiltered console errors.
-
-**Required runtime** (start these in two separate terminals before running
-the test):
+A single Chromium-driven end-to-end test exercises the full mock flow on
+every change: ModeBanner pills, readiness chip, model + ratio + duration
+selectors with documented defaults, settings persistence after reload,
+mock concept generation, mock video generation reaching `SUCCEEDED`,
+campaign save, gallery rendering with `video ready` + `cached locally`,
+and the three Campaign Pack Build buttons (when cache succeeded).
 
 ```bash
-# 1) backend in fully mocked mode (does NOT touch the repo-root .env;
-#    the empty shell vars take precedence over the .env file values)
+# Terminal 1 — backend in fully mocked mode (does NOT touch the repo-root
+# .env; the empty shell vars take precedence over the .env file values)
 cd backend && source .venv/bin/activate
 RUNWAY_API_KEY= OPENAI_API_KEY= uvicorn app.main:app --port 8000
 
-# 2) Vite on :5173
+# Terminal 2 — Vite on :5173
 cd frontend && npm run dev
-```
 
-Then run the test:
-
-```bash
+# Terminal 3 — the test
 cd frontend && npm run test:e2e
 ```
 
-What it verifies:
-- `ModeBanner` renders the per-provider mock pills and the header MOCK
-  MODE chip (proves `/health` round-trip works through the Vite proxy).
-- `POST /api/concepts` returns 3 concept cards and exactly one
-  `recommended` pill.
-- `POST /api/runway/generate` produces a `mock_*` task and the polling
-  loop reaches `SUCCEEDED` inside the 25 s expect timeout.
-- Saving the campaign causes the `CampaignGallery` to render a new
-  card with a `video ready` pill.
-- No uncaught `pageerror` events. Console errors are filtered to drop
-  unrelated `<video>` network noise (`BigBuckBunny`,
-  `MEDIA_ELEMENT_ERROR`, `net::ERR_*`); anything else fails the test.
-
-The test is **single-shot, single-worker** and never calls the real
-Runway or OpenAI APIs. Don't run it against a backend with real keys
-in the shell environment — the assertions specifically expect mock pills.
+The test is **single-shot, single-worker** and never hits the real
+Runway or OpenAI APIs. Don't run it against a backend with real keys in
+the shell environment — the assertions specifically expect mock pills.
 
 Test artifacts (`frontend/test-results/`, `frontend/playwright-report/`,
 `frontend/.playwright/`) are gitignored.
@@ -262,56 +224,89 @@ Test artifacts (`frontend/test-results/`, `frontend/playwright-report/`,
 
 | Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/health` | Liveness + mock-mode flags |
+| `GET`  | `/health` | Liveness + per-provider mock flags |
+| `GET`  | `/api/runway/provider-status` | Secret-free policy metadata (models, ratios, durations, image-required) |
+| `GET`  | `/api/runway/organization` | Defensive proxy of `/v1/organization`. Returns `{mock_mode, credits, monthly_credit_cap}`; failure is non-blocking |
 | `POST` | `/api/concepts` | `{business, product, tone, audience}` → 3 concepts + recommended Runway prompt |
-| `POST` | `/api/runway/generate` | `{prompt_text, prompt_image?, duration, ratio}` → `{task_id, status}`. `prompt_image` is required in real mode (backend returns 400 if missing); optional in mock mode. |
-| `GET` | `/api/runway/task/{task_id}` | Poll status; clients should use ≥5s interval + jitter |
-| `POST` | `/api/campaigns` | Save a campaign card to local JSON |
-| `GET` | `/api/campaigns` | List saved campaigns |
+| `POST` | `/api/runway/image` | `{prompt_text, ratio}` → `{image_id, image_url}`. Real path uses `gen4_image_turbo` with a seeded reference (Runway requires ≥1) |
+| `GET`  | `/api/runway/image/{image_id}` | Streams the cached PNG |
+| `POST` | `/api/runway/generate` | `{prompt_text, prompt_image?, model, ratio, duration}` → `{task_id, status, model, endpoint}`. Routes to `image_to_video` or `text_to_video` |
+| `GET`  | `/api/runway/task/{task_id}` | Poll status; client uses ≥5 s + jitter, capped at 60 attempts (~5 min) |
+| `POST` | `/api/campaigns` | Save a campaign card; downloads + caches the MP4 to `backend/data/videos/<id>.mp4` |
+| `GET`  | `/api/campaigns` | List saved campaigns |
+| `GET`  | `/api/campaigns/{id}/video` | Stream the cached MP4 |
+| `POST` | `/api/campaigns/{id}/finish?format=...` | Build a Campaign Pack format with local ffmpeg |
+| `GET`  | `/api/campaigns/{id}/finished-video` | Legacy: serves the landscape finished MP4 |
+| `GET`  | `/api/campaigns/{id}/finished-video/{fmt}` | Per-format finished MP4 |
 
 ## Project layout
 
 ```
 backend/
   app/
-    main.py            FastAPI app + CORS + routers
-    config.py          pydantic-settings (env-driven mock flags)
-    models.py          Pydantic schemas
+    main.py              FastAPI app + CORS + /health + routers
+    config.py            pydantic-settings (env-driven mock flags)
+    models.py            Pydantic schemas
     services/
-      concept_service.py   OpenAI + mock fallback
-      runway_client.py     Real httpx client + in-memory mock store
-      storage.py           JSON-file campaign store
+      concept_service.py   OpenAI + deterministic mock fallback
+      image_client.py      Runway text_to_image (real + stdlib mock PNG)
+      runway_client.py     Generation policy + image_to_video / text_to_video routing
+      finisher_service.py  Local ffmpeg Campaign Pack
+      storage.py           JSON campaign store + local video cache
     routers/
       concepts.py runway.py campaigns.py
   requirements.txt
   .env.example
+
 frontend/
-  vite.config.js       /api + /health proxy → :8000
+  vite.config.js         /api + /health proxy → :8000
   src/
-    App.jsx            Orchestrates form → concepts → prompt → runway → save
-    api.js             fetch wrapper
-    components/        CampaignForm, ConceptCards, PromptPreview, RunwayPanel, CampaignGallery
+    App.jsx              Orchestrates form → concepts → prompt → image → runway → save
+    api.js               fetch wrapper (typed, JSON)
+    settings.js          localStorage persistence with safety clamps
+    errors.js            Friendly error parser + per-call hints
+    components/          CampaignForm, ConceptCards, PromptPreview,
+                         RunwayPanel, CampaignGallery, ModeBanner
+
 docs/
-  WHAT_IT_IS.md
-  INVENTORY.md
-  handoffs/SESSION_001_BOOTSTRAP.md
-00-START-NEXT-SESSION.md
+  WHAT_IT_IS.md          concept + stack
+  INVENTORY.md           what's real / mocked / incomplete
+  handoffs/SESSION_*.md  one per session
+
+DEMO_SCRIPT.md           60–90 s screen-recording script
+SUBMISSION.md            judge-facing summary
+00-START-NEXT-SESSION.md latest branch + priorities for the next session
 ```
 
-## Known limitations
+## Generated media — never committed
 
-- Single-process JSON file for storage (`backend/data/campaigns.json`). Fine
-  for a hackathon, not for production.
-- No image upload UI yet — Runway's image-to-video path benefits from a
-  reference image; the request model already accepts `prompt_image`.
-- Polling state is client-side only; refreshing the page loses the task id.
-- No tests; manual smoke verified via curl + browser.
+Generated PNGs, downloaded Runway MP4s, and finished Campaign Pack
+outputs all live under `backend/data/{images,videos,finished}`. The
+entire `data/` directory is gitignored via `backend/.gitignore`. Verify
+before any commit:
+
+```bash
+git status --short                                # nothing under data/
+git ls-files | grep -E '\.(env|mp4|png|wav|mp3)$' || echo ok
+git check-ignore backend/data/images/foo.png      # should match
+```
+
+API keys live only in the repo-root `.env` (also gitignored). The React
+app has no key access at runtime — every Runway call goes through
+FastAPI.
 
 ## Safety / hygiene
 
 - API keys never leave the backend; the React app talks only to FastAPI.
 - CORS is locked to `http://localhost:5173` by default.
 - `.env` and `backend/data/` are gitignored.
-- This repo is **not connected to `unified-donkey-betz`**. That project was
-  inspected read-only for prompt-shape inspiration; nothing was copied
-  verbatim and no edits were made there.
+- Real Runway calls require an explicit user click. The app never
+  auto-generates on page load.
+- A model-aware policy returns `400` on any unsupported model / ratio /
+  duration / missing-image combination *before* any outbound HTTP, so
+  misconfigured requests never burn credits.
+- Polling is capped (60 attempts × 5 s + jitter ≈ 5 min) and stops
+  immediately on terminal status.
+- This repo is **not connected to `unified-donkey-betz`**. That project
+  was inspected read-only for prompt-shape inspiration; nothing was
+  copied verbatim and no edits were made there.

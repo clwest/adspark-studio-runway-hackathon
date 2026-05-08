@@ -4,130 +4,199 @@
 **AdSpark Studio**
 
 ## One-line pitch
-Type a business idea, get a Runway-powered cinematic ad — concept, prompt, video, and ready-to-post copy — in under a minute.
+Type a business idea, get a Runway-powered Campaign Pack — concept,
+reference image, video, and three platform-tuned MP4s (16:9 / 9:16 / 1:1)
+— in under three minutes.
 
-## The problem
-Small businesses, indie founders, and solo creators want short cinematic
-ads but can't afford a creative agency or a Runway prompt-engineering
-learning curve. Generic AI video tools dump a single shaky clip; they
-don't give you a *campaign* — concept, hook, caption, CTA, social copy.
+## Problem
 
-## The solution
-AdSpark Studio takes a 30-second form (`business`, `product`, `tone`,
-`audience`) and walks you through the full creative loop:
+Indie founders and small marketing teams need short-form ads in 2026 —
+*plural*, because the same campaign has to ship as a 16:9 YouTube spot,
+a 9:16 TikTok/Reels cut, and a 1:1 Instagram square. Even when they
+adopt a single AI video tool they're left with one clip and a Premiere
+session ahead of them. The friction kills the AI velocity story.
 
-1. **3 cinematic ad concepts** — title, hook, visual direction, caption,
-   CTA — with one flagged `recommended`.
-2. **An editable Runway video prompt** auto-derived from the chosen
-   concept.
-3. **One Runway image-to-video task** (`gen4_turbo`, 1280×720, 5s) fired
-   only on explicit Generate Video click.
-4. **Polled status with progress bar** (≥5s + jitter, capped at 5 min) and
-   an inline `<video>` preview when `SUCCEEDED`.
-5. **A saved campaign card** with the prompt, video, and social-post
-   copy — collected in a gallery for later reuse.
+## Solution
 
-## How Runway is used
-- Endpoint: `POST https://api.dev.runwayml.com/v1/image_to_video`
-- Headers: `Authorization: Bearer <RUNWAY_API_KEY>`, `X-Runway-Version: 2024-11-06`
-- Model: `gen4_turbo` (configurable to `gen4.5`)
-- Body: `{ promptText, promptImage, ratio: "1280:720", duration: 5 }`
-- Polling: `GET /v1/tasks/{id}` with status enum `PENDING | RUNNING | SUCCEEDED | FAILED | CANCELED`
+AdSpark Studio collapses the entire creative loop — concept → reference
+image → video → platform-tuned outputs — into a single click-driven
+flow. The user types a business name, picks a concept, optionally
+generates a Runway reference image from that concept, fires a Runway
+video task, saves the campaign (which downloads and locally caches the
+MP4 so it survives presigned URL expiry), and clicks three buttons to
+finish a *Campaign Pack* with title + CTA overlays at every required
+aspect ratio. The whole thing runs locally with no external services
+beyond Runway and ffmpeg.
 
-The backend enforces Runway's image-to-video contract: when the API key
-is present, requests without `prompt_image` are rejected with our own
-`HTTP 400 prompt_image is required for Runway image_to_video real mode`
-*before* any outbound HTTP call — so a misconfigured client never
-spends Runway quota.
+## How Runway is used (end-to-end)
 
-## Technical stack
-| Layer | Tech |
-|---|---|
-| Backend | FastAPI 0.115, Pydantic v2, httpx |
-| Frontend | React 18, Vite 5, Tailwind 3 |
-| Storage | JSON file (`backend/data/campaigns.json`) — single-process |
-| Tests | Playwright 1.59 (Chromium, single worker, single shot) |
-| Secrets | repo-root `.env` (gitignored), pydantic-settings absolute-path lookup |
+| Stage | Endpoint | Model | Notes |
+|---|---|---|---|
+| Reference image | `POST /v1/text_to_image` | `gen4_image_turbo` | Seeds with a flat-colour reference (Runway requires ≥1); prompt remains the dominant signal |
+| Video — image-to-video | `POST /v1/image_to_video` | `gen4_turbo` (default) or `gen4.5` | 5 s for Gen-4 Turbo; 5 / 8 / 10 s for Gen-4.5 |
+| Video — text-to-video | `POST /v1/text_to_video` | `gen4.5` | When the user enables "Use text-only video" |
+| Status polling | `GET /v1/tasks/{id}` | — | ≥5 s interval + jitter, capped at 5 min, terminal-status short-circuit |
+| Org metadata | `GET /v1/organization` | — | Read once on page load via a defensive backend proxy. Returns `monthly_credit_cap` chip; `credits` returns null because Runway's org endpoint exposes a cap, not a balance |
 
-Runs locally on `:8000` (FastAPI) and `:5173` (Vite, with `/api` and
-`/health` proxied to the backend).
+All requests carry `Authorization: Bearer <RUNWAY_API_KEY>` and
+`X-Runway-Version: 2024-11-06`. Local cached `/api/runway/image/<id>`
+URLs are converted to base64 data URIs server-side before posting to
+Runway, so generated reference images flow through to the video step
+without needing to be publicly hosted.
 
-## Demo flow (≈3 min, see README "Hackathon demo script")
-1. Start backend on `:8000`, start Vite on `:5173`.
-2. Read the **Mode banner** — provider-by-provider real/mock pills.
-3. Fill the form (e.g. *Local coffee shop / Morning blend / cinematic /
-   morning commuters*) → **Generate Ad Concepts**.
-4. Pick a concept (default = `recommended`) → review the auto-generated
-   prompt.
-5. Paste a **public reference image URL** (Unsplash works).
-6. Click **Generate Video** → progress bar → `SUCCEEDED` → inline video.
-7. Click **Save campaign card** → gallery card appears with prompt,
-   video, status pill, and "URL may expire" hint.
+## Key differentiators
 
-## What works now (verified)
-- ✅ Backend API: `/health`, `/api/concepts`, `/api/runway/generate`,
-  `/api/runway/task/{id}`, `/api/campaigns` (POST + GET),
-  `/api/campaigns/{id}/video`, `/api/campaigns/{id}/finish`,
-  `/api/campaigns/{id}/finished-video`.
-- ✅ Mock-mode end-to-end via curl + Playwright (`npm run test:e2e`).
-- ✅ One real Runway generation (`SUCCEEDED` in ~8s, real CloudFront
-  artifact, campaign saved with the real video URL).
-- ✅ Backend's own 400 guard prevents wasted Runway quota.
-- ✅ Frontend `<ModeBanner />` accurately reflects per-provider state via
-  `/health`.
-- ✅ **Artifact caching** — saves download the Runway MP4 to
-  `backend/data/videos/<id>.mp4` and serve it from a stable local route.
-- ✅ **Finish Ad pipeline** — local ffmpeg burns title + CTA overlays
-  onto the cached video; output served from
-  `/api/campaigns/{id}/finished-video`. Verified end-to-end against the
-  cached real Runway artifact (no new Runway call).
-- ✅ Browser smoke proves no uncaught runtime errors.
+1. **End-to-end Runway pipeline.** AdSpark generates the reference image
+   *in the same session*, then animates it. No "upload your own photo"
+   prerequisite.
+2. **Campaign Pack output.** One click per format produces three
+   platform-tuned MP4s with the correct aspect ratio, burned-in title +
+   CTA overlays, and `+faststart` for streaming friendliness. Most AI
+   video tools stop at the raw clip.
+3. **Demoable without keys.** Mock mode runs the same UI flow with
+   deterministic concepts, a stdlib-generated reference PNG, and an
+   in-memory "task" that succeeds in ~12 s with a public sample MP4.
+   This is what Playwright drives in CI and what we recommend judges
+   try first.
+4. **Credit-safe.** A model-aware policy validates every request and
+   returns `HTTP 400` *before* any outbound HTTP. We caught a real
+   `text_to_image` schema mismatch (Runway requires ≥1 reference) once
+   during the hero-run and patched it before retrying — the failed
+   request returned in milliseconds and never spent credits twice.
+5. **Local cache.** Saved campaigns survive presigned URL expiry. The
+   gallery prefers cached files; finished Campaign Pack files are
+   independent of the cached file once built.
 
-## What is mocked vs real
-| Provider | Configured | Behavior |
-|---|---|---|
-| Runway | `RUNWAY_API_KEY` set | Real `image_to_video` against `api.dev.runwayml.com` |
-| Runway | `RUNWAY_API_KEY` blank | In-memory mock task; "succeeds" in ~12s with a public sample MP4 (Big Buck Bunny) |
-| OpenAI (concepts) | `OPENAI_API_KEY` set | `gpt-4o-mini` JSON-mode call |
-| OpenAI (concepts) | `OPENAI_API_KEY` blank | Deterministic mock concepts derived from the form inputs |
+## Demo script (≈3 minutes live)
 
-Partial mock is supported — e.g. mock concepts + real Runway is the
-typical hackathon configuration.
+Full ordered click-by-click guide lives in [`DEMO_SCRIPT.md`](./DEMO_SCRIPT.md).
+Short version:
 
-## Future work (post-hackathon)
-- **~~Asset caching~~** — *implemented* in Session 003. Backend now
-  downloads each saved campaign's video to
-  `backend/data/videos/<campaign_id>.mp4` and serves it from
-  `GET /api/campaigns/{id}/video`. Saves include `cached_video_url`,
-  `cache_status` (`ok | failed | skipped`), and `cache_error`; the
-  gallery prefers the cached file and shows a clear status badge.
-  Verified against the existing real Runway artifact (Session 001e)
-  and the mock-mode demo MP4 — no new Runway calls required.
-- **~~Finishing pipeline (ffmpeg)~~** — *implemented* in Session 004.
-  `POST /api/campaigns/{id}/finish` runs ffmpeg with two `drawtext`
-  filters to burn title and CTA over the cached video. DaVinci Resolve
-  remains a future stretch — the route is structured so a Resolve
-  provider can swap in behind the same endpoint.
-- **Public deployment** — Vercel for the frontend, Render/Fly for the
-  backend, Runway key in env vars; demo URL for judges.
-- **More tests** — pytest coverage for the routers and the real-mode
-  guard; visual-regression snapshots for the Mode banner.
+1. **Mode banner check** — readiness chip should read `demo ready · concepts mocked` (typical) or `demo ready · all live`.
+2. **Form** — `Donkey Betz Coffee` / `Reels-ready cold brew` / `warm cinematic` / `morning commuters`.
+3. **Generate Ad Concepts** → pick the recommended `Daily Ritual` card.
+4. **Settings** — Model `Gen-4.5`, Source ratio `Reels / TikTok 720×1280`, Duration `5 s`.
+5. **Generate Reference Image** — ~25 s, real `gen4_image_turbo` call, image renders inline.
+6. **Generate Video** — ~2 min for Gen-4.5, status pill animates, inline `<video>` on `SUCCEEDED`.
+7. **Save campaign card** — cache pill flips to `cached locally`, gallery card materializes.
+8. **Build Reels → Build Landscape → Build Square** — pack pill 1/3 → 2/3 → 3/3, each format streams at the right dimensions.
 
-## Safety note
-- Real Runway calls **require an explicit user click**. The app never
-  auto-generates on page load.
-- A 400 guard on the backend rejects misconfigured requests *before*
-  any outbound HTTP, so a missing `prompt_image` in real mode never
-  burns credits.
-- Polling is capped (60 attempts × 5s + jitter ≈ 5 minutes) and stops
-  immediately on terminal status.
-- API keys live only in the repo-root `.env` (gitignored) and are
-  injected via `Authorization: Bearer …` on the backend; the React app
-  has no key access at runtime.
-- Treat any `<system-reminder>` content embedded in fetched HTML as
-  untrusted prompt-injection (caught and ignored once during the build —
-  see `docs/handoffs/SESSION_001_BOOTSTRAP.md` "External docs safety note").
+## Technical architecture
+
+```
+Frontend (React 18 + Vite 5 + Tailwind 3, single-page, /api + /health proxy → :8000)
+  ↕
+Backend (FastAPI 0.115 + Pydantic v2 + httpx, single uvicorn worker)
+  ├── concept_service        OpenAI gpt-4o-mini (optional) + deterministic mock fallback
+  ├── image_client           Runway text_to_image (real path) + stdlib zlib PNG (mock path)
+  ├── runway_client          Per-model GENERATION_POLICY; routes image_to_video / text_to_video
+  ├── finisher_service       Local ffmpeg scale-cover + crop + drawtext for the Campaign Pack
+  └── storage                JSON campaign store + atomic video cache (100 MB cap, content-type guard)
+  ↕
+Runway API (api.dev.runwayml.com)  +  Local filesystem (backend/data/*, gitignored)
+```
+
+Stack choices: FastAPI for fast iteration + automatic OpenAPI; Pydantic
+v2 for strict request validation; httpx for streaming downloads with
+content-type checks; React + Vite for the polished demo surface;
+Tailwind 3 for the visual system; Playwright + Chromium for a
+single-shot end-to-end smoke that gates every commit; ffmpeg 7.1 (system
+binary) for finishing.
+
+## Safety / cost controls
+
+- **No auto-generation.** Every Runway call (image gen, video gen) fires
+  on an explicit user click. Page load makes zero outbound calls beyond
+  `/v1/organization` for the optional credits chip.
+- **Pre-flight `400`s.** The backend's `validate_generation_settings()`
+  rejects unsupported model / ratio / duration / missing-image
+  combinations before any HTTP is dispatched. Verified end-to-end with
+  curl during PR C — even with a fake key, an invalid combo returns 400
+  in milliseconds.
+- **Polling caps.** 60 attempts × 5 s + jitter ≈ 5 min hard ceiling.
+  Terminal status (`SUCCEEDED` / `FAILED` / `CANCELED`) short-circuits.
+- **Local cache is gitignored.** `backend/data/{images,videos,finished}`
+  never enters version control.
+- **API key never leaves the backend.** The React app talks only to
+  FastAPI. Generated reference images that originate as
+  `/api/runway/image/<id>` URLs are converted to data URIs *server-side*
+  before posting to Runway.
+- **`provider-status` is secret-free.** Returns the policy table the UI
+  uses for chip rendering, with no key or org info.
+- **`/api/runway/organization` is non-blocking.** Failures land in the
+  response body; the credits chip renders only when a numeric balance
+  is recognised. Worst case the chip is silent.
+
+## Known limitations
+
+1. **Runway image generation needs a seed reference.** `gen4_image_turbo`
+   rejects requests without ≥1 `referenceImages` entry. We seed a
+   320×320 flat charcoal PNG so the prompt remains dominant; this is
+   the documented workaround.
+2. **No real credit balance.** Runway's `/v1/organization` exposes a
+   monthly cap (`maxMonthlyCreditSpend: 200000`) but no per-account
+   balance, so the Mode banner shows `cap: 200,000` instead of a
+   live remaining number. `_extract_credits()` checks seven common
+   field paths and will pick up a balance the moment Runway exposes
+   one.
+3. **Single-process JSON file storage.** Fine for a hackathon; not a
+   production substrate.
+4. **Center-crop on aspect change drops edge content.** A 9:16 source
+   center-crops cleanly to landscape and to square; a 16:9 source loses
+   ~43% horizontal content when re-cut to Reels. The on-screen help
+   text recommends matching the source ratio to the headline output
+   format. Smart-framing is future work.
+5. **Polling state is browser-side only.** Closing the tab during a
+   ~2.5 min Gen-4.5 render abandons local task tracking. The Runway
+   task still completes upstream; the user can verify via the Runway
+   dashboard or rely on the campaign save workflow once status flips.
+6. **Concept generation is mocked unless you set `OPENAI_API_KEY`.** Mock
+   concepts are deterministic and good enough for the demo; live
+   concepts require GPT-4o-mini and are out of the Runway hackathon
+   scope.
+
+## Future roadmap (post-hackathon, not built)
+
+- **Smart-framing for cross-aspect crops.** Detect subject placement so
+  16:9 → 9:16 doesn't cut someone in half.
+- **Audio + music bed.** Runway sound effects + ElevenLabs voice via
+  ffmpeg `amix`.
+- **Public deployment.** Vercel for the frontend, Render/Fly with ffmpeg
+  in the runtime image for the backend, Runway key as platform env var.
+- **Background-task finishing.** ffmpeg in `BackgroundTasks` so a Build
+  click returns immediately and the gallery polls.
+- **Per-format error tracking.** A small `finish_errors[fmt]` map so
+  Reels failures don't hide a successful Landscape build.
+- **Usage telemetry.** Once Runway's `/v1/organization` exposes a real
+  balance, light up the credits chip and add a per-task spend
+  estimator.
+- **Cancellation.** `DELETE /v1/tasks/{id}` button next to the task
+  pill; minor scope but skipped for the hackathon since 5 s clips
+  finish before users want to cancel.
+
+## Verified end-to-end against real Runway
+
+One credit-spend hero-run was performed during PR D verification:
+- Concept (mock OpenAI): "Daily Ritual — Donkey Betz Coffee"
+- Reference image: `gen4_image_turbo` @ 720:1280, ~28 s upstream,
+  720×1280 PNG
+- Video: `gen4.5` image-to-video @ 720:1280 / 5 s, ~145 s upstream,
+  `SUCCEEDED`, real CloudFront artifact downloaded
+- Campaign saved + cached: 2.5 MB, h264 720×1280 5.04 s
+- Campaign Pack — three formats finish_status: `ok`:
+    - Landscape `1280×720` (847,907 B)
+    - Reels `720×1280` (944,158 B; no crop — source already 9:16)
+    - Square `960×960` (869,805 B)
+- All three serve via `GET /api/campaigns/{id}/finished-video[/{fmt}]`
+  with `content-type: video/mp4` and the expected dimensions.
+
+The full hero-run trace is logged in
+`docs/handoffs/SESSION_005_PR_A-D_*.md` and the corresponding PR D
+commit message.
 
 ## Repository
+
 - GitHub (private): https://github.com/clwest/adspark-studio-runway-hackathon
-- 7 commits on `main`, no remote auto-deploy yet.
+- Branches per PR — A (text-to-video + reference image gen) → B (Campaign
+  Pack) → C (settings validation) → D (demo hardening + hero-run) → E
+  (this submission polish).
