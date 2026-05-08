@@ -20,6 +20,13 @@ class Settings(BaseSettings):
     runway_api_base: str = "https://api.dev.runwayml.com"
     runway_api_version: str = "2024-11-06"
     runway_model: str = "gen4_turbo"
+    # PR F — Character Host
+    runway_host_voice_preset: str = "vincent"
+    # Default Unsplash portrait for the curated stock host. Overridable via
+    # env so a brand-specific portrait can replace it without code changes.
+    runway_host_portrait_url: str = (
+        "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=512&q=80"
+    )
 
     openai_api_key: str = ""
     openai_model: str = "gpt-4o-mini"

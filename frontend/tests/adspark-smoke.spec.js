@@ -163,6 +163,12 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
     ).toBeVisible()
   }
 
+  // 13b. PR F — AI Host section is always visible on a saved card.
+  await expect(newestCard.getByText(/^AI Host$/)).toBeVisible()
+  await expect(
+    newestCard.getByRole('button', { name: /^Present Campaign with AI Host$/i }),
+  ).toBeVisible()
+
   // 13. Console / page errors — page errors are always fatal; console errors
   //     are filtered to drop video-network noise.
   const realConsoleErrors = consoleErrors.filter(

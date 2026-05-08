@@ -479,6 +479,150 @@ Each is a one-line probe; the existing
 
 ---
 
+## 12. Live Probe Results (PR F, 2026-05-08)
+
+Six progressive probes ran against the live Runway API. Total spend was
+**three avatar creations and one short avatar video** — well under
+50 credits. All schema unknowns from §11 are now resolved.
+
+### `POST /v1/avatars` — confirmed
+
+Accepted body shape:
+
+```jsonc
+{
+  "name": "AdSpark Probe Host v3",
+  "referenceImage": "<public URL or data: URI>",   // string union: URL / data URI / runway:// URI
+  "voice": { "type": "runway-live-preset", "presetId": "vincent" },
+  "personality": "Concise, friendly product spokesperson."
+}
+```
+
+- `referenceImage` (singular, **not** `image`) is required.
+- `voice.presetId` (not `voice.preset`) is required, lowercase. The
+  validator emitted the **complete enum of 30 preset voice ids**:
+  `victoria, vincent, clara, drew, skye, max, morgan, felix, mia,
+  marcus, summer, ruby, aurora, jasper, leo, adrian, nina, emma, blake,
+  david, maya, nathan, sam, georgia, petra, adam, zach, violet, roman,
+  luna`. **No account-level enablement required.**
+- A flat-colour PNG (no face) returns `status: "FAILED"` after
+  processing — Runway's avatar processor requires a recognisable face.
+- A typical Unsplash portrait processes from `PROCESSING` → `READY` in
+  ~30–45 s. Both `referenceImageUri` and `processedImageUri` populate.
+- `personality` is optional and stored on the Avatar; it doesn't appear
+  to influence `avatar_videos` output script (script is the dominant
+  signal there).
+- Data URIs **are accepted** by the schema validator (no rejection on
+  field-shape grounds for the placeholder PNG); the only failure mode
+  was the avatar-processor face check after creation.
+
+### `POST /v1/avatar_videos` — confirmed
+
+Accepted body shape:
+
+```jsonc
+{
+  "model": "gwm1_avatars",
+  "avatar": { "type": "custom", "avatarId": "<avatar id>" },
+  "speech": { "type": "text", "text": "<8–12 word script>" }
+}
+```
+
+- `model` enum: only `"gwm1_avatars"`.
+- `avatar` is a discriminated union on `type`. The discriminator value
+  for an existing Avatar id is **`"custom"`** (not `existing` / `id` /
+  `reference` — we tried 11 other values, all rejected). Inside, the id
+  field is **`avatarId`** (not `id` like in `/v1/avatars` responses).
+  Other discriminator values exist (the union has multiple branches)
+  but `"custom"` is the one we need for the V1 path.
+- `speech` is a discriminated union on `type`. Confirmed value:
+  `"text"` with the script under the **`text`** field (`content` is
+  rejected). Other branches likely exist for audio inputs (e.g. `type:
+  "audio"`) — out of V1 scope.
+- Response: `{"id": "<task uuid>"}` — same task shape as our existing
+  `image_to_video` flow.
+
+### Task polling — same as existing flow
+
+`GET /v1/tasks/<id>`:
+
+```json
+{
+  "id": "0bf1eca5-ce64-460c-8fb9-b90890f5e6dd",
+  "createdAt": "...",
+  "status": "SUCCEEDED",
+  "output": ["https://dnznrvs05pmza.cloudfront.net/<id>.mp4?_jwt=..."]
+}
+```
+
+- `output` is a list of presigned CloudFront URLs (same shape as our
+  current image_to_video / text_to_image responses).
+- The 8-word probe script (`"Meet Donkey Betz Coffee. Reels-ready cold
+  brew."`) finished in ~10 s end-to-end.
+- The `progress` field arrives sparsely for avatar_videos — it was
+  `0` then `null` at SUCCEEDED. Treat missing as 0.0 (pre-)/1.0
+  (terminal); existing `runway_client._normalize_status` already does.
+
+### Output MP4 properties
+
+Probed via ffprobe on the downloaded artifact:
+
+| Stream | Codec | Dimensions | Duration |
+|---|---|---|---|
+| Video | h264 | **1088×704** | 3.96 s |
+| Audio | aac  | — | 3.97 s |
+
+- **The avatar MP4 has an audio track** (the spokesperson's voice).
+  Different from `gen4_turbo` / `gen4.5` video output which is silent.
+- Output dimensions are not user-controllable; appear close to 11:7
+  aspect. Not a clean Reels/Square ratio. For V1 we serve the host
+  clip as its own artifact (no ffmpeg crop into Campaign Pack
+  formats — V1.5 territory).
+- File size ~800 KB for a 4 s clip. 100 MB cap is fine.
+
+### Cost / time
+
+- Per avatar create: **failed avatar (no face)** completed quickly with
+  no output — appears free or near-free.
+- Per successful avatar create: ~30–45 s `PROCESSING` window, no
+  output artifact (the processed image is internal).
+- Per avatar video: ~10 s for an 8-word script.
+- Total spend for the probe: 3 avatars created (1 success, 2 failed)
+  + 1 avatar video → tiny fraction of the 50k credit pool.
+
+### Concrete settings for V1
+
+- **Default host voice**: `vincent` (preset id, lowercase). Override
+  via env `RUNWAY_HOST_VOICE_PRESET=clara` etc.
+- **Default host portrait** (V1 uses one cached avatar across all
+  campaigns): an Unsplash portrait URL hard-coded in
+  `character_host_client.py` so the demo doesn't depend on a personal
+  asset. The campaign's reference image **cannot** drive an avatar
+  reliably (faceless coffee-shop scenes fail processing). Listed as
+  V1.5 once we add face detection.
+- **Max script length**: not directly probed; based on the 8-word
+  successful probe and Runway's docs, we'll truncate the templated
+  script to ≤300 characters before sending. Plenty for
+  `"Meet {business}. {hook}. {caption}. {cta}."`.
+- **Mock mode**: shell out to ffmpeg lavfi `color` to generate a 5 s
+  black MP4 with `drawtext "Mock Host"` overlay, AAC silent track.
+  Same dependency we already require for Campaign Pack — no new
+  third-party deps.
+
+### Bonus discoveries
+
+- The `/v1/avatars` response includes `processedImageUri` once
+  processing completes; this could be surfaced in the UI as the
+  "talent headshot" thumbnail.
+- A failed avatar (face check rejection) doesn't block the API — just
+  surfaces `status: "FAILED"` indefinitely; no cleanup needed.
+- The `documentIds` field on the avatar object is empty for our use;
+  appears to relate to RAG-style document grounding (out of scope).
+
+**Outcome: full GO on V1 with the shape above. No blockers remain.**
+
+---
+
 ## Sources
 
 Public Runway documentation accessed during this research, all

@@ -69,7 +69,12 @@ function CampaignCard({ c, onUpdated }) {
   const cacheFailed = c.cache_status === 'failed'
 
   const [busyFormat, setBusyFormat] = useState(null) // null | "landscape" | "reels" | "square"
+  const [hostBusy, setHostBusy] = useState(false)
   const [localError, setLocalError] = useState('')
+
+  const hostReady = c.host_status === 'ok' && Boolean(c.host_video_url)
+  const hostFailed = c.host_status === 'failed'
+  const hostUnavailable = c.host_status === 'unavailable'
 
   const cacheStatusLabel = isCached
     ? 'cached locally'
@@ -91,6 +96,19 @@ function CampaignCard({ c, onUpdated }) {
       setLocalError(`${fmt}: ${e}`)
     } finally {
       setBusyFormat(null)
+    }
+  }
+
+  const handlePresent = async () => {
+    setLocalError('')
+    setHostBusy(true)
+    try {
+      const updated = await api.presentCampaign(c.id)
+      onUpdated?.(updated)
+    } catch (e) {
+      setLocalError(`host: ${e}`)
+    } finally {
+      setHostBusy(false)
     }
   }
 
@@ -232,10 +250,99 @@ function CampaignCard({ c, onUpdated }) {
               last finish attempt failed — see backend log
             </p>
           )}
-          {localError && (
-            <p className="text-[10px] text-rose-300">{localError}</p>
+        </div>
+      )}
+
+      {/* PR F — AI Host. Always available once a campaign exists; doesn't
+          require a cached video like the Campaign Pack does. */}
+      <div className="border-t border-zinc-800 pt-3 space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-zinc-300">AI Host</span>
+            <span
+              className="text-[10px] text-zinc-500"
+              title="Runway avatar video — a short spokesperson clip that narrates the campaign concept."
+            >
+              Runway avatar video
+            </span>
+          </div>
+          {hostReady && (
+            <span className="text-[10px] rounded-full bg-sky-500/20 text-sky-300 px-2 py-0.5">
+              ready
+            </span>
+          )}
+          {hostUnavailable && (
+            <span className="text-[10px] text-amber-300">
+              ffmpeg unavailable for mock host
+            </span>
           )}
         </div>
+        {hostReady ? (
+          <div className="space-y-1.5">
+            <video
+              key={c.host_video_url}
+              src={c.host_video_url}
+              controls
+              preload="metadata"
+              className="w-full max-w-xs rounded-lg border border-zinc-800"
+            />
+            <div className="flex items-center gap-3 text-xs">
+              <a
+                href={c.host_video_url}
+                target="_blank"
+                rel="noreferrer"
+                className="text-spark hover:underline"
+              >
+                open host clip ↗
+              </a>
+              {c.host_mock_mode === true && (
+                <span className="text-[10px] text-amber-300">
+                  mock placeholder
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={handlePresent}
+                disabled={hostBusy}
+                className="text-[10px] text-zinc-500 hover:text-zinc-300 disabled:opacity-50"
+                title="Generate a fresh host clip (replaces the current one)"
+              >
+                regenerate
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-1">
+            <p className="text-[10px] text-zinc-500">
+              Creates a short spokesperson clip for this campaign.
+            </p>
+            <button
+              type="button"
+              onClick={handlePresent}
+              disabled={hostBusy}
+              className="rounded-md bg-sky-500/80 hover:bg-sky-500 text-zinc-100 text-xs px-2 py-1 disabled:opacity-50"
+              title="Use Runway avatar_videos to generate a short spokesperson narration"
+            >
+              {hostBusy
+                ? 'Recording host…'
+                : hostFailed
+                ? 'Retry Present Campaign'
+                : 'Present Campaign with AI Host'}
+            </button>
+            {hostFailed && c.host_error && (
+              <p
+                className="text-[10px] text-rose-300"
+                title={c.host_error}
+              >
+                last host attempt failed — see backend log
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+
+      {localError && (
+        <p className="text-[10px] text-rose-300">{localError}</p>
       )}
     </li>
   )

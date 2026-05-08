@@ -29,4 +29,9 @@ export const api = {
       `/api/campaigns/${encodeURIComponent(campaignId)}/finish?format=${encodeURIComponent(format)}`,
       { method: 'POST' },
     ),
+  presentCampaign: (campaignId, body = {}) =>
+    jsonFetch(
+      `/api/campaigns/${encodeURIComponent(campaignId)}/host-video`,
+      { method: 'POST', body: JSON.stringify(body) },
+    ),
 }

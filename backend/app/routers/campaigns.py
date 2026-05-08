@@ -1,10 +1,17 @@
 import logging
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
+from pydantic import BaseModel, Field
 
 from ..config import Settings, get_settings
 from ..models import Campaign, CampaignCreate, CampaignList
+from ..services.character_host_client import (
+    SUPPORTED_VOICE_PRESETS,
+    generate_host_video,
+    path_for as host_path_for,
+)
 from ..services.finisher_service import (
     FORMAT_DIMS,
     LANDSCAPE,
@@ -205,4 +212,96 @@ def get_finished_video_format(
         str(path),
         media_type="video/mp4",
         filename=f"adspark-{campaign_id}-finished-{fmt}.mp4",
+    )
+
+
+# ---- PR F — Character Host ------------------------------------------
+
+
+class HostVideoBody(BaseModel):
+    voice_preset: Optional[str] = Field(
+        default=None, description="lowercase preset id (e.g. 'vincent')"
+    )
+    script_override: Optional[str] = Field(
+        default=None, max_length=300, description="overrides the templated script"
+    )
+
+
+@router.post("/{campaign_id}/host-video", response_model=Campaign)
+def post_host_video(
+    campaign_id: str,
+    body: Optional[HostVideoBody] = None,
+    settings: Settings = Depends(get_settings),
+    store: CampaignStore = Depends(_store),
+) -> Campaign:
+    """Generate a Runway avatar spokesperson clip for the campaign and
+    cache it locally. User click only — never auto-fired.
+    """
+    record = store.get(campaign_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="campaign not found")
+
+    voice_preset = (body.voice_preset if body else None)
+    script_override = (body.script_override if body else None)
+    if voice_preset and voice_preset.lower() not in SUPPORTED_VOICE_PRESETS:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"unsupported voice_preset '{voice_preset}'. "
+                f"supported: {sorted(SUPPORTED_VOICE_PRESETS)}"
+            ),
+        )
+
+    result = generate_host_video(
+        record,
+        settings,
+        voice_preset=voice_preset,
+        script_override=script_override,
+    )
+    if result.status == "ok":
+        logger.info(
+            "host video ok campaign=%s mock=%s task=%s",
+            campaign_id, result.mock_mode, result.task_id,
+        )
+        updated = store.update_host_fields(
+            campaign_id,
+            host_video_url=f"/api/campaigns/{campaign_id}/host-video",
+            host_status="ok",
+            host_error=None,
+            host_avatar_id=result.avatar_id,
+            host_task_id=result.task_id,
+            host_mock_mode=result.mock_mode,
+        )
+    else:
+        logger.warning(
+            "host video %s for campaign=%s: %s",
+            result.status, campaign_id, result.error,
+        )
+        updated = store.update_host_fields(
+            campaign_id,
+            host_video_url=None,
+            host_status=result.status,
+            host_error=result.error,
+            host_avatar_id=result.avatar_id,
+            host_task_id=result.task_id,
+            host_mock_mode=result.mock_mode,
+        )
+    return updated or record
+
+
+@router.get("/{campaign_id}/host-video")
+def get_host_video(
+    campaign_id: str,
+    settings: Settings = Depends(get_settings),
+) -> FileResponse:
+    path = host_path_for(settings, campaign_id)
+    if not path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="No host video for this campaign",
+        )
+    return FileResponse(
+        str(path),
+        media_type="video/mp4",
+        filename=f"adspark-{campaign_id}-host.mp4",
     )

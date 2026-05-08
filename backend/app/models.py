@@ -91,6 +91,7 @@ class CampaignCreate(BaseModel):
 
 CacheStatus = Literal["ok", "failed", "skipped"]
 FinishStatus = Literal["ok", "failed", "unavailable"]
+HostStatus = Literal["ok", "failed", "unavailable"]
 
 
 class Campaign(CampaignCreate):
@@ -103,6 +104,13 @@ class Campaign(CampaignCreate):
     finished_videos: dict[str, str] = {}  # PR B: per-format URLs
     finish_status: Optional[FinishStatus] = None  # status of the most recent finish op
     finish_error: Optional[str] = None  # error from the most recent finish op
+    # PR F — Character Host
+    host_video_url: Optional[str] = None
+    host_status: Optional[HostStatus] = None
+    host_error: Optional[str] = None
+    host_avatar_id: Optional[str] = None
+    host_task_id: Optional[str] = None
+    host_mock_mode: Optional[bool] = None
 
 
 class CampaignList(BaseModel):
