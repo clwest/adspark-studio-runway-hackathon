@@ -1,10 +1,41 @@
 # AdSpark Studio
 
-A RunwayML hackathon app. Type a business idea → get 3 cinematic ad concepts,
-a recommended Runway video prompt, a generated video, and a saved campaign card
-with caption + CTA + social copy.
+> **Type a business idea, get a Runway-powered cinematic ad — concept,
+> prompt, video, and ready-to-post copy — in under a minute.**
 
-Runs in **mock mode by default** — no API keys required to demo.
+A RunwayML hackathon entry. The flow: short form → 3 ad concepts → editable
+Runway video prompt → one image-to-video generation on user click →
+polled progress → inline video preview → saved campaign card with
+caption + CTA + social copy.
+
+- ⚡ **Demo-ready in mock mode without any API keys** — every step
+  works with deterministic mock concepts and an in-memory mock Runway
+  task.
+- 🎬 **Real Runway integration** verified end-to-end (`gen4_turbo`,
+  `image_to_video`, 1280:720, 5 s).
+- 🛡 **Credit-safe by design** — backend rejects misconfigured requests
+  with a 400 *before* hitting Runway; no auto-generation on page load.
+- 🧪 **Browser smoke test** (Playwright + Chromium) drives the full mock
+  flow on every change.
+
+📄 **Submission write-up:** [`SUBMISSION.md`](./SUBMISSION.md) — pitch,
+problem/solution, what's real vs mocked, future work, safety notes.
+🎯 **Live demo script:** see [Hackathon demo script](#hackathon-demo-script-3-minutes-live)
+below.
+
+## TL;DR — run it locally
+```bash
+# Terminal 1 — backend
+cd backend && python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+
+# Terminal 2 — frontend
+cd frontend && npm install && npm run dev   # http://localhost:5173
+```
+Open `http://localhost:5173`. With no keys set, you're in mock mode and
+can drive the full flow immediately. Drop a `RUNWAY_API_KEY` into the
+**repo-root** `.env` to flip Runway into real mode.
 
 ## Quick start
 

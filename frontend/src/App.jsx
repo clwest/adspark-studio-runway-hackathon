@@ -136,7 +136,9 @@ export default function App() {
           <h1 className="text-3xl font-bold">
             AdSpark <span className="text-spark">Studio</span>
           </h1>
-          <p className="text-sm text-zinc-400">Cinematic ad concepts → Runway video.</p>
+          <p className="text-sm text-zinc-400">
+            From idea to cinematic Runway ad — concept, prompt, video, copy.
+          </p>
         </div>
         {mockBadge && (
           <div
