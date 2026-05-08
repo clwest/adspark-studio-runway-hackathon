@@ -177,6 +177,19 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
     newestCard.getByRole('button', { name: /^Design Brand Voice$/i }),
   ).toBeVisible()
 
+  // 13d. PR I — Talk to Brand Spokesperson realtime section. Only
+  //      renders once the avatar is in {ready, mock} state. The mock
+  //      smoke run never creates the avatar (timing-sensitive), so we
+  //      assert non-strictly: if the section is present, the start
+  //      button must be in the disabled "unavailable" state in mock.
+  const realtimeSection = newestCard.getByText(/^Talk to Brand Spokesperson$/)
+  if (await realtimeSection.isVisible().catch(() => false)) {
+    await expect(newestCard.getByText(/^Realtime Runway Avatar$/)).toBeVisible()
+    await expect(
+      newestCard.getByRole('button', { name: /Start Conversation \(unavailable\)/i }),
+    ).toBeDisabled()
+  }
+
   // 13. Console / page errors — page errors are always fatal; console errors
   //     are filtered to drop video-network noise.
   const realConsoleErrors = consoleErrors.filter(

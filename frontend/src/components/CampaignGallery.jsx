@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { api } from '../api'
+import RealtimeSpokesperson from './RealtimeSpokesperson.jsx'
 
 const PACK_FORMATS = [
   { key: 'landscape', label: 'Landscape', dims: '1280×720', hint: 'YouTube / web' },
@@ -502,6 +503,21 @@ function CampaignCard({ c, onUpdated }) {
               </div>
             )}
           </div>
+        )}
+
+        {/* PR I — Talk to Brand Spokesperson (realtime).  Strictly
+            additive layer, gated to real-mode ready avatars only.  In
+            mock mode we render the section disabled with a clear
+            reason so the demo story stays honest. */}
+        {avatarReady && (
+          <RealtimeSpokesperson
+            campaign={c}
+            gateReason={
+              avatarMock
+                ? 'Realtime requires a real Runway key — running in mock mode.'
+                : null
+            }
+          />
         )}
       </div>
 

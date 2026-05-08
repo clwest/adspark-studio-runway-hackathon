@@ -40,4 +40,5 @@ export const ERROR_HINTS = {
   poll: 'Lost track of the Runway task',
   save: 'Couldn’t save the campaign',
   finish: 'Couldn’t build that pack format',
+  realtime: 'Couldn’t start the realtime session',
 }

@@ -49,4 +49,14 @@ export const api = {
       `/api/campaigns/${encodeURIComponent(campaignId)}/dub`,
       { method: 'POST', body: JSON.stringify({ target_lang }) },
     ),
+  startSpokespersonSession: (campaignId) =>
+    jsonFetch(
+      `/api/campaigns/${encodeURIComponent(campaignId)}/spokesperson-session`,
+      { method: 'POST' },
+    ),
+  endSpokespersonSession: (campaignId, sessionId) =>
+    jsonFetch(
+      `/api/campaigns/${encodeURIComponent(campaignId)}/spokesperson-session/${encodeURIComponent(sessionId)}`,
+      { method: 'DELETE' },
+    ),
 }

@@ -1,6 +1,7 @@
 import logging
 from typing import Optional
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
@@ -18,6 +19,11 @@ from ..services.character_host_client import (
     create_or_reuse_avatar,
     generate_host_video,
     path_for as host_path_for,
+)
+from ..services.realtime_avatar_client import (
+    RealtimeUnavailableError,
+    create_session as realtime_create_session,
+    delete_session as realtime_delete_session,
 )
 from ..services.finisher_service import (
     FORMAT_DIMS,
@@ -516,6 +522,80 @@ def post_dub_voice(
             error=result.error,
         )
     return updated or record
+
+
+# ---- PR I — Realtime Brand Spokesperson session broker -------------
+
+
+@router.post("/{campaign_id}/spokesperson-session")
+def post_spokesperson_session(
+    campaign_id: str,
+    settings: Settings = Depends(get_settings),
+    store: CampaignStore = Depends(_store),
+) -> dict:
+    """PR I — broker a Runway realtime session for the campaign's host
+    avatar. Returns ONLY client-safe fields (session id + session key
+    + expiry). The Runway API key never leaves FastAPI.
+    """
+    record = store.get(campaign_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="campaign not found")
+    if (
+        not record.host_avatar_id
+        or record.host_avatar_status not in {"ready"}
+    ):
+        # Mock avatars are explicitly not allowed here — they're not real
+        # Runway resources.  Avatar must be created first via PR F V2.
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Brand Spokesperson Avatar must be ready in real mode. "
+                "POST /api/campaigns/{id}/avatar (real Runway key required)."
+            ),
+        )
+    try:
+        session = realtime_create_session(record, settings)
+    except RealtimeUnavailableError as exc:
+        # Mock mode hits this path. Use 503 so the frontend can show
+        # "available in real mode only" instead of attempting WebRTC.
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except httpx.HTTPStatusError as exc:
+        logger.warning(
+            "realtime upstream error: %s %s",
+            exc.response.status_code, exc.response.text[:200],
+        )
+        raise HTTPException(
+            status_code=502,
+            detail=f"runway upstream {exc.response.status_code}",
+        ) from exc
+    except Exception as exc:  # pragma: no cover — defensive
+        logger.exception("realtime broker crashed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    logger.info(
+        "realtime session ok campaign=%s session=%s avatar=%s",
+        campaign_id, session.session_id, session.avatar_id,
+    )
+    return {
+        "session_id": session.session_id,
+        "session_key": session.session_key,
+        "expires_at": session.expires_at,
+        "avatar_id": session.avatar_id,
+    }
+
+
+@router.delete("/{campaign_id}/spokesperson-session/{session_id}")
+def delete_spokesperson_session(
+    campaign_id: str,
+    session_id: str,
+    settings: Settings = Depends(get_settings),
+) -> dict:
+    """PR I — best-effort DELETE for clean teardown when the user clicks
+    End Conversation. Always returns 200 with an ``ok`` boolean even if
+    Runway already cancelled the session — the frontend's behaviour
+    shouldn't depend on the result.
+    """
+    ok = realtime_delete_session(session_id, settings)
+    return {"ok": ok, "session_id": session_id}
 
 
 @router.get("/{campaign_id}/audio/{kind}")

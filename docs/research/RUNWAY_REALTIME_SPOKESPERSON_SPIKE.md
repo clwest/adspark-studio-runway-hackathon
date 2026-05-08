@@ -94,7 +94,7 @@ READY payload — adds two:
   "createdAt": "2026-05-08T19:50:32.535Z",
   "status": "READY",
   "expiresAt": "2026-05-08T19:55:34.531Z",
-  "sessionKey": "stk_eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImY0MWFjMzM2LTBiNWEtNDEzMy1hNWE..."
+  "sessionKey": "<<JWT-shaped opaque token, ~248 chars; redacted from this doc>>"
 }
 ```
 
