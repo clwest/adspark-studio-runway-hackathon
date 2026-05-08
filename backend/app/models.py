@@ -70,6 +70,7 @@ class CampaignCreate(BaseModel):
 
 
 CacheStatus = Literal["ok", "failed", "skipped"]
+FinishStatus = Literal["ok", "failed", "unavailable"]
 
 
 class Campaign(CampaignCreate):
@@ -78,6 +79,9 @@ class Campaign(CampaignCreate):
     cached_video_url: Optional[str] = None
     cache_status: Optional[CacheStatus] = None
     cache_error: Optional[str] = None
+    finished_video_url: Optional[str] = None
+    finish_status: Optional[FinishStatus] = None
+    finish_error: Optional[str] = None
 
 
 class CampaignList(BaseModel):

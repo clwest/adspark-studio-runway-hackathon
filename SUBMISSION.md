@@ -66,13 +66,21 @@ Runs locally on `:8000` (FastAPI) and `:5173` (Vite, with `/api` and
 
 ## What works now (verified)
 - ✅ Backend API: `/health`, `/api/concepts`, `/api/runway/generate`,
-  `/api/runway/task/{id}`, `/api/campaigns` (POST + GET).
+  `/api/runway/task/{id}`, `/api/campaigns` (POST + GET),
+  `/api/campaigns/{id}/video`, `/api/campaigns/{id}/finish`,
+  `/api/campaigns/{id}/finished-video`.
 - ✅ Mock-mode end-to-end via curl + Playwright (`npm run test:e2e`).
 - ✅ One real Runway generation (`SUCCEEDED` in ~8s, real CloudFront
   artifact, campaign saved with the real video URL).
 - ✅ Backend's own 400 guard prevents wasted Runway quota.
 - ✅ Frontend `<ModeBanner />` accurately reflects per-provider state via
   `/health`.
+- ✅ **Artifact caching** — saves download the Runway MP4 to
+  `backend/data/videos/<id>.mp4` and serve it from a stable local route.
+- ✅ **Finish Ad pipeline** — local ffmpeg burns title + CTA overlays
+  onto the cached video; output served from
+  `/api/campaigns/{id}/finished-video`. Verified end-to-end against the
+  cached real Runway artifact (no new Runway call).
 - ✅ Browser smoke proves no uncaught runtime errors.
 
 ## What is mocked vs real
@@ -95,9 +103,11 @@ typical hackathon configuration.
   gallery prefers the cached file and shows a clear status badge.
   Verified against the existing real Runway artifact (Session 001e)
   and the mock-mode demo MP4 — no new Runway calls required.
-- **Finishing pipeline** — DaVinci Resolve / ffmpeg overlay step to burn
-  the caption + CTA into the Runway clip and produce a brand-aligned
-  export.
+- **~~Finishing pipeline (ffmpeg)~~** — *implemented* in Session 004.
+  `POST /api/campaigns/{id}/finish` runs ffmpeg with two `drawtext`
+  filters to burn title and CTA over the cached video. DaVinci Resolve
+  remains a future stretch — the route is structured so a Resolve
+  provider can swap in behind the same endpoint.
 - **Public deployment** — Vercel for the frontend, Render/Fly for the
   backend, Runway key in env vars; demo URL for judges.
 - **More tests** — pytest coverage for the routers and the real-mode

@@ -20,4 +20,8 @@ export const api = {
   saveCampaign: (body) =>
     jsonFetch('/api/campaigns', { method: 'POST', body: JSON.stringify(body) }),
   listCampaigns: () => jsonFetch('/api/campaigns'),
+  finishCampaign: (campaignId) =>
+    jsonFetch(`/api/campaigns/${encodeURIComponent(campaignId)}/finish`, {
+      method: 'POST',
+    }),
 }

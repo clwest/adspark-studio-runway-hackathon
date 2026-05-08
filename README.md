@@ -180,6 +180,37 @@ This works for both real Runway artifacts and the mock-mode demo MP4 —
 no schema migration is required for older saves; missing cache fields
 are treated as `external URL may expire`.
 
+## Finish Ad — local ffmpeg overlay pipeline
+
+Once a campaign has a cached video, click **Finish Ad** in the gallery
+to produce a branded MP4 with text overlays burned in via local ffmpeg
+— no third-party API calls.
+
+- **Trigger:** `POST /api/campaigns/{campaign_id}/finish` (user click only;
+  never automatic).
+- **Source:** the cached MP4 at `backend/data/videos/<campaign_id>.mp4`.
+- **Output:** `backend/data/finished/<campaign_id>-finished.mp4` (gitignored).
+- **Stable serve route:** `GET /api/campaigns/{campaign_id}/finished-video`.
+- **Overlays:** the selected concept's title across the top, CTA (or
+  caption fallback) across the bottom — semi-transparent black box,
+  white text, sized relative to the video height.
+- **Encode:** libx264 / `veryfast` / CRF 23, audio copied through,
+  `+faststart` for streaming friendliness.
+- **Campaign record fields:** `finished_video_url`, `finish_status`
+  (`ok | failed | unavailable`), `finish_error`. The gallery prefers
+  the finished video over the cached video and shows a violet
+  `finished ad` badge.
+- **Failure handling:** `finish_status: "unavailable"` if ffmpeg is
+  missing on the server (the route also returns HTTP 503 on the first
+  attempt so the UI can surface a brew-install hint); `finish_status:
+  "failed"` with truncated stderr if ffmpeg returns non-zero.
+- **DaVinci Resolve / richer finishing** is future work — the `Finish
+  Ad` route is structured so a Resolve provider can swap in behind
+  the same endpoint without a frontend change.
+
+Requires `ffmpeg` on `PATH`. macOS: `brew install ffmpeg`. The pipeline
+is fully local — no provider keys, no network calls.
+
 ## Browser smoke test (Playwright)
 
 A single Chromium-driven end-to-end test exercises the polished mock flow

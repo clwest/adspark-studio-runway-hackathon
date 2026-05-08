@@ -83,6 +83,24 @@ class CampaignStore:
                     return Campaign.model_validate(row)
         return None
 
+    def update_finish_fields(
+        self,
+        campaign_id: str,
+        finished_video_url: Optional[str],
+        finish_status: Optional[str],
+        finish_error: Optional[str],
+    ) -> Optional[Campaign]:
+        with _LOCK:
+            rows = self._read()
+            for row in rows:
+                if row.get("id") == campaign_id:
+                    row["finished_video_url"] = finished_video_url
+                    row["finish_status"] = finish_status
+                    row["finish_error"] = finish_error
+                    self._write(rows)
+                    return Campaign.model_validate(row)
+        return None
+
 
 @dataclass
 class CacheResult:
