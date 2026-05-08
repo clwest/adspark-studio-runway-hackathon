@@ -1,9 +1,29 @@
+function statusCopy(task) {
+  switch (task.status) {
+    case 'PENDING':
+      return 'Queueing the task with Runway…'
+    case 'RUNNING':
+      return task.endpoint === 'text_to_video'
+        ? 'Runway is rendering the text-to-video clip…'
+        : 'Runway is rendering the image-to-video clip…'
+    case 'SUCCEEDED':
+      return 'Clip ready. Save it to keep a permanent local copy.'
+    case 'FAILED':
+      return task.failure_reason || 'Runway returned a failure for this task.'
+    case 'CANCELED':
+      return 'Task was canceled.'
+    default:
+      return ''
+  }
+}
+
 export default function RunwayPanel({ task, onSave, savedId }) {
   if (!task) return null
   const pct = Math.round((task.progress ?? 0) * 100)
   const done = task.status === 'SUCCEEDED'
   const failed = task.status === 'FAILED' || task.status === 'CANCELED'
   const videoUrl = task.output?.[0]
+  const copy = statusCopy(task)
 
   return (
     <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5 space-y-3">
@@ -29,8 +49,10 @@ export default function RunwayPanel({ task, onSave, savedId }) {
         <span className="text-xs text-zinc-400 w-10 text-right">{pct}%</span>
       </div>
 
-      {failed && task.failure_reason && (
-        <p className="text-sm text-rose-300">{task.failure_reason}</p>
+      {copy && (
+        <p className={`text-xs ${failed ? 'text-rose-300' : 'text-zinc-400'}`}>
+          {copy}
+        </p>
       )}
 
       {done && videoUrl && (
@@ -55,7 +77,7 @@ export default function RunwayPanel({ task, onSave, savedId }) {
               disabled={!!savedId}
               className="rounded-lg bg-zinc-800 hover:bg-zinc-700 px-3 py-1 text-sm disabled:opacity-50"
             >
-              {savedId ? 'Saved' : 'Save campaign card'}
+              {savedId ? 'Saved · cached locally' : 'Save campaign card'}
             </button>
           </div>
         </div>

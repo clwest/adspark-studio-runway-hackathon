@@ -12,6 +12,8 @@ async function jsonFetch(path, init = {}) {
 
 export const api = {
   health: () => jsonFetch('/health'),
+  providerStatus: () => jsonFetch('/api/runway/provider-status'),
+  organization: () => jsonFetch('/api/runway/organization'),
   generateConcepts: (body) =>
     jsonFetch('/api/concepts', { method: 'POST', body: JSON.stringify(body) }),
   startRunway: (body) =>

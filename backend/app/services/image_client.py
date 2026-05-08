@@ -1,7 +1,10 @@
 """Reference-image generation for Runway image_to_video.
 
 Real path: POST /v1/text_to_image with `gen4_image_turbo`, poll the resulting
-task synchronously, then download the produced PNG to local disk.
+task synchronously, then download the produced PNG to local disk. Runway's
+gen4_image* models require at least one `referenceImages` entry, so we seed
+the request with a flat-colour PNG that contributes negligible visual
+information (the prompt remains the dominant signal).
 
 Mock path: synthesize a small, deterministic PNG locally with stdlib only.
 No third-party network calls in mock mode — safe for CI and the Playwright
@@ -9,6 +12,7 @@ smoke.
 """
 from __future__ import annotations
 
+import base64
 import hashlib
 import logging
 import struct
@@ -163,11 +167,25 @@ def _download_image(url: str, *, timeout_s: float = 30.0) -> bytes:
         return b"".join(chunks)
 
 
+def _seed_reference_uri() -> str:
+    """Generate a flat-colour PNG and return it as a data URI suitable for
+    Runway's `referenceImages` field. The image is small (320x320) and a
+    near-neutral charcoal — enough to satisfy the gen4_image_turbo schema
+    while keeping the prompt the dominant signal.
+    """
+    payload = _solid_png(320, 320, (45, 45, 55))
+    return "data:image/png;base64," + base64.b64encode(payload).decode("ascii")
+
+
 def _generate_real(req: ImageGenerateRequest, settings: Settings) -> ImageGenerateResponse:
     body = {
         "model": _IMAGE_MODEL,
         "promptText": req.prompt_text,
         "ratio": req.ratio,
+        # gen4_image_turbo rejects requests without at least one
+        # referenceImages entry. We seed a flat charcoal PNG so the prompt
+        # text remains the dominant signal — see _seed_reference_uri.
+        "referenceImages": [{"uri": _seed_reference_uri(), "tag": "seed"}],
     }
     create_url = f"{settings.runway_api_base}/v1/text_to_image"
     with httpx.Client(timeout=30.0) as client:

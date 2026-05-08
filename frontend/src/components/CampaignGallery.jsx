@@ -198,7 +198,12 @@ function CampaignCard({ c, onUpdated }) {
       {isCached && (
         <div className="border-t border-zinc-800 pt-3 space-y-2">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-xs font-semibold text-zinc-300">Campaign Pack</span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-zinc-300">Campaign Pack</span>
+              <span className="text-[10px] text-zinc-500" title="Each format runs a local ffmpeg pass — no extra Runway calls.">
+                {finishedCount}/3 formats ready
+              </span>
+            </div>
             {finishUnavailable && (
               <span className="text-[10px] text-amber-300">
                 ffmpeg unavailable — install via `brew install ffmpeg`

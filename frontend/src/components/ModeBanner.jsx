@@ -12,7 +12,27 @@ function Pill({ label, real }) {
   )
 }
 
-export default function ModeBanner({ health }) {
+function readinessFor(health, providerStatus) {
+  if (!health) return { label: 'starting', tone: 'zinc' }
+  if (health.status !== 'ok') return { label: 'backend down', tone: 'rose' }
+  if (!providerStatus) return { label: 'checking providers', tone: 'zinc' }
+  const realRunway = providerStatus.has_runway_key === true
+  const realConcepts = health.openai_mock === false
+  if (realRunway && realConcepts) return { label: 'demo ready · all live', tone: 'emerald' }
+  if (realRunway && !realConcepts) {
+    return { label: 'demo ready · concepts mocked', tone: 'emerald' }
+  }
+  return { label: 'demo mode', tone: 'amber' }
+}
+
+const TONE_CLASSES = {
+  zinc: 'bg-zinc-800 text-zinc-300',
+  rose: 'bg-rose-500/20 text-rose-300',
+  amber: 'bg-amber-500/20 text-amber-300',
+  emerald: 'bg-emerald-500/20 text-emerald-300',
+}
+
+export default function ModeBanner({ health, providerStatus, organization }) {
   if (!health) {
     return (
       <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-4 text-sm text-zinc-500">
@@ -22,20 +42,57 @@ export default function ModeBanner({ health }) {
   }
   const conceptsReal = health.openai_mock === false
   const runwayReal = health.runway_mock === false
-  // image_gen_mock is set by /health and currently mirrors runway_mock; kept as
-  // a separate pill so judges can see the system uses Runway for both legs.
   const imageGenReal = health.image_gen_mock === false
+  const readiness = readinessFor(health, providerStatus)
+  // Show a credits chip only when runway is live AND we got a numeric value.
+  // Failure / mock modes intentionally render no chip — non-blocking.
+  const credits =
+    runwayReal && organization && typeof organization.credits === 'number'
+      ? organization.credits
+      : null
+
+  const supportTooltip = providerStatus
+    ? `models: ${providerStatus.supported_models.join(', ')}\nratios: ${(providerStatus.supported_ratios_by_model?.[
+        providerStatus.supported_models[0]
+      ] || []).join(', ')}`
+    : 'provider status unavailable'
 
   return (
     <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4 space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <h3 className="font-semibold mr-2">Mode</h3>
+        <span
+          className={`text-xs rounded-full px-2 py-0.5 font-mono ${TONE_CLASSES[readiness.tone]}`}
+          title={supportTooltip}
+          aria-label="readiness"
+        >
+          {readiness.label}
+        </span>
         <Pill label="Concepts (OpenAI)" real={conceptsReal} />
         <Pill label="Image Gen (Runway)" real={imageGenReal} />
         <Pill label="Video Gen (Runway)" real={runwayReal} />
-        {runwayReal && (
-          <span className="text-xs rounded-full bg-spark/20 text-spark px-2 py-0.5">
-            real Runway verified
+        {credits !== null && (
+          <span
+            className="text-xs rounded-full bg-spark/20 text-spark px-2 py-0.5 font-mono"
+            title="Runway credits remaining (best-effort, refreshes on page load)"
+          >
+            credits: {credits}
+          </span>
+        )}
+        {runwayReal && credits === null && typeof organization?.monthly_credit_cap === 'number' && (
+          <span
+            className="text-[10px] rounded-full bg-zinc-800 text-zinc-300 px-2 py-0.5 font-mono"
+            title="Runway returns the monthly spend cap, not a per-account balance, on the org endpoint."
+          >
+            cap: {organization.monthly_credit_cap.toLocaleString()}
+          </span>
+        )}
+        {runwayReal && credits === null && !organization?.monthly_credit_cap && organization?.error && (
+          <span
+            className="text-[10px] text-zinc-500"
+            title={`organization endpoint: ${organization.error}`}
+          >
+            (credit balance unavailable)
           </span>
         )}
       </div>

@@ -35,6 +35,9 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
   await expect(page.getByText(/Concepts \(OpenAI\): mock/i)).toBeVisible()
   await expect(page.getByText(/Image Gen \(Runway\): mock/i)).toBeVisible()
   await expect(page.getByText(/Video Gen \(Runway\): mock/i)).toBeVisible()
+  // PR D readiness chip — provider-status resolved, fully mocked.
+  await expect(page.getByLabel('readiness')).toBeVisible()
+  await expect(page.getByLabel('readiness')).toHaveText(/demo mode/i)
   // Header MOCK MODE pill present (any_mock = true)
   await expect(page.getByText(/^MOCK MODE$/)).toBeVisible()
 
@@ -90,6 +93,24 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
   await expect(settings.getByText('5s', { exact: true })).toBeVisible()
   await expect(settings.getByText('reference image')).toBeVisible()
 
+  // 7c. PR D — settings persistence. Switch to Reels (720:1280) and reload;
+  //     the dropdown must come back with the new value, not the default.
+  await ratioSelect.selectOption('720:1280')
+  await expect(ratioSelect).toHaveValue('720:1280')
+  await page.reload()
+  // After reload, prompt panel only re-renders if concepts are regenerated;
+  // settings still need to persist. Re-trigger concepts and re-check.
+  await page.getByPlaceholder('Donkey Betz Coffee').fill('Local coffee shop')
+  await page.getByPlaceholder('Cold-brew subscription').fill('Morning blend')
+  await page.getByRole('button', { name: /Generate Ad Concepts/i }).click()
+  // Pick the same Daily Ritual concept again so the prompt panel mounts.
+  await expect(page.getByRole('button', { name: /Daily Ritual/i })).toBeVisible()
+  await page.getByRole('button', { name: /Daily Ritual/i }).click()
+  const ratioAfterReload = page.getByLabel('source ratio')
+  await expect(ratioAfterReload).toHaveValue('720:1280')
+  // Reset to landscape so the rest of the test resembles the original path.
+  await ratioAfterReload.selectOption('1280:720')
+
   // 8. Reference Image URL — placeholder value to mirror the demo path
   await page
     .getByPlaceholder(/images\.unsplash\.com\/photo/i)
@@ -104,7 +125,9 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
 
   // 11. Save campaign
   await page.getByRole('button', { name: /^Save campaign card$/i }).click()
-  await expect(page.getByRole('button', { name: /^Saved$/i })).toBeVisible()
+  await expect(
+    page.getByRole('button', { name: /^Saved · cached locally$/i }),
+  ).toBeVisible()
 
   // 12. Gallery now contains the new campaign. Scope to the gallery card
   //     specifically (a `div.rounded-2xl` containing the heading) so we don't

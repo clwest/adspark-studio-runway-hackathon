@@ -1,4 +1,5 @@
 import logging
+from typing import Optional
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
@@ -18,6 +19,7 @@ from ..services.image_client import (
     path_for as image_path_for,
 )
 from ..services.runway_client import (
+    GENERATION_POLICY,
     GenerationSettingsError,
     create_task,
     get_task as fetch_task,
@@ -113,3 +115,114 @@ def get_generated_image(
     if not path.exists():
         raise HTTPException(status_code=404, detail="image not found")
     return FileResponse(str(path), media_type="image/png", filename=f"{image_id}.png")
+
+
+@router.get("/provider-status")
+def get_provider_status(settings: Settings = Depends(get_settings)) -> dict:
+    """Public, secret-free metadata about generation capabilities.
+
+    Used by the frontend to render the readiness/status chip and to verify
+    that the policy table the UI assumes still matches what the backend
+    enforces. Never returns the API key.
+    """
+    return {
+        "runway_mock": settings.runway_mock,
+        "image_gen_mock": settings.runway_mock,
+        "video_gen_mock": settings.runway_mock,
+        "has_runway_key": not settings.runway_mock,
+        "supported_models": sorted(GENERATION_POLICY.keys()),
+        "supported_ratios_by_model": {
+            m: sorted(p["ratios"]) for m, p in GENERATION_POLICY.items()
+        },
+        "supported_durations_by_model": {
+            m: sorted(p["durations"]) for m, p in GENERATION_POLICY.items()
+        },
+        "image_required_by_model": {
+            m: bool(p["image_required"]) for m, p in GENERATION_POLICY.items()
+        },
+    }
+
+
+def _extract_credits(payload: dict) -> Optional[float]:
+    """Pull a numeric credit balance from a Runway organization response.
+
+    The /v1/organization endpoint shape is undocumented enough that we accept
+    a few common field names. Returns None when no numeric value is found.
+    """
+    for path in (
+        ("creditsRemaining",),
+        ("credits", "remaining"),
+        ("credits", "balance"),
+        ("credits",),
+        ("balance", "credits"),
+        ("balance",),
+        ("usage", "creditsRemaining"),
+    ):
+        cur: object = payload
+        ok = True
+        for key in path:
+            if isinstance(cur, dict) and key in cur:
+                cur = cur[key]
+            else:
+                ok = False
+                break
+        if ok and isinstance(cur, (int, float)):
+            return float(cur)
+    return None
+
+
+@router.get("/organization")
+def get_organization(settings: Settings = Depends(get_settings)) -> dict:
+    """Best-effort proxy of Runway's /v1/organization. Never raises and never
+    returns the API key. Mock mode short-circuits with credits=None so the
+    UI can decide whether to render a credit chip.
+
+    The Runway response shape is intentionally treated as opaque — we extract
+    a numeric credit value when we can recognise one and otherwise pass
+    through whatever fields look interesting (plan, tier) without leaking
+    secrets. Failures land in the response body so the frontend stays
+    non-blocking.
+    """
+    if settings.runway_mock:
+        return {"mock_mode": True, "credits": None}
+
+    url = f"{settings.runway_api_base}/v1/organization"
+    headers = {
+        "Authorization": f"Bearer {settings.runway_api_key}",
+        "X-Runway-Version": settings.runway_api_version,
+    }
+    try:
+        with httpx.Client(timeout=10.0) as client:
+            resp = client.get(url, headers=headers)
+        if resp.status_code != 200:
+            logger.warning(
+                "runway organization status %s: %s",
+                resp.status_code, resp.text[:200],
+            )
+            return {
+                "mock_mode": False,
+                "credits": None,
+                "error": f"runway returned {resp.status_code}",
+            }
+        payload = resp.json() if resp.content else {}
+    except httpx.HTTPError as exc:
+        logger.warning("runway organization fetch failed: %s", exc)
+        return {"mock_mode": False, "credits": None, "error": "fetch failed"}
+    except Exception:
+        logger.exception("runway organization unexpected error")
+        return {"mock_mode": False, "credits": None, "error": "unexpected error"}
+
+    if not isinstance(payload, dict):
+        return {"mock_mode": False, "credits": None, "error": "unexpected response shape"}
+
+    # Runway's /v1/organization returns plan limits keyed under `tier` (or
+    # `plan`, depending on account shape) and includes a noisy per-model
+    # `models` quota map. We strip that out and extract only the small set
+    # of safe fields the frontend can render.
+    tier_raw = payload.get("tier") or payload.get("plan")
+    tier: dict = tier_raw if isinstance(tier_raw, dict) else {}
+    return {
+        "mock_mode": False,
+        "credits": _extract_credits(payload),
+        "monthly_credit_cap": tier.get("maxMonthlyCreditSpend"),
+    }

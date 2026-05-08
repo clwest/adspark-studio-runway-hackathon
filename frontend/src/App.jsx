@@ -1,5 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from './api'
+import { friendlyError, ERROR_HINTS } from './errors'
+import {
+  ALLOWED_DURATIONS,
+  DEFAULT_SETTINGS,
+  loadSettings,
+  saveSettings,
+} from './settings'
 import CampaignForm from './components/CampaignForm.jsx'
 import ConceptCards from './components/ConceptCards.jsx'
 import PromptPreview from './components/PromptPreview.jsx'
@@ -10,29 +17,24 @@ import ModeBanner from './components/ModeBanner.jsx'
 const POLL_INTERVAL_MS = 5000
 const POLL_MAX_ATTEMPTS = 60
 
-const DEFAULT_MODEL = 'gen4_turbo'
-const DEFAULT_RATIO = '1280:720'
-const DEFAULT_DURATION = 5
-
-// Mirror of backend GENERATION_POLICY (services/runway_client.py). Used here
-// only to clamp duration when the model changes — backend is the source of
-// truth and re-validates every generate call.
-const ALLOWED_DURATIONS = {
-  gen4_turbo: [5],
-  'gen4.5': [5, 8, 10],
-}
+// Load once at module init so the very first render already reflects the
+// persisted choices — avoids a default→restored flicker that the smoke test
+// would otherwise race against on reload.
+const PERSISTED = loadSettings()
 
 export default function App() {
   const [health, setHealth] = useState(null)
+  const [providerStatus, setProviderStatus] = useState(null)
+  const [organization, setOrganization] = useState(null)
   const [form, setForm] = useState(null)
   const [conceptResp, setConceptResp] = useState(null)
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [prompt, setPrompt] = useState('')
-  const [imageUrl, setImageUrl] = useState('')
-  const [model, setModel] = useState(DEFAULT_MODEL)
-  const [ratio, setRatio] = useState(DEFAULT_RATIO)
-  const [duration, setDuration] = useState(DEFAULT_DURATION)
-  const [textOnly, setTextOnly] = useState(false)
+  const [imageUrl, setImageUrl] = useState(PERSISTED.imageUrl)
+  const [model, setModel] = useState(PERSISTED.model)
+  const [ratio, setRatio] = useState(PERSISTED.ratio)
+  const [duration, setDuration] = useState(PERSISTED.duration)
+  const [textOnly, setTextOnly] = useState(PERSISTED.textOnly)
   const [generatedImage, setGeneratedImage] = useState(null) // { image_url, image_id, mock_mode, model }
   const [task, setTask] = useState(null)
   const [campaigns, setCampaigns] = useState([])
@@ -43,8 +45,18 @@ export default function App() {
 
   useEffect(() => {
     api.health().then(setHealth).catch(() => setHealth({ status: 'down' }))
+    api.providerStatus().then(setProviderStatus).catch(() => setProviderStatus(null))
+    // Organization lookup is best-effort and entirely optional — never let
+    // it surface as an error or block the rest of the page.
+    api.organization().then(setOrganization).catch(() => setOrganization(null))
     api.listCampaigns().then((d) => setCampaigns(d.campaigns || [])).catch(() => {})
   }, [])
+
+  // Persist settings whenever the user changes any one of them. The clamp
+  // inside saveSettings() guarantees we never write an invalid combination.
+  useEffect(() => {
+    saveSettings({ model, ratio, duration, textOnly, imageUrl })
+  }, [model, ratio, duration, textOnly, imageUrl])
 
   const refreshCampaigns = () =>
     api.listCampaigns().then((d) => setCampaigns(d.campaigns || [])).catch(() => {})
@@ -63,7 +75,7 @@ export default function App() {
       setSelectedIndex(resp.recommended_index ?? 0)
       setPrompt(resp.runway_prompt || '')
     } catch (e) {
-      setError(String(e))
+      setError(friendlyError(e, ERROR_HINTS.concepts))
     } finally {
       setBusy((b) => ({ ...b, concepts: false }))
     }
@@ -80,14 +92,24 @@ export default function App() {
         const terminal = ['SUCCEEDED', 'FAILED', 'CANCELED'].includes(t.status)
         if (terminal) {
           pollRef.current.active = false
+          if (t.status !== 'SUCCEEDED') {
+            setError(
+              friendlyError(
+                new Error(`200 OK: ${JSON.stringify({ detail: t.failure_reason || t.status })}`),
+                ERROR_HINTS.video,
+              ),
+            )
+          }
           return
         }
       } catch (e) {
-        setError(`Polling error: ${e}`)
+        setError(friendlyError(e, ERROR_HINTS.poll))
       }
       if (pollRef.current.attempts >= POLL_MAX_ATTEMPTS) {
         pollRef.current.active = false
-        setError('Polling timed out (5 min cap). Task may still be running on Runway.')
+        setError(
+          `${ERROR_HINTS.poll} — polling timed out at the 5-min cap. The task may still be running on Runway; check the Runway dashboard.`,
+        )
         return
       }
       const jitter = Math.random() * 800
@@ -122,7 +144,7 @@ export default function App() {
       })
       startPolling(resp.task_id)
     } catch (e) {
-      setError(String(e))
+      setError(friendlyError(e, ERROR_HINTS.video))
     } finally {
       setBusy((b) => ({ ...b, runway: false }))
     }
@@ -135,12 +157,12 @@ export default function App() {
     try {
       const resp = await api.generateReferenceImage({
         prompt_text: prompt,
-        ratio: '1280:720',
+        ratio,
       })
       setGeneratedImage(resp)
       setImageUrl(resp.image_url)
     } catch (e) {
-      setError(String(e))
+      setError(friendlyError(e, ERROR_HINTS.image))
     } finally {
       setBusy((b) => ({ ...b, image: false }))
     }
@@ -170,13 +192,12 @@ export default function App() {
       setSavedId(saved.id)
       refreshCampaigns()
     } catch (e) {
-      setError(String(e))
+      setError(friendlyError(e, ERROR_HINTS.save))
     }
   }
 
   const mockBadge = health?.any_mock
   const concepts = conceptResp?.concepts
-  // requireImage: only enforce for image-required models AND when text-only is off.
   const isImageRequiredModel = model !== 'gen4.5'
   const requireImage = health
     ? health.runway_mock === false && (isImageRequiredModel || !textOnly)
@@ -204,12 +225,24 @@ export default function App() {
       </header>
 
       {error && (
-        <div className="rounded-lg border border-rose-500/40 bg-rose-500/10 text-rose-200 px-4 py-2 text-sm">
-          {error}
+        <div className="rounded-lg border border-rose-500/40 bg-rose-500/10 text-rose-200 px-4 py-2 text-sm flex items-start justify-between gap-3">
+          <span>{error}</span>
+          <button
+            type="button"
+            onClick={() => setError('')}
+            className="text-xs text-rose-300/70 hover:text-rose-100"
+            aria-label="dismiss error"
+          >
+            dismiss
+          </button>
         </div>
       )}
 
-      <ModeBanner health={health} />
+      <ModeBanner
+        health={health}
+        providerStatus={providerStatus}
+        organization={organization}
+      />
 
       <CampaignForm onSubmit={handleConcepts} busy={busy.concepts} />
 
@@ -245,7 +278,7 @@ export default function App() {
             if (m !== 'gen4.5') setTextOnly(false)
             // clamp duration to what the new model supports (default to first
             // allowed value if the current selection is no longer valid)
-            const allowed = ALLOWED_DURATIONS[m] || [DEFAULT_DURATION]
+            const allowed = ALLOWED_DURATIONS[m] || [DEFAULT_SETTINGS.duration]
             if (!allowed.includes(duration)) setDuration(allowed[0])
           }}
           textOnly={textOnly}
