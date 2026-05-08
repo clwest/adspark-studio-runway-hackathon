@@ -3,4 +3,44 @@
 @tailwind utilities;
 
 html, body, #root { height: 100%; }
-body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+body {
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, sans-serif;
+  /* Subtle radial wash anchored at the top of the viewport. Gives
+     the studio shell depth without per-card borders. The wash
+     stays fixed while the page scrolls so the hero retains its
+     "studio" feel even after the user scrolls past it. */
+  background-color: #0b0b0f;
+  background-image:
+    radial-gradient(60% 80% at 0% 0%, rgba(249,115,22,0.08), transparent 60%),
+    radial-gradient(50% 60% at 100% 0%, rgba(99,102,241,0.05), transparent 60%);
+  background-attachment: fixed;
+}
+
+/* ---- Studio shell utility classes ---------------------------------
+ * Used by App.jsx to give every "stage" a consistent panel feel. The
+ * inner panel sits on a darker base (#0d0d12) than the body so the
+ * radial-glow background bleeds through subtly at the page edges.
+ */
+@layer components {
+  .studio-panel {
+    @apply rounded-2xl bg-studio-900/80 ring-1 ring-zinc-800/60 shadow-panel;
+  }
+  .studio-stage {
+    /* Slightly lifted card. Used for the four numbered stages
+       (Brief / Visual / Character / Saved). Inner padding handled
+       per-stage so existing components keep their own padding. */
+    @apply rounded-2xl bg-studio-850/50 ring-1 ring-zinc-800/40 shadow-panel;
+  }
+  .stage-number {
+    /* Numbered chip for stage headers. */
+    @apply flex h-6 w-6 items-center justify-center rounded-full bg-spark/15
+           text-spark text-xs font-mono font-semibold ring-1 ring-spark/30;
+  }
+  .stage-title {
+    @apply text-lg font-semibold text-zinc-100 tracking-tight;
+  }
+  .stage-meta {
+    @apply text-[11px] text-zinc-500 leading-relaxed;
+  }
+}

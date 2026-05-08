@@ -94,7 +94,13 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
   await expect(settings.getByText('reference image')).toBeVisible()
 
   // 7b.5. PR K — Character Studio panel renders above the gallery.
-  await expect(page.getByRole('heading', { name: /Character Studio/i })).toBeVisible()
+  // PR O introduced a numbered-stage <h2>Character Studio</h2> wrapper
+  // around the panel, in addition to the panel's own <h3>Character
+  // Studio</h3> header. Use .first() to target the outer stage heading
+  // (same pattern as the Audio Pack assertion).
+  await expect(
+    page.getByRole('heading', { name: /Character Studio/i }).first(),
+  ).toBeVisible()
   await expect(
     page.getByRole('button', { name: /^\+ Create Character$/i }),
   ).toBeVisible()

@@ -204,105 +204,229 @@ export default function App() {
     ? health.runway_mock === false && (isImageRequiredModel || !textOnly)
     : false
 
+  // Stage-progress derivation. Powers the visible "you are here"
+  // indicator in the hero. Layout-only — does not gate any flow.
+  const briefDone = Boolean(form && conceptResp)
+  const visualDone = Boolean(task && task.status === 'SUCCEEDED')
+  const savedAny = (campaigns || []).length > 0
+  // Character stage is "done" once at least one character avatar is
+  // ready. We don't track characters in App state today, so we infer
+  // from any campaign having a character_id attached. Conservative:
+  // treats Character Studio as in-progress until a campaign uses it.
+  const characterDone = (campaigns || []).some((c) => Boolean(c.character_id))
+  const stages = [
+    { key: 'brief', label: 'Brief', done: briefDone, current: !briefDone },
+    { key: 'visual', label: 'Visual Ad', done: visualDone, current: briefDone && !visualDone },
+    { key: 'character', label: 'Character', done: characterDone, current: visualDone && !characterDone },
+    { key: 'saved', label: 'Saved', done: savedAny, current: characterDone && !savedAny },
+  ]
+
   return (
-    <div className="min-h-full max-w-5xl mx-auto p-6 space-y-6">
-      <header className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">
-            AdSpark <span className="text-spark">Studio</span>
-          </h1>
-          <p className="text-sm text-zinc-400">
-            From idea to cinematic Runway ad — concept, prompt, video, copy.
-          </p>
-        </div>
-        {mockBadge && (
-          <div
-            title={`OpenAI mock: ${health.openai_mock} · Runway mock: ${health.runway_mock}`}
-            className="rounded-full bg-amber-500/20 text-amber-300 text-xs px-3 py-1 font-mono"
+    <div className="min-h-full">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+        {/* ---- Hero ---------------------------------------------------- */}
+        <header className="space-y-4">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div className="space-y-1">
+              <h1 className="text-4xl sm:text-5xl font-bold tracking-tight">
+                AdSpark <span className="text-spark">Studio</span>
+              </h1>
+              <p className="text-sm sm:text-base text-zinc-400">
+                AI Campaign + Character Studio — Runway-powered ads,
+                reusable brand spokespeople, and live conversation in
+                one click-driven flow.
+              </p>
+            </div>
+            {mockBadge && (
+              <div
+                title={`OpenAI mock: ${health.openai_mock} · Runway mock: ${health.runway_mock}`}
+                className="rounded-full bg-amber-500/20 text-amber-300 text-xs px-3 py-1 font-mono shrink-0"
+              >
+                MOCK MODE
+              </div>
+            )}
+          </div>
+
+          {/* Stage progress indicator — purely layout, no gating. */}
+          <nav
+            aria-label="demo path"
+            className="flex items-center gap-1.5 sm:gap-3 flex-wrap"
           >
-            MOCK MODE
+            {stages.map((s, i) => {
+              const isLast = i === stages.length - 1
+              return (
+                <div key={s.key} className="flex items-center gap-1.5 sm:gap-2">
+                  <span
+                    className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-mono font-semibold ring-1 ${
+                      s.done
+                        ? 'bg-spark/20 text-spark ring-spark/50'
+                        : s.current
+                        ? 'bg-zinc-800 text-zinc-200 ring-spark/40'
+                        : 'bg-zinc-900 text-zinc-500 ring-zinc-700'
+                    }`}
+                    aria-current={s.current ? 'step' : undefined}
+                  >
+                    {s.done ? '✓' : i + 1}
+                  </span>
+                  <span
+                    className={`text-xs sm:text-sm font-medium ${
+                      s.done
+                        ? 'text-zinc-200'
+                        : s.current
+                        ? 'text-zinc-100'
+                        : 'text-zinc-500'
+                    }`}
+                  >
+                    {s.label}
+                  </span>
+                  {!isLast && (
+                    <span
+                      className={`hidden sm:block h-px w-8 ${
+                        s.done ? 'bg-spark/40' : 'bg-zinc-800'
+                      }`}
+                    />
+                  )}
+                </div>
+              )
+            })}
+          </nav>
+        </header>
+
+        {error && (
+          <div className="rounded-lg border border-rose-500/40 bg-rose-500/10 text-rose-200 px-4 py-2 text-sm flex items-start justify-between gap-3">
+            <span>{error}</span>
+            <button
+              type="button"
+              onClick={() => setError('')}
+              className="text-xs text-rose-300/70 hover:text-rose-100"
+              aria-label="dismiss error"
+            >
+              dismiss
+            </button>
           </div>
         )}
-      </header>
 
-      {error && (
-        <div className="rounded-lg border border-rose-500/40 bg-rose-500/10 text-rose-200 px-4 py-2 text-sm flex items-start justify-between gap-3">
-          <span>{error}</span>
-          <button
-            type="button"
-            onClick={() => setError('')}
-            className="text-xs text-rose-300/70 hover:text-rose-100"
-            aria-label="dismiss error"
+        {/* ---- Mode / status row ------------------------------------- */}
+        <ModeBanner
+          health={health}
+          providerStatus={providerStatus}
+          organization={organization}
+        />
+
+        {/* ---- Stage 1 — Campaign Brief ------------------------------ */}
+        <Stage number={1} title="Campaign Brief" meta="Who is the ad for?">
+          <CampaignForm onSubmit={handleConcepts} busy={busy.concepts} />
+        </Stage>
+
+        {/* ---- Stage 2 — Generate Visual Ad -------------------------- */}
+        {(concepts || task) && (
+          <Stage
+            number={2}
+            title="Generate Visual Ad"
+            meta="Concept → prompt → silent visual cut → save"
           >
-            dismiss
-          </button>
-        </div>
-      )}
+            {concepts && (
+              <ConceptCards
+                concepts={concepts}
+                recommendedIndex={conceptResp.recommended_index}
+                selectedIndex={selectedIndex}
+                onSelect={setSelectedIndex}
+              />
+            )}
 
-      <ModeBanner
-        health={health}
-        providerStatus={providerStatus}
-        organization={organization}
-      />
+            {concepts && (
+              <PromptPreview
+                prompt={prompt}
+                onChange={setPrompt}
+                imageUrl={imageUrl}
+                onImageUrlChange={(v) => {
+                  setImageUrl(v)
+                  // user typed a different URL — drop the cached generated-image badge
+                  if (generatedImage && v !== generatedImage.image_url) {
+                    setGeneratedImage(null)
+                  }
+                }}
+                requireImage={requireImage}
+                onGenerate={handleGenerateVideo}
+                busy={busy.runway || (task && !['SUCCEEDED', 'FAILED', 'CANCELED'].includes(task.status))}
+                disabled={busy.runway}
+                model={model}
+                onModelChange={(m) => {
+                  setModel(m)
+                  // text-only is only valid for gen4.5 — collapse if model changes off it
+                  if (m !== 'gen4.5') setTextOnly(false)
+                  // clamp duration to what the new model supports (default to first
+                  // allowed value if the current selection is no longer valid)
+                  const allowed = ALLOWED_DURATIONS[m] || [DEFAULT_SETTINGS.duration]
+                  if (!allowed.includes(duration)) setDuration(allowed[0])
+                }}
+                textOnly={textOnly}
+                onTextOnlyChange={setTextOnly}
+                onGenerateImage={handleGenerateImage}
+                imageBusy={busy.image}
+                imageMockMode={generatedImage?.mock_mode}
+                ratio={ratio}
+                onRatioChange={setRatio}
+                duration={duration}
+                onDurationChange={setDuration}
+              />
+            )}
 
-      <CampaignForm onSubmit={handleConcepts} busy={busy.concepts} />
+            <RunwayPanel task={task} onSave={handleSaveCampaign} savedId={savedId} />
+          </Stage>
+        )}
 
-      {concepts && (
-        <ConceptCards
-          concepts={concepts}
-          recommendedIndex={conceptResp.recommended_index}
-          selectedIndex={selectedIndex}
-          onSelect={setSelectedIndex}
-        />
-      )}
+        {/* ---- Stage 3 — Character Studio ---------------------------- */}
+        <Stage
+          number={3}
+          title="Character Studio"
+          meta="Reusable brand mascot / founder / coach / local guide — bound to a Runway Avatar"
+          accent="pink"
+        >
+          <CharacterStudio onCharactersChanged={refreshCampaigns} />
+        </Stage>
 
-      {concepts && (
-        <PromptPreview
-          prompt={prompt}
-          onChange={setPrompt}
-          imageUrl={imageUrl}
-          onImageUrlChange={(v) => {
-            setImageUrl(v)
-            // user typed a different URL — drop the cached generated-image badge
-            if (generatedImage && v !== generatedImage.image_url) {
-              setGeneratedImage(null)
-            }
-          }}
-          requireImage={requireImage}
-          onGenerate={handleGenerateVideo}
-          busy={busy.runway || (task && !['SUCCEEDED', 'FAILED', 'CANCELED'].includes(task.status))}
-          disabled={busy.runway}
-          model={model}
-          onModelChange={(m) => {
-            setModel(m)
-            // text-only is only valid for gen4.5 — collapse if model changes off it
-            if (m !== 'gen4.5') setTextOnly(false)
-            // clamp duration to what the new model supports (default to first
-            // allowed value if the current selection is no longer valid)
-            const allowed = ALLOWED_DURATIONS[m] || [DEFAULT_SETTINGS.duration]
-            if (!allowed.includes(duration)) setDuration(allowed[0])
-          }}
-          textOnly={textOnly}
-          onTextOnlyChange={setTextOnly}
-          onGenerateImage={handleGenerateImage}
-          imageBusy={busy.image}
-          imageMockMode={generatedImage?.mock_mode}
-          ratio={ratio}
-          onRatioChange={setRatio}
-          duration={duration}
-          onDurationChange={setDuration}
-        />
-      )}
+        {/* ---- Stage 4 — Saved Campaigns ----------------------------- */}
+        <Stage
+          number={4}
+          title="Saved Campaigns"
+          meta="Pack outputs · Brand Spokesperson · Voice Identity · Realtime"
+        >
+          <CampaignGallery campaigns={campaigns} onRefresh={refreshCampaigns} />
+        </Stage>
 
-      <RunwayPanel task={task} onSave={handleSaveCampaign} savedId={savedId} />
-
-      <CharacterStudio onCharactersChanged={refreshCampaigns} />
-
-      <CampaignGallery campaigns={campaigns} onRefresh={refreshCampaigns} />
-
-      <footer className="text-xs text-zinc-600 pt-6 border-t border-zinc-900">
-        AdSpark Studio · hackathon build · {new Date().getFullYear()}
-      </footer>
+        <footer className="text-xs text-zinc-600 pt-6 border-t border-zinc-900/60">
+          AdSpark Studio · hackathon build · {new Date().getFullYear()}
+        </footer>
+      </div>
     </div>
+  )
+}
+
+/**
+ * Numbered stage wrapper. Lays out a section header (number + title +
+ * meta) above the content slot. Keeps existing children unchanged —
+ * the visual hierarchy comes entirely from this wrapper.
+ *
+ * Layout-only. No behaviour. Phase 1 of the UI redesign.
+ */
+function Stage({ number, title, meta, accent, children }) {
+  const numberColor = accent === 'pink'
+    ? 'bg-pink-500/15 text-pink-300 ring-pink-400/40'
+    : 'bg-spark/15 text-spark ring-spark/30'
+  return (
+    <section className="space-y-3">
+      <div className="flex items-baseline gap-3 flex-wrap">
+        <span
+          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-mono font-semibold ring-1 ${numberColor}`}
+          aria-hidden="true"
+        >
+          {number}
+        </span>
+        <h2 className="stage-title">{title}</h2>
+        {meta && <span className="stage-meta hidden sm:inline">{meta}</span>}
+      </div>
+      <div className="space-y-4">{children}</div>
+    </section>
   )
 }
