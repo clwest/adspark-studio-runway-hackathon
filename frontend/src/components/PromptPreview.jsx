@@ -221,6 +221,11 @@ export default function PromptPreview({
       >
         {busy ? 'Submitting…' : effectiveTextOnly ? 'Generate Video (text-only)' : 'Generate Video'}
       </button>
+      <p className="text-[11px] text-zinc-500 leading-relaxed">
+        Generates the visual cut — silent. The Avatar Host Clip
+        (spokesperson speaking the pitch) and Audio Pack (brand voice
+        identity) appear on each saved campaign card after Save.
+      </p>
       {blockedByImage && (
         <p className="text-xs text-rose-300">
           Backend is in real Runway mode. Add a reference image URL above —

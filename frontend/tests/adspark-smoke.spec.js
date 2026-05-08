@@ -187,24 +187,53 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
     newestCard.getByRole('button', { name: /Music Superstar/i }),
   ).toBeVisible()
 
-  // 13c. PR H — Audio Pack section + Brand Voice button.
-  await expect(newestCard.getByText(/^Audio Pack$/)).toBeVisible()
-  await expect(newestCard.getByText(/^Runway Voices$/)).toBeVisible()
+  // 13c. PR H — Audio Pack section + honest labels (PR M).
+  //      Header still reads "Audio Pack" but the explanatory pill is
+  //      now "Brand Voice Identity" (used to read "Runway Voices"),
+  //      and the section copy explicitly disclaims that the samples
+  //      are not full ad narration. Note: "Audio Pack" appears twice
+  //      now — once in the section header, once in the visual-only
+  //      caption above ("…Avatar Host Clip and Audio Pack sections
+  //      below"). `.first()` targets the section header.
+  await expect(newestCard.getByText(/^Audio Pack$/).first()).toBeVisible()
+  await expect(newestCard.getByText(/^Brand Voice Identity$/)).toBeVisible()
+  await expect(
+    newestCard.getByText(/Voice samples, not full ad narration/i),
+  ).toBeVisible()
   await expect(
     newestCard.getByRole('button', { name: /^Design Brand Voice$/i }),
+  ).toBeVisible()
+
+  // 13c.2 — PR M visual-only video chip + caption render once the
+  //         campaign has a saved/cached video.
+  await expect(newestCard.getByText(/^visual-only · silent$/)).toBeVisible()
+  await expect(
+    newestCard.getByText(/Visual cut only — Runway gen4_turbo/i),
   ).toBeVisible()
 
   // 13d. PR I — Talk to Brand Spokesperson realtime section. Only
   //      renders once the avatar is in {ready, mock} state. The mock
   //      smoke run never creates the avatar (timing-sensitive), so we
   //      assert non-strictly: if the section is present, the start
-  //      button must be in the disabled "unavailable" state in mock.
+  //      button must be in the disabled "unavailable" state in mock,
+  //      and the PR M suggested-prompt chips render with at least
+  //      one campaign-grounded chip.
   const realtimeSection = newestCard.getByText(/^Talk to Brand Spokesperson$/)
   if (await realtimeSection.isVisible().catch(() => false)) {
     await expect(newestCard.getByText(/^Realtime Runway Avatar$/)).toBeVisible()
     await expect(
       newestCard.getByRole('button', { name: /Start Conversation \(unavailable\)/i }),
     ).toBeDisabled()
+    // Suggested-prompt chips: PR M / P1 #6. The exact subject in the
+    // first chip depends on campaign fields ("Local coffee shop" /
+    // "Morning blend"); assert on the static "Who is this campaign
+    // for?" chip which always renders.
+    await expect(
+      newestCard.getByRole('button', { name: /Who is this campaign for/i }),
+    ).toBeVisible()
+    await expect(
+      newestCard.getByRole('button', { name: /Make this pitch funnier/i }),
+    ).toBeVisible()
   }
 
   // 13. Console / page errors — page errors are always fatal; console errors

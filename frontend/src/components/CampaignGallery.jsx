@@ -330,27 +330,40 @@ function CampaignCard({ c, onUpdated }) {
             >
               open video ↗
             </a>
-            {cacheStatusLabel && (
+            <div className="flex items-center gap-2 flex-wrap">
               <span
-                className={
-                  isCached
-                    ? 'text-emerald-300'
-                    : cacheFailed
-                    ? 'text-rose-300'
-                    : 'text-zinc-500'
-                }
-                title={
-                  isCached
-                    ? 'Backend cached the video at backend/data/videos and serves it from /api/campaigns/{id}/video. Stable forever.'
-                    : cacheFailed
-                    ? `Caching failed: ${c.cache_error || 'unknown error'}. Falling back to the original Runway URL, which expires in ~days.`
-                    : 'Runway artifact URLs are presigned and expire (~days). Cache skipped — fallback to the original URL.'
-                }
+                className="text-[10px] rounded-full bg-zinc-800 text-zinc-300 px-2 py-0.5 font-mono"
+                title="Runway gen4_turbo / gen4.5 produce the visual cut only. Spoken assets live in the Avatar Host Clip and Audio Pack sections below."
               >
-                {cacheStatusLabel}
+                visual-only · silent
               </span>
-            )}
+              {cacheStatusLabel && (
+                <span
+                  className={
+                    isCached
+                      ? 'text-emerald-300'
+                      : cacheFailed
+                      ? 'text-rose-300'
+                      : 'text-zinc-500'
+                  }
+                  title={
+                    isCached
+                      ? 'Backend cached the video at backend/data/videos and serves it from /api/campaigns/{id}/video. Stable forever.'
+                      : cacheFailed
+                      ? `Caching failed: ${c.cache_error || 'unknown error'}. Falling back to the original Runway URL, which expires in ~days.`
+                      : 'Runway artifact URLs are presigned and expire (~days). Cache skipped — fallback to the original URL.'
+                  }
+                >
+                  {cacheStatusLabel}
+                </span>
+              )}
+            </div>
           </div>
+          <p className="text-[10px] text-zinc-500 leading-relaxed">
+            Visual cut only — Runway gen4_turbo / gen4.5 output is silent.
+            Spoken assets live in the <span className="text-zinc-300">Avatar Host Clip</span>{' '}
+            and <span className="text-zinc-300">Audio Pack</span> sections below.
+          </p>
         </div>
       )}
 
@@ -715,16 +728,16 @@ function CampaignCard({ c, onUpdated }) {
         )}
       </div>
 
-      {/* PR H — Audio Pack: Brand Voice (Phase 1) + Multilingual Dub (Phase 2) */}
+      {/* PR H — Audio Pack: Brand Voice Identity (Phase 1) + Voice Samples (Phase 2) */}
       <div className="border-t border-zinc-800 pt-3 space-y-3">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <span className="text-xs font-semibold text-zinc-300">Audio Pack</span>
             <span
               className="text-[10px] text-zinc-500 font-mono"
-              title="Runway brand voice + multilingual dubbing"
+              title="Brand Voice Identity (Runway /v1/voices) + multilingual voice samples (Runway voice_dubbing). These are voice samples, not full ad narration — commercial narration mixing is future work."
             >
-              Runway Voices
+              Brand Voice Identity
             </span>
           </div>
           {voiceReady && (
@@ -745,37 +758,52 @@ function CampaignCard({ c, onUpdated }) {
           )}
         </div>
 
-        {/* Phase 1 — Brand Voice */}
+        <p className="text-[10px] text-zinc-500 leading-relaxed">
+          Voice samples, not full ad narration.{' '}
+          <span className="text-zinc-300">
+            The spoken pitch lives in the Avatar Host Clip above
+          </span>{' '}
+          — that's the avatar speaking the campaign hook + caption + CTA.
+          Commercial narration / mixing into the visual cut is future work.
+        </p>
+
+        {/* Phase 1 — Brand Voice Identity */}
         {voiceReady ? (
-          <div className="flex items-start gap-3">
-            <audio
-              key={c.brand_voice_preview_url}
-              src={c.brand_voice_preview_url}
-              controls
-              preload="metadata"
-              className="w-full max-w-xs"
-            />
-            <div className="text-[11px] text-zinc-400 space-y-0.5 min-w-0">
-              <div className="font-mono text-zinc-200 truncate" title={c.brand_voice_id || ''}>
-                voice id: {String(c.brand_voice_id).slice(0, 12)}…
+          <div className="space-y-1.5">
+            <div className="text-[11px] font-semibold text-zinc-300">
+              Voice Sample
+            </div>
+            <div className="flex items-start gap-3">
+              <audio
+                key={c.brand_voice_preview_url}
+                src={c.brand_voice_preview_url}
+                controls
+                preload="metadata"
+                className="w-full max-w-xs"
+              />
+              <div className="text-[11px] text-zinc-400 space-y-0.5 min-w-0">
+                <div className="font-mono text-zinc-200 truncate" title={c.brand_voice_id || ''}>
+                  voice id: {String(c.brand_voice_id).slice(0, 12)}…
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleDesignVoice({ force_recreate: true })}
+                  disabled={voiceBusy}
+                  className="text-[10px] text-zinc-500 hover:text-zinc-300 disabled:opacity-50"
+                  title="Discard the cached voice identity and design a fresh one"
+                >
+                  {voiceBusy ? 'Re-designing…' : 'Re-design voice identity'}
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => handleDesignVoice({ force_recreate: true })}
-                disabled={voiceBusy}
-                className="text-[10px] text-zinc-500 hover:text-zinc-300 disabled:opacity-50"
-                title="Discard the cached voice and design a fresh one"
-              >
-                {voiceBusy ? 'Re-designing…' : 'Re-design voice'}
-              </button>
             </div>
           </div>
         ) : (
           <div className="space-y-1.5">
             <p className="text-[10px] text-zinc-500 leading-relaxed">
-              Designs a custom Runway voice from this campaign’s tone +
-              audience. The preview MP3 caches locally and seeds the
-              multilingual dubs below.
+              Designs a reusable Runway voice that matches this campaign's
+              tone + audience. The cached preview is Runway's generic voice
+              sample — not the ad copy — and seeds the multilingual samples
+              below.
             </p>
             <button
               type="button"
@@ -797,15 +825,25 @@ function CampaignCard({ c, onUpdated }) {
           </div>
         )}
 
-        {/* Phase 2 — Multilingual Dub Pack — only meaningful with a ready voice */}
+        {/* Phase 2 — Multilingual Voice Samples — only meaningful with a ready voice */}
         {voiceReady && (
           <div className="border-t border-zinc-800/60 pt-2 space-y-2">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-semibold text-zinc-300">Multilingual Dubs</span>
-              <span className="text-[10px] text-zinc-500" title="Runway voice_dubbing on the cached Brand Voice preview">
+              <span className="text-xs font-semibold text-zinc-300">
+                Voice Samples — Multilingual
+              </span>
+              <span
+                className="text-[10px] text-zinc-500"
+                title="Runway voice_dubbing dubs the Brand Voice sample above into the chosen language. The output is a voice sample in that language — not the campaign ad in that language."
+              >
                 Runway voice_dubbing
               </span>
             </div>
+            <p className="text-[10px] text-zinc-500 leading-relaxed">
+              Each language re-voices the Voice Sample above —{' '}
+              <span className="text-zinc-300">not the ad itself</span>. Tap to
+              hear how the brand voice sounds in that language.
+            </p>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
               {DUB_LANGS.map((d) => {
                 const url = (c.dubbed_audio_urls || {})[d.code]
@@ -831,9 +869,9 @@ function CampaignCard({ c, onUpdated }) {
                         onClick={() => handleDub(d.code)}
                         disabled={isBusy || Boolean(busyDubLang)}
                         className="rounded bg-teal-500/70 hover:bg-teal-500 text-zinc-100 text-[10px] px-1.5 py-0.5 disabled:opacity-50"
-                        title={`Dub the Brand Voice into ${d.label}`}
+                        title={`Generate a ${d.label} voice sample from the Brand Voice above`}
                       >
-                        {isBusy ? 'Dubbing…' : failed ? `Retry ${d.label}` : `Dub ${d.label}`}
+                        {isBusy ? 'Sampling…' : failed ? `Retry ${d.label}` : `Sample ${d.label}`}
                       </button>
                     )}
                     {failed && error && (

@@ -21,6 +21,38 @@ function fmtRemaining(expiresAtIso) {
   return `${m}:${s}`
 }
 
+// Suggested prompt chips (PR M / P1 #6).
+//
+// The realtime broker does NOT pass campaign context to Runway today
+// (verified in docs/research/FLOW_INTEGRATION_AUDIT.md §"Flow 5"). The
+// avatar genuinely doesn't know the campaign. These chips give the
+// user campaign-grounded questions to read aloud (or copy and paste
+// into a voice tool of choice). Chips are populated from campaign
+// fields so each saved card surfaces a tailored set.
+function buildPromptChips(campaign) {
+  const concept = campaign?.selected_concept || {}
+  const subject =
+    (campaign?.product && campaign.product.trim()) ||
+    (campaign?.business && campaign.business.trim()) ||
+    'this product'
+  const audience = (campaign?.audience && campaign.audience.trim()) || ''
+  const hook = (concept?.hook && concept.hook.trim()) || ''
+
+  const chips = [
+    hook
+      ? `Pitch ${subject} in one sentence — the hook is "${hook}".`
+      : `Pitch ${subject} in one sentence.`,
+    audience
+      ? `Who is this campaign for? It's ${audience}.`
+      : 'Who is this campaign for?',
+    `Give me three stronger ad angles for ${subject}.`,
+    `How should this spokesperson sell the offer?`,
+    `Make this pitch funnier.`,
+    `Make this pitch more premium.`,
+  ]
+  return chips
+}
+
 /**
  * "Talk to your Brand Spokesperson" — Phase I V1.
  *
@@ -39,7 +71,25 @@ export default function RealtimeSpokesperson({ campaign, gateReason }) {
   const [session, setSession] = useState(null)
   const [errMsg, setErrMsg] = useState('')
   const [tick, setTick] = useState(0)
+  const [copiedChipIdx, setCopiedChipIdx] = useState(null)
   const tickRef = useRef(null)
+
+  const promptChips = buildPromptChips(campaign)
+
+  const handleCopyChip = useCallback(async (text, idx) => {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text)
+      }
+    } catch {
+      // Clipboard API unavailable (insecure context, permission denied) —
+      // chip still acts as a read-aloud cue, no error path needed.
+    }
+    setCopiedChipIdx(idx)
+    setTimeout(() => {
+      setCopiedChipIdx((cur) => (cur === idx ? null : cur))
+    }, 1200)
+  }, [])
 
   // Update the countdown once a second while live.
   useEffect(() => {
@@ -79,6 +129,36 @@ export default function RealtimeSpokesperson({ campaign, gateReason }) {
     ? fmtRemaining(session.expires_at) || `${tick % 0}` // ref tick to keep effect honest
     : ''
 
+  // Suggested-prompt chip row. Renders in both gated + idle paths so
+  // users can read context-grounded questions aloud once the session
+  // is live (or copy them now and paste into another tool). The
+  // realtime broker does not pass any campaign context to Runway today.
+  const chipRow = (
+    <div
+      className="flex flex-wrap gap-1"
+      aria-label="suggested realtime prompts"
+    >
+      {promptChips.map((text, i) => {
+        const copied = copiedChipIdx === i
+        return (
+          <button
+            key={i}
+            type="button"
+            onClick={() => handleCopyChip(text, i)}
+            className={`text-[10px] rounded-full px-2 py-0.5 border transition-colors ${
+              copied
+                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/40'
+                : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:border-fuchsia-400 hover:text-fuchsia-200'
+            }`}
+            title={copied ? 'Copied to clipboard' : 'Click to copy — read aloud once the session is live'}
+          >
+            {copied ? '✓ copied' : text}
+          </button>
+        )
+      })}
+    </div>
+  )
+
   // Header: section heading + status pill
   const header = (
     <div className="flex items-center justify-between gap-2">
@@ -115,8 +195,11 @@ export default function RealtimeSpokesperson({ campaign, gateReason }) {
       <div className="border-t border-zinc-800/60 pt-2 space-y-1.5">
         {header}
         <p className="text-[10px] text-zinc-500 leading-relaxed">
-          Ask your AI spokesperson how they would pitch this campaign.
+          Realtime session uses the selected avatar. The avatar does not
+          automatically know the campaign — use the suggested prompts
+          below to give it context once you're live.
         </p>
+        {chipRow}
         <button
           type="button"
           disabled
@@ -176,9 +259,12 @@ export default function RealtimeSpokesperson({ campaign, gateReason }) {
     <div className="border-t border-zinc-800/60 pt-2 space-y-1.5">
       {header}
       <p className="text-[10px] text-zinc-500 leading-relaxed">
-        Ask your AI spokesperson how they would pitch this campaign.{' '}
+        Realtime session uses the selected avatar. The avatar does not
+        automatically know the campaign — use the suggested prompts
+        below to give it context once you're live.{' '}
         <span className="text-zinc-400">Mic required. Webcam optional.</span>
       </p>
+      {chipRow}
       <div className="flex items-center gap-2 flex-wrap">
         <button
           type="button"
