@@ -597,3 +597,87 @@ If approving Phase H next, the prompt to give a future session is:
 
 For Phase I / J the same shape applies — see §6 for endpoint lists,
 backend/frontend diffs, and verification scope.
+
+---
+
+## Appendix C — Phase H Live Probe (2026-05-08)
+
+A small credit-spend probe ran against `/v1/voices`,
+`/v1/text_to_speech`, and `/v1/voice_dubbing` to lock the audio
+schemas. Findings:
+
+### `POST /v1/voices` — works
+
+Body shape:
+```jsonc
+{
+  "name": "AdSpark Brand Voice (probe)",
+  "from": {
+    "type": "text",
+    "prompt": "<≥20 char description>",
+    "model": "eleven_multilingual_ttv_v2"
+  }
+}
+```
+
+Returns `{id: "<uuid>"}`. Poll `GET /v1/voices/{id}` until
+`status == "READY"` (~10 s). Response shape:
+```jsonc
+{
+  "id": "...",
+  "name": "...",
+  "status": "READY",
+  "previewUrl": "https://d2jqrm6oza8nb6.cloudfront.net/.../voice_sample_*.mp3?_jwt=…",
+  "createdAt": "..."
+}
+```
+
+The `previewUrl` is a presigned CloudFront MP3 we can download and
+cache locally (~250 KB).
+
+### `POST /v1/voice_dubbing` — works
+
+Body shape:
+```jsonc
+{
+  "model": "eleven_voice_dubbing",
+  "audioUri": "<public URL or data: URI>",
+  "targetLang": "<one of 29 lang codes>"
+}
+```
+
+Returns `{id: "<task uuid>"}`. Same `/v1/tasks/{id}` polling shape.
+Output `["<presigned mp3 URL>"]`. ~25 s for a short voice sample.
+
+The 29 documented language codes (validator-dumped on a bad
+`targetLang`):
+
+> en, hi, pt, zh, es, fr, de, ja, ar, ru, ko, id, it, nl, tr, pl, sv, fil, ms, ro, uk, …
+> (the validator truncated at 21; the page doc says 29 total)
+
+### `POST /v1/text_to_speech` — schema gated
+
+Confirmed:
+- `model: "eleven_multilingual_v2"` (single allowed value)
+- `promptText: <string>` (the script)
+- `voice` is a required object with a discriminated-union `type` field
+
+**The `voice.type` discriminator is gated.** Runway's validator does
+not dump allowed values for this union (unlike avatars where the
+allowed value `"custom"` did surface). Tried 30+ candidate
+discriminator values (`custom`, `voiceId`, `voice`, `preset`, `text`,
+`design`, `clone`, `library`, `system`, `default`,
+`elevenlabs-preset`, etc.) — all rejected with the same "Invalid
+input" without a `values` array.
+
+**Phase H V1 ships voice creation + dubbing only.** Direct TTS
+narration of a custom campaign script is deferred until the
+discriminator is documented or surfaced through Runway support.
+
+### `GET /v1/voices` — works (returns paginated list)
+
+```jsonc
+{ "data": [...], "hasMore": false, "nextCursor": null }
+```
+
+Useful for a future "manage your voices" UI.

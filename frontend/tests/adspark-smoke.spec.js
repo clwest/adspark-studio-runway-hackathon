@@ -170,6 +170,13 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
     newestCard.getByRole('button', { name: /^Create Brand Spokesperson$/i }),
   ).toBeVisible()
 
+  // 13c. PR H — Audio Pack section + Brand Voice button.
+  await expect(newestCard.getByText(/^Audio Pack$/)).toBeVisible()
+  await expect(newestCard.getByText(/^Runway Voices$/)).toBeVisible()
+  await expect(
+    newestCard.getByRole('button', { name: /^Design Brand Voice$/i }),
+  ).toBeVisible()
+
   // 13. Console / page errors — page errors are always fatal; console errors
   //     are filtered to drop video-network noise.
   const realConsoleErrors = consoleErrors.filter(

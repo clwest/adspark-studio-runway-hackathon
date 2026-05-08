@@ -39,4 +39,14 @@ export const api = {
       `/api/campaigns/${encodeURIComponent(campaignId)}/host-video`,
       { method: 'POST', body: JSON.stringify(body) },
     ),
+  designBrandVoice: (campaignId, body = {}) =>
+    jsonFetch(
+      `/api/campaigns/${encodeURIComponent(campaignId)}/brand-voice`,
+      { method: 'POST', body: JSON.stringify(body) },
+    ),
+  dubBrandVoice: (campaignId, target_lang) =>
+    jsonFetch(
+      `/api/campaigns/${encodeURIComponent(campaignId)}/dub`,
+      { method: 'POST', body: JSON.stringify({ target_lang }) },
+    ),
 }

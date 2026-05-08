@@ -7,6 +7,19 @@ const PACK_FORMATS = [
   { key: 'square', label: 'Square', dims: '960×960', hint: 'Instagram feed' },
 ]
 
+const DUB_LANGS = [
+  { code: 'es', label: 'Spanish' },
+  { code: 'fr', label: 'French' },
+  { code: 'de', label: 'German' },
+  { code: 'pt', label: 'Portuguese' },
+  { code: 'ja', label: 'Japanese' },
+  { code: 'zh', label: 'Mandarin' },
+  { code: 'hi', label: 'Hindi' },
+  { code: 'ar', label: 'Arabic' },
+  { code: 'ko', label: 'Korean' },
+  { code: 'it', label: 'Italian' },
+]
+
 function finishedUrlFor(c, fmt) {
   // Prefer the per-format dict introduced in PR B; fall back to the legacy
   // single-URL field for landscape only so old saves still display correctly.
@@ -71,7 +84,13 @@ function CampaignCard({ c, onUpdated }) {
   const [busyFormat, setBusyFormat] = useState(null) // null | "landscape" | "reels" | "square"
   const [avatarBusy, setAvatarBusy] = useState(false)
   const [hostBusy, setHostBusy] = useState(false)
+  const [voiceBusy, setVoiceBusy] = useState(false)
+  const [busyDubLang, setBusyDubLang] = useState(null)
   const [localError, setLocalError] = useState('')
+
+  const voiceReady = ['ready', 'mock'].includes(c.brand_voice_status || '')
+  const voiceFailed = c.brand_voice_status === 'failed'
+  const voiceMock = c.brand_voice_status === 'mock'
 
   const avatarReady = ['ready', 'mock'].includes(c.host_avatar_status || '') && Boolean(c.host_avatar_id)
   const avatarFailed = c.host_avatar_status === 'failed'
@@ -126,6 +145,32 @@ function CampaignCard({ c, onUpdated }) {
       setLocalError(`host: ${e}`)
     } finally {
       setHostBusy(false)
+    }
+  }
+
+  const handleDesignVoice = async (opts = {}) => {
+    setLocalError('')
+    setVoiceBusy(true)
+    try {
+      const updated = await api.designBrandVoice(c.id, opts)
+      onUpdated?.(updated)
+    } catch (e) {
+      setLocalError(`voice: ${e}`)
+    } finally {
+      setVoiceBusy(false)
+    }
+  }
+
+  const handleDub = async (lang) => {
+    setLocalError('')
+    setBusyDubLang(lang)
+    try {
+      const updated = await api.dubBrandVoice(c.id, lang)
+      onUpdated?.(updated)
+    } catch (e) {
+      setLocalError(`dub ${lang}: ${e}`)
+    } finally {
+      setBusyDubLang(null)
     }
   }
 
@@ -456,6 +501,143 @@ function CampaignCard({ c, onUpdated }) {
                 )}
               </div>
             )}
+          </div>
+        )}
+      </div>
+
+      {/* PR H — Audio Pack: Brand Voice (Phase 1) + Multilingual Dub (Phase 2) */}
+      <div className="border-t border-zinc-800 pt-3 space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-zinc-300">Audio Pack</span>
+            <span
+              className="text-[10px] text-zinc-500 font-mono"
+              title="Runway brand voice + multilingual dubbing"
+            >
+              Runway Voices
+            </span>
+          </div>
+          {voiceReady && (
+            <span
+              className={`text-[10px] rounded-full px-2 py-0.5 font-mono ${
+                voiceMock
+                  ? 'bg-amber-500/20 text-amber-300'
+                  : 'bg-teal-500/20 text-teal-300'
+              }`}
+            >
+              {voiceMock ? 'mock voice' : 'voice ready'}
+            </span>
+          )}
+          {voiceFailed && (
+            <span className="text-[10px] rounded-full bg-rose-500/20 text-rose-300 px-2 py-0.5 font-mono">
+              voice failed
+            </span>
+          )}
+        </div>
+
+        {/* Phase 1 — Brand Voice */}
+        {voiceReady ? (
+          <div className="flex items-start gap-3">
+            <audio
+              key={c.brand_voice_preview_url}
+              src={c.brand_voice_preview_url}
+              controls
+              preload="metadata"
+              className="w-full max-w-xs"
+            />
+            <div className="text-[11px] text-zinc-400 space-y-0.5 min-w-0">
+              <div className="font-mono text-zinc-200 truncate" title={c.brand_voice_id || ''}>
+                voice id: {String(c.brand_voice_id).slice(0, 12)}…
+              </div>
+              <button
+                type="button"
+                onClick={() => handleDesignVoice({ force_recreate: true })}
+                disabled={voiceBusy}
+                className="text-[10px] text-zinc-500 hover:text-zinc-300 disabled:opacity-50"
+                title="Discard the cached voice and design a fresh one"
+              >
+                {voiceBusy ? 'Re-designing…' : 'Re-design voice'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            <p className="text-[10px] text-zinc-500 leading-relaxed">
+              Designs a custom Runway voice from this campaign’s tone +
+              audience. The preview MP3 caches locally and seeds the
+              multilingual dubs below.
+            </p>
+            <button
+              type="button"
+              onClick={() => handleDesignVoice()}
+              disabled={voiceBusy}
+              className="rounded-md bg-teal-500/80 hover:bg-teal-500 text-zinc-100 text-xs px-2 py-1 disabled:opacity-50"
+            >
+              {voiceBusy
+                ? 'Designing Brand Voice…'
+                : voiceFailed
+                ? 'Retry Design Brand Voice'
+                : 'Design Brand Voice'}
+            </button>
+            {voiceFailed && c.brand_voice_error && (
+              <p className="text-[10px] text-rose-300" title={c.brand_voice_error}>
+                {c.brand_voice_error}
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Phase 2 — Multilingual Dub Pack — only meaningful with a ready voice */}
+        {voiceReady && (
+          <div className="border-t border-zinc-800/60 pt-2 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold text-zinc-300">Multilingual Dubs</span>
+              <span className="text-[10px] text-zinc-500" title="Runway voice_dubbing on the cached Brand Voice preview">
+                Runway voice_dubbing
+              </span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+              {DUB_LANGS.map((d) => {
+                const url = (c.dubbed_audio_urls || {})[d.code]
+                const status = (c.dub_statuses || {})[d.code]
+                const error = (c.dub_errors || {})[d.code]
+                const ready = status === 'ok' && Boolean(url)
+                const isBusy = busyDubLang === d.code
+                const failed = status === 'failed'
+                return (
+                  <div
+                    key={d.code}
+                    className="rounded-md border border-zinc-800 bg-zinc-950/40 p-1.5 text-[11px] flex flex-col gap-1"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-zinc-200">{d.label}</span>
+                      <span className="text-[10px] text-zinc-500 font-mono">{d.code}</span>
+                    </div>
+                    {ready ? (
+                      <audio src={url} controls preload="none" className="w-full" />
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleDub(d.code)}
+                        disabled={isBusy || Boolean(busyDubLang)}
+                        className="rounded bg-teal-500/70 hover:bg-teal-500 text-zinc-100 text-[10px] px-1.5 py-0.5 disabled:opacity-50"
+                        title={`Dub the Brand Voice into ${d.label}`}
+                      >
+                        {isBusy ? 'Dubbing…' : failed ? `Retry ${d.label}` : `Dub ${d.label}`}
+                      </button>
+                    )}
+                    {failed && error && (
+                      <span
+                        className="text-[10px] text-rose-300 truncate"
+                        title={error}
+                      >
+                        {error}
+                      </span>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
           </div>
         )}
       </div>

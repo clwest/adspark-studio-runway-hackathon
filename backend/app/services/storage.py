@@ -106,6 +106,66 @@ class CampaignStore:
                     return Campaign.model_validate(row)
         return None
 
+    def update_brand_voice_fields(
+        self,
+        campaign_id: str,
+        brand_voice_id: Optional[str],
+        brand_voice_status: Optional[str],
+        brand_voice_preview_url: Optional[str],
+        brand_voice_error: Optional[str],
+        brand_voice_mock_mode: Optional[bool] = None,
+    ) -> Optional[Campaign]:
+        """PR H — persist Brand Voice (Phase 1) fields."""
+        with _LOCK:
+            rows = self._read()
+            for row in rows:
+                if row.get("id") == campaign_id:
+                    row["brand_voice_id"] = brand_voice_id
+                    row["brand_voice_status"] = brand_voice_status
+                    row["brand_voice_preview_url"] = brand_voice_preview_url
+                    row["brand_voice_error"] = brand_voice_error
+                    if brand_voice_mock_mode is not None:
+                        row["brand_voice_mock_mode"] = brand_voice_mock_mode
+                    self._write(rows)
+                    return Campaign.model_validate(row)
+        return None
+
+    def update_dub_fields(
+        self,
+        campaign_id: str,
+        target_lang: str,
+        url: Optional[str],
+        status: Optional[str],
+        error: Optional[str],
+    ) -> Optional[Campaign]:
+        """PR H — persist a single language slot of the Multilingual Dub
+        Pack. Other languages remain untouched.  Mirrors PR B's
+        per-format finished_videos pattern.
+        """
+        with _LOCK:
+            rows = self._read()
+            for row in rows:
+                if row.get("id") == campaign_id:
+                    dub_urls = dict(row.get("dubbed_audio_urls") or {})
+                    dub_statuses = dict(row.get("dub_statuses") or {})
+                    dub_errors = dict(row.get("dub_errors") or {})
+                    if url and status == "ok":
+                        dub_urls[target_lang] = url
+                    else:
+                        dub_urls.pop(target_lang, None)
+                    if status:
+                        dub_statuses[target_lang] = status
+                    if error:
+                        dub_errors[target_lang] = error
+                    elif target_lang in dub_errors and status == "ok":
+                        dub_errors.pop(target_lang, None)
+                    row["dubbed_audio_urls"] = dub_urls
+                    row["dub_statuses"] = dub_statuses
+                    row["dub_errors"] = dub_errors
+                    self._write(rows)
+                    return Campaign.model_validate(row)
+        return None
+
     def update_host_video_fields(
         self,
         campaign_id: str,

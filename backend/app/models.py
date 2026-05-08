@@ -116,6 +116,15 @@ class Campaign(CampaignCreate):
     host_error: Optional[str] = None
     host_task_id: Optional[str] = None
     host_mock_mode: Optional[bool] = None
+    # PR H — Brand Voice Studio + Multilingual Dub Pack
+    brand_voice_id: Optional[str] = None
+    brand_voice_status: Optional[Literal["pending", "ready", "failed", "mock"]] = None
+    brand_voice_preview_url: Optional[str] = None  # local /api/campaigns/{id}/audio/voice-preview
+    brand_voice_error: Optional[str] = None
+    brand_voice_mock_mode: Optional[bool] = None
+    dubbed_audio_urls: dict[str, str] = {}  # lang_code -> /api/campaigns/{id}/audio/dub-{lang}
+    dub_statuses: dict[str, str] = {}       # lang_code -> "ok" | "failed"
+    dub_errors: dict[str, str] = {}         # lang_code -> error message
 
 
 class CampaignList(BaseModel):

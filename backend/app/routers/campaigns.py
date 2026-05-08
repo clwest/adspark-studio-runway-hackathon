@@ -7,6 +7,12 @@ from pydantic import BaseModel, Field
 
 from ..config import Settings, get_settings
 from ..models import Campaign, CampaignCreate, CampaignList
+from ..services.audio_client import (
+    SUPPORTED_DUB_LANGS,
+    design_brand_voice,
+    dub_brand_voice,
+    path_for_audio,
+)
 from ..services.character_host_client import (
     SUPPORTED_VOICE_PRESETS,
     create_or_reuse_avatar,
@@ -378,4 +384,154 @@ def get_host_video(
         str(path),
         media_type="video/mp4",
         filename=f"adspark-{campaign_id}-host.mp4",
+    )
+
+
+# ---- PR H — Brand Voice + Multilingual Dub --------------------------
+
+
+class BrandVoiceBody(BaseModel):
+    description_override: Optional[str] = Field(
+        default=None, max_length=600,
+        description="overrides the templated voice description",
+    )
+    force_recreate: bool = Field(default=False)
+
+
+class DubBody(BaseModel):
+    target_lang: str = Field(..., description="ISO 639-1 lang code")
+
+
+@router.post("/{campaign_id}/brand-voice", response_model=Campaign)
+def post_design_brand_voice(
+    campaign_id: str,
+    body: Optional[BrandVoiceBody] = None,
+    settings: Settings = Depends(get_settings),
+    store: CampaignStore = Depends(_store),
+) -> Campaign:
+    """PR H Phase 1 — Design the Brand Voice for this campaign via
+    Runway ``/v1/voices`` text design.  Persists voice id + cached
+    preview URL on the campaign record.
+    """
+    record = store.get(campaign_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="campaign not found")
+
+    description_override = body.description_override if body else None
+    force_recreate = bool(body.force_recreate) if body else False
+
+    result = design_brand_voice(
+        record,
+        settings,
+        description_override=description_override,
+        force_recreate=force_recreate,
+    )
+    if result.status in {"ready", "mock"}:
+        logger.info(
+            "brand voice %s campaign=%s id=%s",
+            result.status, campaign_id, result.voice_id,
+        )
+        updated = store.update_brand_voice_fields(
+            campaign_id,
+            brand_voice_id=result.voice_id,
+            brand_voice_status=result.status,
+            brand_voice_preview_url=result.preview_url,
+            brand_voice_error=None,
+            brand_voice_mock_mode=result.mock_mode,
+        )
+    else:
+        logger.warning(
+            "brand voice %s campaign=%s err=%s",
+            result.status, campaign_id, result.error,
+        )
+        updated = store.update_brand_voice_fields(
+            campaign_id,
+            brand_voice_id=None,
+            brand_voice_status=result.status,
+            brand_voice_preview_url=None,
+            brand_voice_error=result.error,
+            brand_voice_mock_mode=result.mock_mode,
+        )
+    return updated or record
+
+
+@router.post("/{campaign_id}/dub", response_model=Campaign)
+def post_dub_voice(
+    campaign_id: str,
+    body: DubBody,
+    settings: Settings = Depends(get_settings),
+    store: CampaignStore = Depends(_store),
+) -> Campaign:
+    """PR H Phase 2 — Multilingual Dub. Dubs the cached Brand Voice
+    preview MP3 into ``body.target_lang`` via Runway
+    ``/v1/voice_dubbing``.  Requires Phase 1 to be ready.
+    """
+    record = store.get(campaign_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="campaign not found")
+    target_lang = body.target_lang.strip().lower()
+    if target_lang not in SUPPORTED_DUB_LANGS:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"unsupported target_lang '{target_lang}'. supported: "
+                f"{sorted(SUPPORTED_DUB_LANGS)}"
+            ),
+        )
+    if (
+        not record.brand_voice_id
+        or record.brand_voice_status not in {"ready", "mock"}
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Brand Voice must be designed first. "
+                "POST /api/campaigns/{id}/brand-voice."
+            ),
+        )
+
+    result = dub_brand_voice(record, settings, target_lang)
+    if result.status == "ok":
+        logger.info(
+            "dub ok campaign=%s lang=%s task=%s",
+            campaign_id, target_lang, result.task_id,
+        )
+        updated = store.update_dub_fields(
+            campaign_id,
+            target_lang=target_lang,
+            url=f"/api/campaigns/{campaign_id}/audio/dub-{target_lang}",
+            status="ok",
+            error=None,
+        )
+    else:
+        logger.warning(
+            "dub %s campaign=%s lang=%s err=%s",
+            result.status, campaign_id, target_lang, result.error,
+        )
+        updated = store.update_dub_fields(
+            campaign_id,
+            target_lang=target_lang,
+            url=None,
+            status=result.status,
+            error=result.error,
+        )
+    return updated or record
+
+
+@router.get("/{campaign_id}/audio/{kind}")
+def get_campaign_audio(
+    campaign_id: str,
+    kind: str,
+    settings: Settings = Depends(get_settings),
+) -> FileResponse:
+    """Stream a campaign audio artefact. ``kind`` ∈ {voice-preview, dub-<lang>}."""
+    path = path_for_audio(settings, campaign_id, kind)
+    if path is None:
+        raise HTTPException(status_code=400, detail=f"unsupported audio kind '{kind}'")
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"no {kind} audio for this campaign")
+    return FileResponse(
+        str(path),
+        media_type="audio/mpeg",
+        filename=f"adspark-{campaign_id}-{kind}.mp3",
     )
