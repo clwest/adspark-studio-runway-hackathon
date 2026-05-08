@@ -104,13 +104,21 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
   await expect(
     newestCard.getByText(/^(cached locally|cache failed|external URL may expire)$/i),
   ).toBeVisible()
-  // 13a. The Finish Ad button only appears when caching succeeded; if the
-  //      mock URL was reachable in this run, assert the button is visible.
-  //      Otherwise it's expected to be absent — that's still a valid path.
+  // 13a. The Campaign Pack only appears when caching succeeded; if the mock
+  //      URL was reachable in this run, assert all three per-format Build
+  //      buttons render. Otherwise it's expected to be absent — that's still
+  //      a valid path.
   const isCached = await newestCard.getByText(/^cached locally$/i).isVisible()
   if (isCached) {
+    await expect(newestCard.getByText(/^Campaign Pack$/)).toBeVisible()
     await expect(
-      newestCard.getByRole('button', { name: /^Finish Ad$/i }),
+      newestCard.getByRole('button', { name: /^Build Landscape$/i }),
+    ).toBeVisible()
+    await expect(
+      newestCard.getByRole('button', { name: /^Build Reels$/i }),
+    ).toBeVisible()
+    await expect(
+      newestCard.getByRole('button', { name: /^Build Square$/i }),
     ).toBeVisible()
   }
 

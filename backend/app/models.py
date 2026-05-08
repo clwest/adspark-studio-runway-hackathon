@@ -99,9 +99,10 @@ class Campaign(CampaignCreate):
     cached_video_url: Optional[str] = None
     cache_status: Optional[CacheStatus] = None
     cache_error: Optional[str] = None
-    finished_video_url: Optional[str] = None
-    finish_status: Optional[FinishStatus] = None
-    finish_error: Optional[str] = None
+    finished_video_url: Optional[str] = None  # legacy: mirrors finished_videos["landscape"]
+    finished_videos: dict[str, str] = {}  # PR B: per-format URLs
+    finish_status: Optional[FinishStatus] = None  # status of the most recent finish op
+    finish_error: Optional[str] = None  # error from the most recent finish op
 
 
 class CampaignList(BaseModel):

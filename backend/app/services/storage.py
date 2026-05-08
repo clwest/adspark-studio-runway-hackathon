@@ -89,12 +89,36 @@ class CampaignStore:
         finished_video_url: Optional[str],
         finish_status: Optional[str],
         finish_error: Optional[str],
+        fmt: Optional[str] = None,
     ) -> Optional[Campaign]:
+        """Update per-finish fields. When ``fmt`` is supplied this also merges
+        the result into the per-format ``finished_videos`` dict (PR B). The
+        legacy ``finished_video_url`` continues to mirror landscape success
+        so old gallery code still resolves a single URL.
+        """
         with _LOCK:
             rows = self._read()
             for row in rows:
                 if row.get("id") == campaign_id:
-                    row["finished_video_url"] = finished_video_url
+                    finished_videos = dict(row.get("finished_videos") or {})
+                    if fmt:
+                        if finished_video_url and finish_status == "ok":
+                            finished_videos[fmt] = finished_video_url
+                        else:
+                            # On failure/unavailable, drop any stale URL for
+                            # this format so the gallery doesn't show a
+                            # broken pack entry.
+                            finished_videos.pop(fmt, None)
+                    row["finished_videos"] = finished_videos
+
+                    # Maintain the legacy single URL field. Only the landscape
+                    # op writes to it; non-landscape ops leave it untouched
+                    # so an existing landscape result still survives.
+                    if not fmt or fmt == "landscape":
+                        row["finished_video_url"] = finished_video_url
+                    elif "finished_video_url" not in row:
+                        row["finished_video_url"] = None
+
                     row["finish_status"] = finish_status
                     row["finish_error"] = finish_error
                     self._write(rows)

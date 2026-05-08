@@ -1,11 +1,16 @@
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 
 from ..config import Settings, get_settings
 from ..models import Campaign, CampaignCreate, CampaignList
-from ..services.finisher_service import VideoFinisher, is_ffmpeg_available
+from ..services.finisher_service import (
+    FORMAT_DIMS,
+    LANDSCAPE,
+    VideoFinisher,
+    is_ffmpeg_available,
+)
 from ..services.storage import CampaignStore, VideoCache
 
 logger = logging.getLogger(__name__)
@@ -86,13 +91,27 @@ def get_campaign_video(
     )
 
 
+def _finished_video_url(campaign_id: str, fmt: str) -> str:
+    if fmt == LANDSCAPE:
+        # Legacy URL kept for backward compatibility — clients that hit
+        # /finished-video without a format still resolve to landscape.
+        return f"/api/campaigns/{campaign_id}/finished-video"
+    return f"/api/campaigns/{campaign_id}/finished-video/{fmt}"
+
+
 @router.post("/{campaign_id}/finish", response_model=Campaign)
 def finish_campaign_video(
     campaign_id: str,
+    fmt: str = Query(LANDSCAPE, alias="format", description="landscape | reels | square"),
     store: CampaignStore = Depends(_store),
     cache: VideoCache = Depends(_video_cache),
     finisher: VideoFinisher = Depends(_finisher),
 ) -> Campaign:
+    if fmt not in FORMAT_DIMS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"unsupported format '{fmt}'. supported: {sorted(FORMAT_DIMS)}",
+        )
     record = store.get(campaign_id)
     if not record:
         raise HTTPException(status_code=404, detail="campaign not found")
@@ -110,6 +129,7 @@ def finish_campaign_video(
             finished_video_url=None,
             finish_status="unavailable",
             finish_error="ffmpeg not found on PATH",
+            fmt=fmt,
         )
         raise HTTPException(
             status_code=503,
@@ -119,25 +139,29 @@ def finish_campaign_video(
     concept = record.selected_concept
     top_text = (concept.title or record.business or "").strip()
     bottom_text = (concept.cta or concept.caption or "").strip()
-    result = finisher.finish(campaign_id, cached_path, top_text, bottom_text)
+    result = finisher.finish(campaign_id, cached_path, top_text, bottom_text, fmt=fmt)
 
     if result.status == "ok":
-        logger.info("finished campaign %s -> %s", campaign_id, result.output_path)
+        logger.info(
+            "finished campaign %s [%s] -> %s", campaign_id, fmt, result.output_path
+        )
         updated = store.update_finish_fields(
             campaign_id,
-            finished_video_url=f"/api/campaigns/{campaign_id}/finished-video",
+            finished_video_url=_finished_video_url(campaign_id, fmt),
             finish_status="ok",
             finish_error=None,
+            fmt=fmt,
         )
     else:
         logger.warning(
-            "finish failed for campaign %s: %s", campaign_id, result.error
+            "finish failed for campaign %s [%s]: %s", campaign_id, fmt, result.error
         )
         updated = store.update_finish_fields(
             campaign_id,
             finished_video_url=None,
             finish_status=result.status,
             finish_error=result.error,
+            fmt=fmt,
         )
     return updated or record
 
@@ -147,7 +171,8 @@ def get_finished_video(
     campaign_id: str,
     finisher: VideoFinisher = Depends(_finisher),
 ) -> FileResponse:
-    path = finisher.path_for(campaign_id)
+    """Legacy single-format serve route. Always returns the landscape MP4."""
+    path = finisher.path_for(campaign_id, LANDSCAPE)
     if not path.exists():
         raise HTTPException(
             status_code=404, detail="No finished video for this campaign"
@@ -156,4 +181,28 @@ def get_finished_video(
         str(path),
         media_type="video/mp4",
         filename=f"adspark-{campaign_id}-finished.mp4",
+    )
+
+
+@router.get("/{campaign_id}/finished-video/{fmt}")
+def get_finished_video_format(
+    campaign_id: str,
+    fmt: str,
+    finisher: VideoFinisher = Depends(_finisher),
+) -> FileResponse:
+    if fmt not in FORMAT_DIMS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"unsupported format '{fmt}'. supported: {sorted(FORMAT_DIMS)}",
+        )
+    path = finisher.path_for(campaign_id, fmt)
+    if not path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"No finished {fmt} video for this campaign",
+        )
+    return FileResponse(
+        str(path),
+        media_type="video/mp4",
+        filename=f"adspark-{campaign_id}-finished-{fmt}.mp4",
     )
