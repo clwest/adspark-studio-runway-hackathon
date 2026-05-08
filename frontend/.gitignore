@@ -2,3 +2,8 @@ node_modules/
 dist/
 .vite/
 .DS_Store
+
+# playwright
+test-results/
+playwright-report/
+.playwright/
