@@ -681,3 +681,181 @@ discriminator is documented or surfaced through Runway support.
 ```
 
 Useful for a future "manage your voices" UI.
+
+---
+
+## Appendix D — Phase H + I + Avatar Picker shipped findings (2026-05-08)
+
+Phase H (Brand Voice + Dub) and Phase I (Realtime Spokesperson +
+Avatar Picker) shipped with these locked findings. Recorded here so
+future sessions don't re-probe what's already known.
+
+### `POST /v1/voices` text design — ✅ shipped
+
+```jsonc
+{
+  "name": "AdSpark — <business>",
+  "from": {
+    "type": "text",
+    "prompt": "<≥20 char description of voice>",
+    "model": "eleven_multilingual_ttv_v2"
+  }
+}
+```
+
+Returns `{id}`. Poll `GET /v1/voices/{id}` until `status == "READY"`
+(~10 s). Response carries a CloudFront `previewUrl` MP3 we cache
+locally (~1.88 MB for the default text-design output, 117 s mono
+44.1 kHz 128 kbps).
+
+### `POST /v1/voice_dubbing` — ✅ shipped
+
+```jsonc
+{
+  "model": "eleven_voice_dubbing",
+  "audioUri": "<URL or data: URI>",
+  "targetLang": "<one of 29 ISO 639-1 codes>"
+}
+```
+
+Returns `{id}` task. Same `/v1/tasks/{id}` polling. Output
+`["<presigned mp3 URL>"]`. ~25 s upstream. **29 supported
+languages** (validator-dumped enum):
+
+> `en, hi, pt, zh, es, fr, de, ja, ar, ru, ko, id, it, nl, tr, pl,
+> sv, fil, ms, ro, uk, el, cs, da, fi, bg, hr, sk, ta`
+
+The dub source can be any audio URL or data URI (we use the cached
+Brand Voice preview MP3 as a base64 data URI; ~1.88 MB stays well
+under the 4 MB sanity cap).
+
+### `POST /v1/text_to_speech` — ❌ deferred
+
+Schema confirms `model: "eleven_multilingual_v2"` and `promptText`
+required, but **`voice.type` discriminator is gated**. 30+ probe
+attempts (`custom`, `voiceId`, `voice`, `preset`, `text`, `design`,
+`clone`, `library`, `system`, `default`, `runway-live-preset`,
+`elevenlabs-preset`, `tts-voice`, etc.) all rejected with
+`invalid_union` and no `values` array dump. **Direct TTS narration
+of arbitrary scripts is deferred** — the Brand Voice + dub pipeline
+covers multilingual voice delivery without it.
+
+### `POST /v1/realtime_sessions` — ✅ shipped
+
+```jsonc
+{
+  "model": "gwm1_avatars",
+  "avatar": { "type": "custom", "avatarId": "<UUID>" }
+}
+```
+
+Returns `{id}`. `GET /v1/realtime_sessions/{id}` transitions
+`NOT_READY → READY` in ~1.5 s; READY response carries the WebRTC
+credentials directly:
+
+```jsonc
+{
+  "id": "...",
+  "status": "READY",
+  "expiresAt": "<5 min from create>",
+  "sessionKey": "stk_<JWT-shaped opaque token>"
+}
+```
+
+**There is no `POST /v1/realtime_sessions/{id}/consume` endpoint.**
+Earlier docs that referenced `/consume` are superseded — the
+credentials are inside the GET payload itself. Direct probe of
+`/consume` returns 404 `Cannot POST`.
+
+`DELETE /v1/realtime_sessions/{id}` returns 204. **5-min hard cap**
+via `expiresAt`. Participant-join window ~20–30 s before
+`failureCode TALKING_AVATAR.NO_PARTICIPANT`.
+
+The frontend uses `@runwayml/avatars-react` `<AvatarCall sessionKey>`
+for the WebRTC handshake. The package is lazy-loaded so SDK errors
+stay isolated.
+
+### `GET /v1/avatars` listing — ✅ shipped
+
+Returns the account's **custom-created avatars only**:
+
+```jsonc
+{
+  "data": [
+    {
+      "id": "<UUID>",
+      "name": "...",
+      "personality": "...",
+      "voice": { "type": "runway-live-preset", "presetId": "vincent", "name": "Vincent", "description": "Knowledgeable" },
+      "referenceImageUri": "<presigned CloudFront>",
+      "processedImageUri": "<presigned CloudFront thumbnail>",
+      "documentIds": [],
+      "status": "READY",
+      "createdAt": "...", "updatedAt": "..."
+    }
+  ],
+  "hasMore": false,
+  "nextCursor": null
+}
+```
+
+The Avatar Picker curates this to a safe view — `id`, `name`,
+`status`, `source`, `thumbnail_url` (`processedImageUri` or
+`referenceImageUri`), voice preset, supports flags. `personality`
+and `documentIds` are intentionally NOT forwarded.
+
+### Preset characters — ❌ NOT API-accessible
+
+Runway documentation references slug-style preset names
+(`music-superstar`, `cat-character`, `fashion-designer`,
+`cooking-teacher`). **None of these are usable via the developer
+API today**:
+
+- `/v1/avatar_videos` validates `avatar.avatarId` as a UUID and
+  rejects slugs with `Invalid UUID`.
+- `/v1/realtime_sessions` accepts the same shape; same rejection.
+- No separate preset-listing endpoint exists. Probed all of
+  `/v1/avatar_presets`, `/v1/avatar_library`,
+  `/v1/character_library`, `/v1/avatars/presets`, `/v1/presets`,
+  `/v1/runway_avatars`, `/v1/preset_avatars`. All 404.
+- `/v1/avatars?type=preset` and `?source=preset` query parameters
+  are silently ignored — they return the same 7 custom avatars.
+
+The Avatar Picker shows the 4 documented preset names as **mock
+entries with stdlib data-URI thumbnails** so the UX stays demoable
+without a real account-side preset library. Real-mode listing is
+account-customs-only. If Runway later exposes presets via
+`GET /v1/avatars` (with proper UUID ids), the picker surfaces them
+automatically — no UI changes needed.
+
+### Avatar discriminator — confirmed across three endpoints
+
+The `avatar.type: "custom"` + `avatarId: <UUID>` shape works
+identically across:
+- `/v1/avatar_videos` (PR F V2)
+- `/v1/realtime_sessions` (PR I)
+- (presumably) any future avatar-driven endpoint
+
+Other discriminator values (`existing`, `id`, `preset`, `library`,
+`reference`, `generated`, `runway-live-preset`, etc.) all rejected
+with `invalid_union`. Documented here so future implementers don't
+re-spend on the same probe.
+
+### What the next phase should tackle
+
+If continuing post-hackathon:
+
+1. **Direct TTS** once Runway exposes the `voice.type` discriminator
+   (or via Runway support). One-liner: replace dub-the-preview with
+   `text_to_speech` for any campaign script.
+2. **Audio mix** into Pack videos via ffmpeg `amix`. ~30 LOC.
+3. **Knowledge documents** (`/v1/documents`) so the realtime
+   spokesperson can cite brand FAQ during conversations.
+4. **Webcam toggle** on the realtime session. The `<AvatarCall>` SDK
+   already accepts a `video` prop; one checkbox + one prop change.
+5. **Background-task finishing** (`BackgroundTasks`) so the
+   ~1–3 s ffmpeg passes don't hold the UI worker.
+
+These are the natural extensions of the v4 stack and are listed in
+`SUBMISSION.md` "Future roadmap" with the same priority. None block
+the hackathon submission — all are post-MVP.

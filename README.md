@@ -1,38 +1,60 @@
 # AdSpark Studio
 
-> **Type a business idea, get a Runway-powered cinematic ad and a
-> Runway Avatar spokesperson that presents it — concept, reference
-> image, video, platform Campaign Pack, and an Avatar Host Clip —
+> **Type a business idea, get a Runway-powered cinematic ad, a
+> reusable AI Brand Spokesperson, multilingual voiceover, and a live
+> "Talk to your spokesperson" call — every artefact cached locally —
 > in under five minutes.**
 
-A RunwayML hackathon entry. AdSpark Studio walks the user from a one-line
-business description to a full Campaign Pack — a 16:9 landscape spot, a
-9:16 Reels/TikTok cut, and a 1:1 square — and then turns the same
-campaign into a reusable AI **Brand Spokesperson** with a short
-**Avatar Host Clip** that pitches the ad. Every asset cached locally so a
-saved campaign keeps working long after Runway's presigned URLs expire.
+A RunwayML hackathon entry. AdSpark Studio walks the user from a
+one-line business description to a full **Campaign Pack** plus a
+**Brand Spokesperson Avatar**, an **Avatar Host Clip**, an **Audio
+Pack** (custom Brand Voice + 29-language dubs), and an optional
+**Realtime Spokesperson session** the user can actually talk to over
+WebRTC. Every asset cached locally so saved campaigns survive Runway's
+URL expiry.
 
-- **Real Runway, end-to-end.** `gen4_image_turbo` synthesizes the
+- **Real Runway, end-to-end.** `gen4_image_turbo` synthesises the
   reference image; `gen4.5` (text or image) or `gen4_turbo`
-  (image-to-video) renders the clip; the Runway Avatars endpoint turns
-  the campaign's reference image into a Brand Spokesperson;
-  `avatar_videos` records that spokesperson speaking the campaign
-  pitch. Local ffmpeg burns title + CTA overlays into the three
-  platform-tuned MP4s.
-- **Mock-mode safe.** Without keys the same flow runs end-to-end with
-  deterministic concepts, an in-memory mock task that returns a
-  public sample MP4 in ~12 s, a synthetic mock avatar, and an
-  ffmpeg-only host placeholder. No third-party calls. Ideal for CI
-  and pre-demo dry runs.
+  (image-to-video) renders the clip; `/v1/avatars` turns any image
+  into a reusable spokesperson; `avatar_videos` records that
+  spokesperson speaking; `/v1/voices` designs a custom Brand Voice;
+  `/v1/voice_dubbing` produces 29-language dubs;
+  `/v1/realtime_sessions` powers a live conversation with the avatar.
+  Local ffmpeg burns title + CTA overlays into three platform-tuned
+  MP4s and synthesises mock audio when keys are absent.
+- **Mock-mode safe.** Without keys the same UI flow runs end-to-end
+  with deterministic concepts, a stdlib mock reference PNG, an
+  in-memory mock task that "succeeds" with a public sample MP4, a
+  synthetic mock avatar, ffmpeg-only host + voice + dub placeholders,
+  and four hard-coded "preset" entries in the avatar picker. Realtime
+  surfaces as a clearly disabled state. No third-party calls. Ideal
+  for CI and pre-demo dry runs.
 - **Credit-safe by design.** A model-aware backend policy validates
-  every request and returns clear `400`s before any outbound HTTP. Real
-  Runway calls fire only on user click.
-- **Browser smoke test** drives the full mock flow on every change with
-  Playwright + Chromium.
+  every request and returns `400` *before* any outbound HTTP. Real
+  Runway calls fire only on user click. The API key never reaches the
+  browser — even the realtime WebRTC handshake is brokered through a
+  one-shot `sessionKey` that the client never trades for the secret.
+- **Browser smoke test** drives the full mock flow on every change
+  with Playwright + Chromium.
 
 📄 **Submission write-up:** [`SUBMISSION.md`](./SUBMISSION.md)
 🎬 **Screen-recording script:** [`DEMO_SCRIPT.md`](./DEMO_SCRIPT.md)
 🧭 **Next-session handoff:** [`00-START-NEXT-SESSION.md`](./00-START-NEXT-SESSION.md)
+🔬 **Capability research:** [`docs/research/RUNWAY_API_CAPABILITY_MAP.md`](./docs/research/RUNWAY_API_CAPABILITY_MAP.md)
+
+## Submission tags
+
+Four tags coexist on origin so any version is reproducible:
+
+| Tag | Commit | Story |
+|---|---|---|
+| `hackathon-submission` | `7ed949e` | Pre-avatar baseline. Concept → Image → Video → Campaign Pack. |
+| `hackathon-submission-v2` | `e6ca02b` | Adds Brand Spokesperson Avatar + Avatar Host Clip. |
+| `hackathon-submission-v3` | `515701f` | Adds Brand Voice + 29-language Multilingual Dubs. |
+| **`hackathon-submission-v4`** | **`89918c3`** | **Canonical full submission.** Adds Realtime Brand Spokesperson + Avatar Picker. |
+
+`git checkout hackathon-submission-v4` and follow the quickstart below
+gets you the entire feature stack.
 
 ## Architecture at a glance
 
@@ -40,23 +62,34 @@ saved campaign keeps working long after Runway's presigned URLs expire.
 flowchart LR
   Form["Business idea form"] --> Concepts["3 mock or OpenAI concepts"]
   Concepts -->|"selected concept's prompt"| Image["Runway gen4_image_turbo<br/>(/v1/text_to_image)"]
-  Image -->|"data URI"| Video["Runway gen4.5 / gen4_turbo<br/>(/v1/image_to_video or text_to_video)"]
+  Image -->|"data URI"| Video["Runway gen4.5 / gen4_turbo<br/>(/v1/image_to_video<br/>or text_to_video)"]
   Video -->|"presigned MP4"| Cache["Local cache<br/>backend/data/videos/&lt;id&gt;.mp4"]
   Cache --> Pack["Local ffmpeg<br/>scale-cover + crop + drawtext"]
-  Pack --> L["Landscape 1280×720"]
-  Pack --> R["Reels 720×1280"]
-  Pack --> S["Square 960×960"]
+  Pack --> Lscape["Landscape 1280×720"]
+  Pack --> Reels["Reels 720×1280"]
+  Pack --> Square["Square 960×960"]
 
   Cache -.saved.-> Saved["Saved Campaign"]
-  Saved --> Avatar["Runway Avatar<br/>(/v1/avatars)<br/>Brand Spokesperson"]
-  Avatar --> Host["Runway avatar_videos<br/>(/v1/avatar_videos)"]
+  Saved --> Picker["Avatar Picker<br/>(GET /v1/avatars)"]
+  Saved --> Avatar["Runway Avatar<br/>(POST /v1/avatars)<br/>Brand Spokesperson"]
+  Picker --> Selected["Selected Avatar"]
+  Avatar --> Selected
+  Selected --> Host["Runway avatar_videos<br/>(/v1/avatar_videos)"]
+  Selected --> Live["Runway realtime_sessions<br/>(/v1/realtime_sessions)<br/>WebRTC"]
   Host --> HostClip["Avatar Host Clip<br/>backend/data/host/&lt;id&gt;.mp4"]
+  Live --> Talk["&lt;AvatarCall&gt; live conversation<br/>5-min cap, mic-only V1"]
+
+  Saved --> Voice["Runway voices<br/>(/v1/voices)<br/>Brand Voice"]
+  Voice --> Preview["Voice preview MP3<br/>backend/data/audio/&lt;id&gt;-voice-preview.mp3"]
+  Preview --> Dub["Runway voice_dubbing<br/>(/v1/voice_dubbing)"]
+  Dub --> DubFiles["Per-language dubs<br/>backend/data/audio/&lt;id&gt;-dub-&lt;lang&gt;.mp3"]
 ```
 
-Every step left of `Pack` can run in mock mode without a key. Everything
-right of `Cache` (Pack + Brand Spokesperson + Host Clip) is either fully
-local or works against mock primitives — no extra third-party calls per
-format and no required spend to demo the spokesperson flow.
+Every step left of `Cache` can run in mock mode without a key. The
+Pack is fully local. Spokesperson + Audio Pack mock paths produce
+deterministic placeholders. Realtime is the only feature that
+requires a real Runway key — its mock path renders a clearly disabled
+button with explanatory copy.
 
 ## TL;DR — run it locally
 
@@ -70,24 +103,25 @@ uvicorn app.main:app --reload --port 8000
 cd frontend && npm install && npm run dev
 ```
 
-Open `http://localhost:5173`. With **no** `RUNWAY_API_KEY` set, you're in
-mock mode and can drive the full flow immediately. Drop a real key into
-the **repo-root** `.env` to flip Runway into real mode.
+Open `http://localhost:5173`. With no `RUNWAY_API_KEY` set, you're in
+mock mode and can drive the full flow except the realtime handshake.
+Drop a real key into the **repo-root** `.env` to unlock everything.
 
 ## Required + optional env vars
 
-The repo-root `.env` (gitignored) is the single source of secrets. The
-backend reads it at startup via `pydantic-settings`. Copy
-`backend/.env.example` to the repo root and fill what you need:
+The repo-root `.env` (gitignored) is the single source of secrets.
+Copy `backend/.env.example` to the repo root and fill what you need:
 
 ```env
-# REQUIRED for real Runway image + video generation
+# REQUIRED for real Runway image + video + avatar + voice + realtime
 RUNWAY_API_KEY=rwk_...
 
 # OPTIONAL — defaults sufficient for the hackathon build
 RUNWAY_API_BASE=https://api.dev.runwayml.com
 RUNWAY_API_VERSION=2024-11-06
-RUNWAY_MODEL=gen4_turbo                # default video model when one isn't chosen in the UI
+RUNWAY_MODEL=gen4_turbo
+RUNWAY_HOST_VOICE_PRESET=vincent
+RUNWAY_HOST_PORTRAIT_URL=https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=512&q=80
 
 # OPTIONAL — leave blank to keep concepts mocked (deterministic and demo-safe)
 OPENAI_API_KEY=sk-...
@@ -102,13 +136,17 @@ DATA_DIR=./data
 
 With both keys blank or missing:
 
-- `/api/concepts` returns deterministic mock concepts derived from the form.
-- `/api/runway/image` writes a small, deterministic local PNG (no provider call).
-- `/api/runway/generate` returns a `mock_<id>` task that "succeeds" in ~12 s
-  with a public sample MP4.
-- The MOCK MODE pill + Mode banner show real/mock state per provider and
-  a top-level readiness chip ("demo mode" / "demo ready · concepts mocked"
-  / "demo ready · all live").
+| Surface | Behaviour |
+|---|---|
+| `/api/concepts` | Deterministic mock concepts derived from the form |
+| `/api/runway/image` | Stdlib zlib PNG written locally |
+| `/api/runway/generate` | In-memory mock task, "succeeds" in ~12 s with a public sample MP4 |
+| `/api/campaigns/{id}/avatar` | Synthetic READY avatar with stdlib PNG thumbnail |
+| `/api/campaigns/{id}/host-video` | ffmpeg lavfi 5 s 720×720 silent placeholder MP4 |
+| `/api/campaigns/{id}/brand-voice` | ffmpeg lavfi 3 s silent MP3 placeholder |
+| `/api/campaigns/{id}/dub` | ffmpeg lavfi 3 s silent MP3 placeholder per language |
+| `/api/runway/avatars` | 4 hard-coded preset entries (Music Superstar, Cat Character, Fashion Designer, Cooking Teacher) with stdlib data-URI thumbnails |
+| `/api/campaigns/{id}/spokesperson-session` | HTTP 503 with explanatory copy; UI shows a clearly disabled button |
 
 To force mock mode without editing `.env`, override the keys at shell
 launch time:
@@ -119,32 +157,38 @@ RUNWAY_API_KEY= OPENAI_API_KEY= uvicorn app.main:app --port 8000
 
 Empty-string env vars override `.env` values via pydantic-settings.
 
-## Demo flow (≈3 minutes)
+## Demo flow (≈4–5 minutes live)
 
 1. **Mode banner check.** Confirms backend health and which providers
-   are real.
+   are real. Readiness chip should read `demo ready · concepts mocked`
+   (typical) or `demo ready · all live`.
 2. **Generate concepts.** Form → 3 ad concepts with one flagged
    `recommended` and an editable Runway prompt.
 3. **Pick a concept.** Selecting another card swaps the prompt; the
    text remains editable.
 4. **Generate Reference Image** (Runway `gen4_image_turbo`).
-   Synthesizes a 16:9 / 9:16 / 1:1 PNG matching the chosen Source ratio
-   and caches it under `backend/data/images/<id>.png`. Click is
-   required — no auto-generation.
 5. **Generate Video** (Runway `gen4.5` text-or-image, or `gen4_turbo`
-   image-to-video). Polled status with progress bar. Inline `<video>`
-   preview when `SUCCEEDED`.
-6. **Save campaign card.** Backend downloads the presigned Runway MP4 to
-   `backend/data/videos/<id>.mp4` so the saved card keeps working
-   forever.
-7. **Build Campaign Pack.** Three buttons in the saved card: Landscape
-   (1280×720), Reels (720×1280), Square (960×960). Each runs a single
-   local ffmpeg pass — `scale=W:H:force_original_aspect_ratio=increase,
-   crop=W:H` to cover-fit + center-crop without distortion, then
-   `drawtext` overlays for title + CTA.
+   image-to-video).
+6. **Save campaign card.** Backend downloads the presigned Runway MP4
+   to `backend/data/videos/<id>.mp4`.
+7. **Build Campaign Pack.** Three buttons: Landscape (1280×720),
+   Reels (720×1280), Square (960×960).
+8. **Choose Existing Runway Avatar** (PR I+) — pick from any of your
+   account's avatars in the picker grid, OR
+9. **Create Custom Brand Spokesperson** — turn this campaign's
+   reference image (or a stock portrait) into a per-campaign Runway
+   Avatar.
+10. **Present Campaign** — record an Avatar Host Clip via
+    `avatar_videos`.
+11. **Design Brand Voice** — `/v1/voices` text-design produces a
+    custom voice; preview MP3 caches locally.
+12. **Dub** — produce per-language dubs of the Brand Voice preview.
+13. **Talk to Brand Spokesperson** — open a 5-minute live WebRTC
+    conversation with the selected avatar. Mic-only V1.
 
-The exact clicks for a 60–90 s screen recording live in
-[`DEMO_SCRIPT.md`](./DEMO_SCRIPT.md).
+The exact clicks for a screen recording live in
+[`DEMO_SCRIPT.md`](./DEMO_SCRIPT.md) (five paths: mock, live, fallback,
+realtime, picker+realtime).
 
 ## Generation settings
 
@@ -152,39 +196,26 @@ The prompt panel exposes:
 
 - **Model** — Gen-4 Turbo (image-to-video) or Gen-4.5 (text or image).
 - **Source ratio** — Landscape 1280:720, Reels 720:1280, Square 960:960.
-  Match the source ratio to your target Campaign Pack format to reduce
-  cropping.
 - **Duration** — 5 / 8 / 10 s. Locked at 5 s when Gen-4 Turbo is
-  selected (single supported value at this scope).
-- **Use text-only video** — checkbox enabled only for Gen-4.5; routes
-  the request to `/v1/text_to_video` and skips the reference image.
+  selected.
+- **Use text-only video** — checkbox enabled only for Gen-4.5.
 
-Backend enforces the same per-model policy and returns a clear `400` on
-any unsupported combination. The frontend persists every choice in
-`localStorage` under `adspark.settings.v1` so a reload during the demo
-preserves the configuration.
+Backend enforces the same per-model policy and returns a clear `400`
+on any unsupported combination. The frontend persists every choice in
+`localStorage` under `adspark.settings.v1`.
 
 ## Saved campaigns cache videos locally
 
-Runway returns presigned CloudFront URLs that expire after about a week.
-To make saved campaigns durable, the backend caches every saved video as
-soon as `POST /api/campaigns` runs:
-
-- File path: `backend/data/videos/<campaign_id>.mp4` (gitignored).
-- Stable serve route: `GET /api/campaigns/{id}/video`.
-- Campaign records carry `cached_video_url`, `cache_status` (`ok | failed
-  | skipped`), and `cache_error`.
-- Frontend gallery prefers the cached URL over the presigned Runway URL
-  and shows a status badge: `cached locally` (green) / `cache failed`
-  (rose) / `external URL may expire` (zinc).
-- Failures are non-fatal. Cap is 100 MB per asset; downloads must report
-  `content-type: video/*`.
+Runway returns presigned CloudFront URLs that expire after about a
+week. The backend caches every saved video at
+`backend/data/videos/<campaign_id>.mp4` (gitignored, 100 MB cap,
+content-type-checked). The gallery prefers the cached URL over the
+presigned Runway URL.
 
 ## Campaign Pack — local ffmpeg finishing
 
-Once a campaign has a cached video, the gallery's Campaign Pack section
-shows three Build buttons. Each click runs a local ffmpeg pass — no extra
-provider call:
+Once a campaign has a cached video, three Build buttons run a local
+ffmpeg pass each — no extra provider call:
 
 | Format | Dimensions | Filename | Use |
 |---|---|---|---|
@@ -192,96 +223,115 @@ provider call:
 | Reels | 720×1280 | `<id>-finished-reels.mp4` | TikTok, Reels, Shorts |
 | Square | 960×960 | `<id>-finished-square.mp4` | Instagram feed |
 
-The ffmpeg filter chain:
-```
-scale=W:H:force_original_aspect_ratio=increase,crop=W:H,
-drawtext=<title>,drawtext=<cta>
-```
-plus `libx264` / `veryfast` / CRF 23 / `+faststart` and `-c:a copy`.
+Filter chain: `scale=W:H:force_original_aspect_ratio=increase,crop=W:H,
+drawtext=<title>,drawtext=<cta>` plus `libx264` / `veryfast` / CRF 23 /
+`+faststart` and `-c:a copy`.
 
-Per-format URLs land in `Campaign.finished_videos[fmt]`; the legacy
-`finished_video_url` field continues to mirror the landscape result for
-back-compat with pre-PR-B saves.
+Requires `ffmpeg` on `PATH`. macOS: `brew install ffmpeg`.
 
-Requires `ffmpeg` on `PATH`. macOS: `brew install ffmpeg`. The pipeline
-is fully local — no provider keys, no network calls.
-
-## Brand Spokesperson + Avatar Host Clip
+## Brand Spokesperson + Avatar Host Clip + Avatar Picker
 
 Every saved campaign exposes a two-step path that turns it into a
-reusable Runway Avatar narrator:
+reusable Runway Avatar narrator, plus a picker that lets you reuse
+any avatar your account has already created:
 
-1. **Create Brand Spokesperson** (`POST /api/campaigns/{id}/avatar`)
-   - Calls Runway `POST /v1/avatars`. Reference image source is chosen
-     in this order: explicit `image_url` override → the campaign's
-     own `reference_image_url` → the configured stock portrait.
-   - Local `/api/runway/image/<id>` URLs are converted to base64 data
-     URIs server-side so a generated reference image can drive the
-     avatar without needing public hosting.
-   - Polls Runway's avatar pipeline through `PROCESSING → READY`. If
-     processing fails (e.g., the campaign image has no recognisable
-     face), the campaign record stores `host_avatar_status: "failed"`
-     and `host_avatar_error: …`. The UI then offers **"Retry with
-     stock portrait"** so the demo never dead-ends.
-   - On success the avatar id, processed thumbnail URL, voice preset,
-     and image source label (`"campaign"` / `"override"` / `"stock"`)
-     are persisted on the campaign so the gallery card can show
-     "Brand Spokesperson · Runway Avatar · ready" with the
-     thumbnail next to the avatar id.
-   - **Voice presets**: 30 lowercase preset ids universally available
-     on the account (`vincent`, `victoria`, `clara`, `drew`, `skye`,
-     `max`, …). Default is `RUNWAY_HOST_VOICE_PRESET` (env, defaults
-     to `vincent`). The avatar owns the voice — Phase 2 doesn't pick
-     one.
-2. **Present Campaign** (`POST /api/campaigns/{id}/host-video`)
-   - Requires `host_avatar_status` to be `ready` or `mock` (returns
-     `409` otherwise with the Phase-1 hint).
-   - Builds a deterministic local script:
-     `Meet {business}. {hook}. {caption}. {cta}.` — capped at 300
-     chars. Body accepts `script_override` if a custom pitch is
-     desired.
-   - Calls `POST /v1/avatar_videos` with
-     `{model: "gwm1_avatars", avatar: {type: "custom", avatarId},
-     speech: {type: "text", text}}`. Polls the resulting task with
-     the same 5 s + jitter pattern used everywhere else.
-   - Downloads the presigned MP4 to
-     `backend/data/host/<campaign_id>.mp4` (gitignored, 100 MB cap,
-     content-type guarded). Streams from `GET /api/campaigns/{id}/host-video`.
+1. **Choose Existing Runway Avatar** — `GET /api/runway/avatars`
+   proxies Runway's avatar list (or returns 4 hard-coded mock presets
+   in mock mode). Click an avatar card → `POST /select-avatar`
+   persists it on the campaign. Selection wins over the per-campaign
+   custom avatar for both Host Clip and realtime.
+2. **Create Brand Spokesperson** (`POST /avatar`) — alternative to
+   the picker when you want a fresh per-campaign avatar.
+   Reference-image source falls back: explicit override → campaign's
+   `reference_image_url` → configured stock portrait. The "Retry with
+   stock portrait" button explicitly forces the stock fallback when
+   Runway rejects the campaign image (e.g., no face).
+3. **Present Campaign** (`POST /host-video`) — records an Avatar Host
+   Clip via `/v1/avatar_videos` using the selected (or custom)
+   avatar. Output cached at `backend/data/host/<id>.mp4`.
 
-Output MP4 is 1088×704 h264 + AAC audio (the spokesperson actually
-speaks). Real Gen-4.5 avatar video typically completes in ~10 s for an
-8–15 word pitch; a one-time avatar create takes ~30–45 s on first call
-and is cached on the campaign record afterwards.
+The avatar identity (`host_avatar_id`, voice preset, processed
+thumbnail) is persisted on the campaign so subsequent host-clip and
+realtime requests skip avatar creation.
 
-**Mock mode mirrors both phases.** Phase 1 returns a synthetic READY
-avatar with a stdlib PNG thumbnail; Phase 2 produces a 5 s 720×720
-silent ffmpeg `lavfi` placeholder. The same two-step UI works without
-spending a single credit.
+> **About Runway's preset characters:** the docs mention slug-style
+> preset names like `music-superstar`, `cat-character`,
+> `fashion-designer`, `cooking-teacher`. As of this build, **those are
+> not API-accessible** — `/v1/avatar_videos` validates `avatar.avatarId`
+> as a UUID and rejects slugs with `Invalid UUID`, and there is no
+> separate preset-listing endpoint. The picker shows them as mock
+> entries so the UX stays demoable; if Runway exposes presets via
+> `GET /v1/avatars` later, the picker surfaces them automatically.
 
-The only required new env var is unchanged from the existing
-`RUNWAY_API_KEY`. Optional knobs:
+## Audio Pack — Brand Voice + Multilingual Dubs
 
-```env
-RUNWAY_HOST_VOICE_PRESET=vincent
-RUNWAY_HOST_PORTRAIT_URL=https://images.unsplash.com/photo-...?w=512&q=80
+Every saved campaign exposes a two-step audio path:
+
+1. **Design Brand Voice** (`POST /brand-voice`) — `POST /v1/voices`
+   text-design produces a custom voice from a templated description
+   (`{tone} mid-range American spokesperson voice for {business},
+   speaking to {audience}…`). Polls to READY (~10 s). Preview MP3
+   downloads to `backend/data/audio/<id>-voice-preview.mp3`.
+2. **Dub** (`POST /dub` with `target_lang`) — `POST
+   /v1/voice_dubbing` re-voices the cached preview into one of 29
+   ISO 639-1 languages (`en, hi, pt, zh, es, fr, de, ja, ar, ru, ko,
+   id, it, nl, tr, pl, sv, fil, ms, ro, uk, el, cs, da, fi, bg, hr,
+   sk, ta`). Output MP3 cached at
+   `backend/data/audio/<id>-dub-<lang>.mp3`.
+
+Direct text-to-speech narration of an arbitrary script is **deferred**
+— Runway's `/v1/text_to_speech` endpoint requires a `voice.type`
+discriminator that's gated and not unlocked via probing. The Brand
+Voice preview MP3 + dub pipeline gives full multilingual voice
+delivery despite this. See
+[`docs/research/RUNWAY_API_CAPABILITY_MAP.md`](./docs/research/RUNWAY_API_CAPABILITY_MAP.md)
+Appendix C for the schema findings.
+
+## Talk to Brand Spokesperson — Realtime WebRTC
+
+Once an avatar is selected (picker) or created (custom), every saved
+campaign card unlocks a **Talk to Brand Spokesperson** subsection. One
+click opens a live 5-minute WebRTC call where you speak (mic) and the
+avatar responds in their configured voice.
+
+```
+Browser              FastAPI broker          Runway
+ │                       │                     │
+ │ POST /spokesperson-session ─────────────────►
+ │                       │  POST /v1/realtime_sessions
+ │                       │  ├ poll GET to READY
+ │                       │  └ pulls sessionKey out of READY payload
+ │ ◄───────── { session_id, session_key, expires_at, avatar_id }
+ │
+ │ <AvatarCall sessionKey={…} audio video=false> ─► Runway media
+ │                                                  WebRTC handshake
 ```
 
-Generated host clips and the cached avatar id live entirely under
-`backend/data/host/` which is gitignored alongside `data/videos/`,
-`data/images/`, and `data/finished/`.
+- **Mic-only V1.** `<AvatarCall audio video={false}>` — no webcam.
+- **5-minute session cap** (Runway-imposed `expiresAt`). Frontend
+  countdown surfaces it.
+- **API key never leaves FastAPI.** The browser only ever sees the
+  short-lived `sessionKey` JWT.
+- **Lazy-loaded SDK.** `@runwayml/avatars-react` is split into a
+  separate chunk — initial bundle stays at ~190 KB JS / ~58 KB gzip.
+- **Mock mode** returns HTTP 503; UI renders a disabled button with
+  explanatory copy. No WebRTC plumbing in CI.
 
 ## Browser smoke test (Playwright)
 
-A single Chromium-driven end-to-end test exercises the full mock flow on
-every change: ModeBanner pills, readiness chip, model + ratio + duration
-selectors with documented defaults, settings persistence after reload,
-mock concept generation, mock video generation reaching `SUCCEEDED`,
-campaign save, gallery rendering with `video ready` + `cached locally`,
-and the three Campaign Pack Build buttons (when cache succeeded).
+A single Chromium-driven end-to-end test exercises the full mock flow
+on every change: ModeBanner pills, readiness chip, model + ratio +
+duration selectors with documented defaults, settings persistence
+after reload, mock concept generation, mock video generation reaching
+`SUCCEEDED`, campaign save, gallery rendering with `video ready` +
+`cached locally`, Campaign Pack three Build buttons, Brand
+Spokesperson + Runway Avatar labels + Create button, Audio Pack +
+Runway Voices + Design Brand Voice button, Avatar Picker grid +
+Music Superstar mock entry, and the disabled Realtime "Start
+Conversation (unavailable)" button.
 
 ```bash
-# Terminal 1 — backend in fully mocked mode (does NOT touch the repo-root
-# .env; the empty shell vars take precedence over the .env file values)
+# Terminal 1 — backend in fully mocked mode
 cd backend && source .venv/bin/activate
 RUNWAY_API_KEY= OPENAI_API_KEY= uvicorn app.main:app --port 8000
 
@@ -292,104 +342,134 @@ cd frontend && npm run dev
 cd frontend && npm run test:e2e
 ```
 
-The test is **single-shot, single-worker** and never hits the real
-Runway or OpenAI APIs. Don't run it against a backend with real keys in
-the shell environment — the assertions specifically expect mock pills.
+The test is **single-shot, single-worker, Chromium-only**, and never
+opens a WebRTC connection. Don't run it against a backend with real
+keys in the shell environment — the assertions specifically expect
+mock pills.
 
-Test artifacts (`frontend/test-results/`, `frontend/playwright-report/`,
-`frontend/.playwright/`) are gitignored.
+Test artifacts (`frontend/test-results/`,
+`frontend/playwright-report/`, `frontend/.playwright/`) are gitignored.
 
 ## Endpoints
+
+22 application routes plus 6 FastAPI built-ins (`/openapi.json`,
+`/docs`, etc.) for **28 routes total**.
 
 | Method | Path | Purpose |
 |---|---|---|
 | `GET`  | `/health` | Liveness + per-provider mock flags |
-| `GET`  | `/api/runway/provider-status` | Secret-free policy metadata (models, ratios, durations, image-required) |
-| `GET`  | `/api/runway/organization` | Defensive proxy of `/v1/organization`. Returns `{mock_mode, credits, monthly_credit_cap}`; failure is non-blocking |
+| `GET`  | `/api/runway/provider-status` | Secret-free policy metadata |
+| `GET`  | `/api/runway/organization` | Defensive proxy of `/v1/organization`; non-blocking |
+| `GET`  | `/api/runway/avatars` | List account avatars (real) or 4 mock presets |
 | `POST` | `/api/concepts` | `{business, product, tone, audience}` → 3 concepts + recommended Runway prompt |
-| `POST` | `/api/runway/image` | `{prompt_text, ratio}` → `{image_id, image_url}`. Real path uses `gen4_image_turbo` with a seeded reference (Runway requires ≥1) |
-| `GET`  | `/api/runway/image/{image_id}` | Streams the cached PNG |
-| `POST` | `/api/runway/generate` | `{prompt_text, prompt_image?, model, ratio, duration}` → `{task_id, status, model, endpoint}`. Routes to `image_to_video` or `text_to_video` |
-| `GET`  | `/api/runway/task/{task_id}` | Poll status; client uses ≥5 s + jitter, capped at 60 attempts (~5 min) |
-| `POST` | `/api/campaigns` | Save a campaign card; downloads + caches the MP4 to `backend/data/videos/<id>.mp4` |
+| `POST` | `/api/runway/image` | `{prompt_text, ratio}` → cached PNG via `gen4_image_turbo` |
+| `GET`  | `/api/runway/image/{image_id}` | Stream the cached PNG |
+| `POST` | `/api/runway/generate` | `{prompt_text, prompt_image?, model, ratio, duration}` → `{task_id, status, model, endpoint}` |
+| `GET`  | `/api/runway/task/{task_id}` | Poll status; ≥5 s + jitter, capped at 5 min |
+| `POST` | `/api/campaigns` | Save a campaign card; downloads + caches the MP4 |
 | `GET`  | `/api/campaigns` | List saved campaigns |
 | `GET`  | `/api/campaigns/{id}/video` | Stream the cached MP4 |
 | `POST` | `/api/campaigns/{id}/finish?format=...` | Build a Campaign Pack format with local ffmpeg |
 | `GET`  | `/api/campaigns/{id}/finished-video` | Legacy: serves the landscape finished MP4 |
 | `GET`  | `/api/campaigns/{id}/finished-video/{fmt}` | Per-format finished MP4 |
-| `POST` | `/api/campaigns/{id}/avatar` | **Phase 1** — create the Brand Spokesperson Runway Avatar (body `{voice_preset?, image_url?, force_recreate?}`) |
-| `POST` | `/api/campaigns/{id}/host-video` | **Phase 2** — record the Avatar Host Clip via `/v1/avatar_videos` (body `{script_override?}`); 409 if the avatar isn't ready |
+| `POST` | `/api/campaigns/{id}/avatar` | Phase 1 — create the Brand Spokesperson Runway Avatar |
+| `POST` | `/api/campaigns/{id}/select-avatar` | Pick an existing Runway avatar (picker) |
+| `POST` | `/api/campaigns/{id}/host-video` | Phase 2 — record the Avatar Host Clip |
 | `GET`  | `/api/campaigns/{id}/host-video` | Stream the cached host clip MP4 |
+| `POST` | `/api/campaigns/{id}/brand-voice` | Audio Phase 1 — design Brand Voice via `/v1/voices` |
+| `POST` | `/api/campaigns/{id}/dub` | Audio Phase 2 — multilingual dub via `/v1/voice_dubbing` |
+| `GET`  | `/api/campaigns/{id}/audio/{kind}` | Stream cached voice-preview or per-language dub MP3 |
+| `POST` | `/api/campaigns/{id}/spokesperson-session` | Realtime broker — returns client-safe `{session_id, session_key, expires_at, avatar_id}` |
+| `DELETE` | `/api/campaigns/{id}/spokesperson-session/{session_id}` | End-conversation cleanup |
 
 ## Project layout
 
 ```
 backend/
   app/
-    main.py              FastAPI app + CORS + /health + routers
-    config.py            pydantic-settings (env-driven mock flags)
-    models.py            Pydantic schemas
+    main.py                         FastAPI app + CORS + /health + routers
+    config.py                       pydantic-settings (env-driven mock flags)
+    models.py                       Pydantic schemas (campaign + request/response)
     services/
-      concept_service.py        OpenAI + deterministic mock fallback
-      image_client.py           Runway text_to_image (real + stdlib mock PNG)
-      runway_client.py          Generation policy + image_to_video / text_to_video routing
-      finisher_service.py       Local ffmpeg Campaign Pack
-      character_host_client.py  Runway Avatars + avatar_videos two-phase host
-      storage.py                JSON campaign store + local video/host caches
+      concept_service.py            OpenAI + deterministic mock fallback
+      image_client.py               Runway text_to_image (real + stdlib mock PNG)
+      runway_client.py              Generation policy + image_to_video / text_to_video routing
+      finisher_service.py           Local ffmpeg Campaign Pack
+      character_host_client.py      Runway Avatars + avatar_videos two-phase host
+      avatar_listing_client.py      Runway avatar list curation + 4 mock presets
+      realtime_avatar_client.py     /v1/realtime_sessions broker (PR I)
+      audio_client.py               Runway voices + voice_dubbing two-phase audio (PR H)
+      storage.py                    JSON campaign store + atomic local caches
     routers/
       concepts.py runway.py campaigns.py
   requirements.txt
   .env.example
 
 frontend/
-  vite.config.js         /api + /health proxy → :8000
+  vite.config.js                    /api + /health proxy → :8000
+  package.json                      includes @runwayml/avatars-react ^0.15.0
   src/
-    App.jsx              Orchestrates form → concepts → prompt → image → runway → save
-    api.js               fetch wrapper (typed, JSON)
-    settings.js          localStorage persistence with safety clamps
-    errors.js            Friendly error parser + per-call hints
-    components/          CampaignForm, ConceptCards, PromptPreview,
-                         RunwayPanel, CampaignGallery, ModeBanner
+    App.jsx                         Orchestrates form → concepts → prompt → image → runway → save
+    api.js                          fetch wrapper (typed, JSON)
+    settings.js                     localStorage persistence with safety clamps
+    errors.js                       Friendly error parser + per-call hints
+    components/
+      CampaignForm.jsx ConceptCards.jsx PromptPreview.jsx
+      RunwayPanel.jsx CampaignGallery.jsx ModeBanner.jsx
+      AvatarPicker.jsx              Pick existing Runway avatar (PR I+)
+      RealtimeSpokesperson.jsx      Lazy-loaded <AvatarCall> wrapper (PR I)
 
 docs/
-  WHAT_IT_IS.md          concept + stack
-  INVENTORY.md           what's real / mocked / incomplete
-  handoffs/SESSION_*.md  one per session
+  WHAT_IT_IS.md                     concept + stack
+  INVENTORY.md                      what's real / mocked / incomplete
+  research/
+    RUNWAY_API_CAPABILITY_MAP.md    Phase H/I findings + product roadmap
+    RUNWAY_CHARACTER_HOST_SPIKE.md  PR F avatar schema probe
+    RUNWAY_REALTIME_SPOKESPERSON_SPIKE.md  PR I realtime schema probe
+  handoffs/SESSION_*.md             one per session
 
-DEMO_SCRIPT.md           60–90 s screen-recording script
-SUBMISSION.md            judge-facing summary
-00-START-NEXT-SESSION.md latest branch + priorities for the next session
+DEMO_SCRIPT.md                      five-path screen-recording script (A/B/C/D/E)
+SUBMISSION.md                       judge-facing summary
+00-START-NEXT-SESSION.md            latest branch + priorities for the next session
 ```
 
 ## Generated media — never committed
 
-Generated PNGs, downloaded Runway MP4s, and finished Campaign Pack
-outputs all live under `backend/data/{images,videos,finished}`. The
-entire `data/` directory is gitignored via `backend/.gitignore`. Verify
+Generated PNGs, downloaded Runway MP4s, finished Campaign Pack
+outputs, host clips, voice previews, and per-language dubs all live
+under `backend/data/{images,videos,finished,host,audio}`. The entire
+`data/` directory is gitignored via `backend/.gitignore`. Verify
 before any commit:
 
 ```bash
 git status --short                                # nothing under data/
 git ls-files | grep -E '\.(env|mp4|png|wav|mp3)$' || echo ok
-git check-ignore backend/data/images/foo.png      # should match
+git check-ignore backend/data/host/foo.mp4        # should match
 ```
 
-API keys live only in the repo-root `.env` (also gitignored). The React
-app has no key access at runtime — every Runway call goes through
-FastAPI.
+API keys live only in the repo-root `.env` (also gitignored). The
+React app has no key access at runtime — every Runway call goes
+through FastAPI. Local `/api/runway/image/<id>` URLs are converted to
+base64 data URIs server-side before being posted to Runway, so
+generated reference images can drive both video and avatar tasks
+without needing public hosting.
 
 ## Safety / hygiene
 
-- API keys never leave the backend; the React app talks only to FastAPI.
+- API keys never leave the backend; the React app talks only to
+  FastAPI. Realtime is no exception — the browser only ever sees the
+  short-lived `sessionKey`, never the Runway API secret.
 - CORS is locked to `http://localhost:5173` by default.
 - `.env` and `backend/data/` are gitignored.
 - Real Runway calls require an explicit user click. The app never
-  auto-generates on page load.
-- A model-aware policy returns `400` on any unsupported model / ratio /
-  duration / missing-image combination *before* any outbound HTTP, so
-  misconfigured requests never burn credits.
+  auto-generates on page load. The optional `/v1/organization`
+  read-only metadata fetch is the sole exception and is non-blocking.
+- A model-aware policy returns `400` on any unsupported model / ratio
+  / duration / missing-image combination *before* any outbound HTTP.
 - Polling is capped (60 attempts × 5 s + jitter ≈ 5 min) and stops
   immediately on terminal status.
+- The realtime session is hard-capped at 5 minutes by Runway's
+  `expiresAt`; the frontend countdown surfaces it.
 - This repo is **not connected to `unified-donkey-betz`**. That project
   was inspected read-only for prompt-shape inspiration; nothing was
   copied verbatim and no edits were made there.

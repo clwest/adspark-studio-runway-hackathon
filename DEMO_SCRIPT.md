@@ -243,3 +243,117 @@ If `Present Campaign` is taking longer than 60 s mid-demo:
   video is — saved campaigns survive Runway's presigned URL expiry.
 - The mock fallback **mirrors both phases** so the same UX is
   demoable without any spend.
+
+---
+
+## Path E — Live Avatar Picker + Realtime Spokesperson Demo (~3:30 min, real credits)
+
+The headline demo for `hackathon-submission-v4`. Combines the Avatar
+Picker (PR I+) with the Realtime Spokesperson (PR I) to show
+end-to-end Runway capability without forcing every campaign through
+fresh avatar creation. Mic permission is the single biggest mid-demo
+failure point — pre-warm it before recording.
+
+Backend stays in real mode. Mode banner readiness chip should read
+**`demo ready · concepts mocked`** (emerald) with `Image Gen
+(Runway): real`, `Video Gen (Runway): real`, and `cap: 200,000` chips
+visible. Avatar Picker at the top of the Brand Spokesperson section
+will show your account's real avatars in real mode.
+
+### Pre-flight (off camera)
+
+1. Make sure `RUNWAY_API_KEY` is set in repo-root `.env`.
+2. `OPENAI_API_KEY` blank for the deterministic mock concept story.
+3. **Pre-warm the mic permission prompt.** Visit
+   `http://localhost:5173`, find a saved card with a READY avatar
+   (e.g. `9a717c675ec6` Donkey Betz Coffee), click *Start
+   Conversation* once — when the prompt fires, click Allow, then End
+   Conversation. The next time you click Start in the recording, the
+   browser remembers and skips the prompt.
+4. Optional clean slate of stale campaigns:
+   `echo '[]' > backend/data/campaigns.json`
+   (only if you don't need the existing hero campaigns; the picker
+   will list whatever avatars survive in `GET /v1/avatars`).
+
+### Recording flow
+
+| t (s) | Action | What the audience sees |
+|---|---|---|
+| 0:00 | Page load | Mode banner emerald readiness chip + cap chip |
+| 0:08 | Narrate: "AdSpark turns one campaign brief into platform-ready creative AND a reusable Runway Avatar spokesperson." | Mode banner |
+| 0:18 | Scroll to a saved campaign with a Campaign Pack already built | Pack pill `3/3 formats ready` |
+| 0:25 | In the Brand Spokesperson section, narrate the picker: "Runway lets us reuse any avatar we've already created. We pick one from the grid." | 4-up avatar picker grid |
+| 0:35 | Click an existing avatar card | Card highlights sky-blue; "Selected Runway Avatar" pill appears |
+| 0:45 | Click **Present Campaign** under Avatar Host Clip | Status pill PENDING → RUNNING |
+| ~0:55 | Inline `<video>` plays the spokesperson speaking the campaign pitch | Avatar speaks |
+| 1:15 | Narrate: "And we can talk to them live." | Audience braces for the cool part |
+| 1:20 | Click **Start Conversation** under Talk to Brand Spokesperson | Button → "Connecting…"; mic permission already allowed from pre-warm |
+| ~1:25 | `<AvatarCall>` mounts; avatar's video feed appears; "live · 4:59" countdown ticks | Live avatar feed |
+| 1:30 | Speak: *"Pitch this campaign in one sentence."* | Mic active |
+| ~1:40 | Avatar responds with a brand-voice pitch | Audio response |
+| 2:00 | (optional follow-up) Speak: *"Now in Spanish?"* | Avatar responds |
+| 2:30 | Click **End Conversation** | Section returns to idle; countdown stops |
+| 2:40 | Scroll to Audio Pack — narrate: "We also designed a custom voice and dubbed it into Spanish and French." | Brand Voice + Multilingual Dubs section |
+| 2:50 | Click play on the voice preview, then on the Spanish dub | Audio plays inline |
+| 3:10 | Narrate the Campaign Pack thumbnails — "Three platform-ready cuts. Ad, spokesperson, voice, and live conversation. One brief." | Closing summary |
+
+### Pass criteria (run through these silently mid-recording)
+
+- Mode banner emerald.
+- Picker shows real avatars (not mock presets).
+- Selected avatar pill shows the chosen identity.
+- Avatar Host Clip plays inline.
+- Realtime: avatar feed appears; audio round-trips both directions;
+  countdown ticks; End Conversation cleanly returns to idle.
+- Audio Pack: voice preview + at least one dub plays.
+- No browser console errors that mention `rwk_`, `RUNWAY_API_KEY`,
+  `Bearer rwk_`, or `sessionKey` (all should stay server-side).
+- `backend/data/host/<id>.mp4` and `backend/data/audio/<id>-*.mp3`
+  exist on disk after the recording ends.
+
+### Fallback if realtime fails mid-recording
+
+If the WebRTC handshake stalls past ~10 seconds after Start
+Conversation, *don't troubleshoot live*:
+
+1. Click End Conversation (it's tolerant — the broker's DELETE always
+   returns 200).
+2. Skip the realtime segment and lean on the Avatar Host Clip — which
+   is the same Runway Avatar speaking the same pitch via async
+   `/v1/avatar_videos`. The headline still works.
+3. Or switch to mock mode mid-recording (Path C technique) — the
+   picker shows 4 mock presets and the realtime button cleanly
+   disables with explanatory copy.
+
+### Anti-patterns specific to Path E
+
+- **Don't show the `.env` file or DevTools network tab.** The
+  realtime broker request includes `session_key` in the *response*;
+  it never carries the API key in the *request* but the response
+  field is sensitive (one-shot JWT). Avoid screen-real-estate it.
+- **Don't over-explain WebRTC.** AdSpark uses async `avatar_videos`
+  as the production primitive; realtime is one optional surface.
+  Bringing up signalling, ICE, STUN, or peer connections invites
+  questions about a feature that's intentionally minimal.
+- **Don't claim preset characters work via the API.** They don't —
+  the picker's mock-mode list shows them as illustrative entries.
+  Real-mode lists the user's account-created custom avatars only.
+  See `SUBMISSION.md` "Known limitations" for the exact wording.
+- **Don't re-create the avatar on camera unless you have a clean
+  account.** The picker's whole point is reuse.
+- **Don't bundle audio mix into the demo claim.** Audio Pack stays a
+  sibling artefact in V1 — voiceover and dubs are separate MP3s, not
+  mixed onto the finished Pack videos. (That's V1.5 work, listed in
+  `SUBMISSION.md` "Future roadmap".)
+
+### What Path E demonstrates
+
+- Runway is the **single source** for every primitive: reference
+  image → video → avatar → host clip → brand voice → multilingual
+  dub → realtime conversation.
+- The avatar is **reusable** — the picker shows account-wide reuse,
+  unlike the per-campaign `Create Custom Brand Spokesperson` path.
+- The realtime call is **brokered** — the API key never touches the
+  browser, even during WebRTC. The countdown surfaces the 5-min
+  hard cap.
+- The full feature stack lives at `hackathon-submission-v4`.
