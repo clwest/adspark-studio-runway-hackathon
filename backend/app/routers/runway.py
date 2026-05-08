@@ -18,10 +18,11 @@ from ..services.image_client import (
     path_for as image_path_for,
 )
 from ..services.runway_client import (
+    GenerationSettingsError,
     create_task,
     get_task as fetch_task,
-    image_required_for,
     resolve_model,
+    validate_generation_settings,
 )
 
 logger = logging.getLogger(__name__)
@@ -34,17 +35,22 @@ def post_generate(
     req: RunwayGenerateRequest,
     settings: Settings = Depends(get_settings),
 ) -> RunwayGenerateResponse:
-    if not settings.runway_mock:
-        model = resolve_model(req.model, settings)
-        has_image = bool(req.prompt_image and req.prompt_image.strip())
-        if image_required_for(model) and not has_image:
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    f"prompt_image is required for Runway image_to_video real mode "
-                    f"(model={model}). Use model=gen4.5 for text-only generation."
-                ),
-            )
+    model = resolve_model(req.model, settings)
+    has_image = bool(req.prompt_image and req.prompt_image.strip())
+    # In mock mode we still validate model/ratio/duration so the UI gets the
+    # same 400s as it would in real mode, but we skip the image-required
+    # check — the in-memory mock task succeeds with a sample MP4 regardless.
+    try:
+        validate_generation_settings(
+            model=model,
+            ratio=req.ratio,
+            duration=req.duration,
+            has_image=has_image,
+            enforce_image_required=not settings.runway_mock,
+        )
+    except GenerationSettingsError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     try:
         return create_task(req, settings)
     except httpx.HTTPStatusError as exc:

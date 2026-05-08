@@ -24,6 +24,67 @@ logger = logging.getLogger(__name__)
 # `promptImage`.
 _TEXT_ONLY_CAPABLE_MODELS = {"gen4.5"}
 
+# Per-model generation policy (PR C). Limits what the router will accept so a
+# misconfigured request never spends Runway quota on a combination Runway will
+# reject anyway. The set of values intentionally tracks what AdSpark exposes
+# in the UI — broader Runway support exists for some models but is out of
+# scope for the hackathon build.
+GENERATION_POLICY: dict[str, dict] = {
+    "gen4_turbo": {
+        "image_required": True,
+        "ratios": {"1280:720", "720:1280", "960:960"},
+        "durations": {5},
+    },
+    "gen4.5": {
+        "image_required": False,
+        "ratios": {"1280:720", "720:1280", "960:960"},
+        "durations": {5, 8, 10},
+    },
+}
+
+
+class GenerationSettingsError(ValueError):
+    """Raised when the requested model/ratio/duration/image combination is
+    rejected by AdSpark's policy. The router maps this to HTTP 400.
+    """
+
+
+def validate_generation_settings(
+    model: str,
+    ratio: str,
+    duration: int,
+    has_image: bool,
+    *,
+    enforce_image_required: bool = True,
+) -> None:
+    """Enforce the per-model generation policy. Raises GenerationSettingsError
+    on the first failure with a human-readable message.
+
+    ``enforce_image_required`` lets callers (mock mode) skip the image
+    requirement check while still getting model/ratio/duration validation.
+    """
+    policy = GENERATION_POLICY.get(model)
+    if policy is None:
+        supported = sorted(GENERATION_POLICY.keys())
+        raise GenerationSettingsError(
+            f"unsupported model '{model}'. supported: {supported}"
+        )
+    if ratio not in policy["ratios"]:
+        raise GenerationSettingsError(
+            f"unsupported ratio '{ratio}' for model {model}. "
+            f"supported: {sorted(policy['ratios'])}"
+        )
+    if duration not in policy["durations"]:
+        raise GenerationSettingsError(
+            f"unsupported duration {duration}s for model {model}. "
+            f"supported: {sorted(policy['durations'])}"
+        )
+    if enforce_image_required and policy["image_required"] and not has_image:
+        raise GenerationSettingsError(
+            f"prompt_image is required for model {model}. "
+            "Use model=gen4.5 for text-only generation."
+        )
+
 # Local image-cache route prefix used by image_client + this client to swap a
 # locally-served URL for a base64 data URI before posting to Runway. Mirrors
 # the FastAPI route registered at GET /api/runway/image/{image_id}.
@@ -38,7 +99,10 @@ def resolve_model(req_model: Optional[str], settings: Settings) -> str:
 
 def image_required_for(model: str) -> bool:
     """Return True iff this video model requires `promptImage` to be supplied."""
-    return model not in _TEXT_ONLY_CAPABLE_MODELS
+    policy = GENERATION_POLICY.get(model)
+    if policy is None:
+        return model not in _TEXT_ONLY_CAPABLE_MODELS
+    return bool(policy["image_required"])
 
 
 @dataclass

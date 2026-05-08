@@ -11,6 +11,16 @@ const POLL_INTERVAL_MS = 5000
 const POLL_MAX_ATTEMPTS = 60
 
 const DEFAULT_MODEL = 'gen4_turbo'
+const DEFAULT_RATIO = '1280:720'
+const DEFAULT_DURATION = 5
+
+// Mirror of backend GENERATION_POLICY (services/runway_client.py). Used here
+// only to clamp duration when the model changes — backend is the source of
+// truth and re-validates every generate call.
+const ALLOWED_DURATIONS = {
+  gen4_turbo: [5],
+  'gen4.5': [5, 8, 10],
+}
 
 export default function App() {
   const [health, setHealth] = useState(null)
@@ -20,6 +30,8 @@ export default function App() {
   const [prompt, setPrompt] = useState('')
   const [imageUrl, setImageUrl] = useState('')
   const [model, setModel] = useState(DEFAULT_MODEL)
+  const [ratio, setRatio] = useState(DEFAULT_RATIO)
+  const [duration, setDuration] = useState(DEFAULT_DURATION)
   const [textOnly, setTextOnly] = useState(false)
   const [generatedImage, setGeneratedImage] = useState(null) // { image_url, image_id, mock_mode, model }
   const [task, setTask] = useState(null)
@@ -95,8 +107,8 @@ export default function App() {
       const resp = await api.startRunway({
         prompt_text: prompt,
         prompt_image: useTextOnly ? null : trimmedImage || null,
-        duration: 5,
-        ratio: '1280:720',
+        duration,
+        ratio,
         model,
       })
       setTask({
@@ -231,12 +243,20 @@ export default function App() {
             setModel(m)
             // text-only is only valid for gen4.5 — collapse if model changes off it
             if (m !== 'gen4.5') setTextOnly(false)
+            // clamp duration to what the new model supports (default to first
+            // allowed value if the current selection is no longer valid)
+            const allowed = ALLOWED_DURATIONS[m] || [DEFAULT_DURATION]
+            if (!allowed.includes(duration)) setDuration(allowed[0])
           }}
           textOnly={textOnly}
           onTextOnlyChange={setTextOnly}
           onGenerateImage={handleGenerateImage}
           imageBusy={busy.image}
           imageMockMode={generatedImage?.mock_mode}
+          ratio={ratio}
+          onRatioChange={setRatio}
+          duration={duration}
+          onDurationChange={setDuration}
         />
       )}
 

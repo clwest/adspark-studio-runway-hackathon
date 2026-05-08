@@ -72,6 +72,24 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
     page.getByRole('button', { name: /^Generate Reference Image$/i }),
   ).toBeVisible()
 
+  // 7b. PR C UI — source ratio + duration selectors with documented defaults.
+  const ratioSelect = page.getByLabel('source ratio')
+  const durationSelect = page.getByLabel('duration')
+  await expect(ratioSelect).toBeVisible()
+  await expect(durationSelect).toBeVisible()
+  // Default model is gen4_turbo, so the duration selector is disabled +
+  // pinned at 5.
+  await expect(ratioSelect).toHaveValue('1280:720')
+  await expect(durationSelect).toHaveValue('5')
+  await expect(durationSelect).toBeDisabled()
+  // Settings summary chips render the active values.
+  const settings = page.getByLabel('active generation settings')
+  await expect(settings).toBeVisible()
+  await expect(settings.getByText('gen4_turbo')).toBeVisible()
+  await expect(settings.getByText('Landscape')).toBeVisible()
+  await expect(settings.getByText('5s', { exact: true })).toBeVisible()
+  await expect(settings.getByText('reference image')).toBeVisible()
+
   // 8. Reference Image URL — placeholder value to mirror the demo path
   await page
     .getByPlaceholder(/images\.unsplash\.com\/photo/i)
