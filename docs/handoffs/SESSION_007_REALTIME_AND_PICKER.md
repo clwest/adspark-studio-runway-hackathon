@@ -328,6 +328,73 @@ If continuing post-hackathon:
 Pricing tier sketches in `SUBMISSION.md` "Why this matters" / Future
 roadmap (Free / Creator / Brand / Enterprise).
 
+## Curated Avatar Library (2026-05-08, post-merge)
+
+After the v4 push, the Avatar Picker was visually noisy: 8 avatars in
+the account, all created from the same default
+`RUNWAY_HOST_PORTRAIT_URL` Unsplash photo during PR-A-through-I
+probes, all using the `vincent` voice preset, all named "AdSpark
+Brand Spokesperson". Functionally the picker worked; visually it
+looked like duplicate noise. Three curated avatars were created and
+four orphans were deleted to make the picker meaningful.
+
+### Created (additive — never delete or rename without checking
+campaigns.json references)
+
+| Avatar id | Name | Voice preset | Source portrait |
+|---|---|---|---|
+| `e71a1e97-f6ee-4923-a0a1-543c56488448` | AdSpark Founder | vincent | `photo-1507003211169-0a1dd7228f2d` |
+| `aae74963-984e-456e-9013-a02cb9da85d2` | AdSpark Creative Director | victoria | `photo-1494790108377-be9c29b29330` |
+| `03de8c24-6d18-40ef-ad8c-dab0b23ca065` | AdSpark Local Guide | drew | `photo-1500648767791-00dcc994a43e` |
+
+All three processed PROCESSING → READY in ~30–45 s and are visible
+at the top of `GET /v1/avatars` (the list is sorted createdAt-desc).
+None are referenced by any campaign — they're available for the
+picker only.
+
+### Deleted (orphan-only sweep)
+
+Verified zero campaign references before deletion. All four returned
+HTTP 204 from `DELETE /v1/avatars/{id}`:
+
+| Avatar id | Name | Status before delete | Reason orphan |
+|---|---|---|---|
+| `636bf16e-f5d7-4e4e-888c-bd850b57794a` | AdSpark Brand Spokesperson | FAILED | PR-F probe with non-portrait input; never referenced |
+| `e0684c6a-1bd8-48ed-828f-138ab2d30082` | AdSpark Host | READY | PR-F-V1 first-pass, replaced by V2 reframe |
+| `943df2b4-60ba-4f88-bc0c-82c7b387e1c2` | AdSpark Probe Host v3 | READY | PR-F probe; never bound to a campaign |
+| `ed880edd-8f83-448f-9a86-e9e0e864c6ab` | AdSpark Probe Host | FAILED | PR-F probe with flat charcoal placeholder; never referenced |
+
+### Untouched (campaign-referenced)
+
+The four remaining `AdSpark Brand Spokesperson` avatars all share
+the same Vincent face but are referenced by real campaigns. **Do
+not delete without rewriting their host_avatar_id references first.**
+
+| Avatar id | Referenced by |
+|---|---|
+| `6f18ad26-5976-4891-b085-61c1646c1251` | `9a717c675ec6` (the hero/demo campaign) |
+| `13e3c138-0c45-417c-8f80-ebcff8c9705c` | `311968dc615b` |
+| `5fa94bca-86d2-47fd-a70f-ca2892938773` | `131aa193fe28` |
+| `70bbe01d-d7f3-4aa0-be47-4f516a2f7edb` | `ad879b62d566` |
+
+### Notes for future sessions
+
+- **Runway preset characters are not API-accessible** as of the
+  PR-I+ probe (`/v1/avatar_videos` + `/v1/realtime_sessions` validate
+  `avatar.avatarId` as a UUID). The "preset" UX is currently faked
+  in mock mode only; real mode lists the account's customs. The
+  curated avatars above are the workaround that gives the picker
+  visible variety.
+- The picker re-uses **any** account-created READY avatar via
+  `GET /v1/avatars` — so creating more curated avatars is purely
+  additive (no code change needed).
+- If `RUNWAY_HOST_PORTRAIT_URL` ever rotates to a different photo,
+  future Create-Brand-Spokesperson clicks will produce a new
+  duplicate-style "AdSpark Brand Spokesperson" entry for the new
+  face. To prevent that, replacing the single env var with a
+  rotation pool (~10 LOC service-level change) is a small future
+  improvement, but not required for the demo recording.
+
 ## Reference docs
 
 - `README.md` — quickstart + Mermaid diagram + endpoint table.
