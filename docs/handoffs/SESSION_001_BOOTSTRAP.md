@@ -233,6 +233,58 @@ real Runway calls in this session.
 - `vite build` clean.
 - Zero real Runway calls this session.
 
+## Session 001g — Playwright browser smoke + docs
+
+Closed the runtime-verification gap from earlier sessions where
+"`vite build` passes" was treated as proof the polish actually worked.
+
+- Added `@playwright/test ^1.59.1` (devDep) and Chromium browser.
+- `frontend/playwright.config.js`: chromium-only, `baseURL=:5173`, retries
+  0, workers 1, trace `retain-on-failure`, screenshot `only-on-failure`,
+  25 s expect timeout.
+- `frontend/tests/adspark-smoke.spec.js`: 13-step end-to-end flow that
+  drives the actual React app. Uses button-role and stable-placeholder
+  selectors so leftover saved campaigns from prior runs don't cause
+  strict-mode locator collisions. Captures `pageerror` (always fatal) and
+  `console.error` (filtered to drop video-network noise that's unrelated
+  to React correctness).
+- `npm run test:e2e` script wired up.
+- `frontend/.gitignore` extended for `test-results/`, `playwright-report/`,
+  `.playwright/`.
+
+Verified locally:
+- backend started with `RUNWAY_API_KEY= OPENAI_API_KEY=` shell override
+  (no `.env` modification),
+- 1/1 test passed in 16.4 s,
+- backend log: 0 outbound `api.dev.runwayml.com` calls, 0 tracebacks,
+- servers stopped cleanly afterward.
+
+The test caught a real correctness issue on its first run: the original
+selector `getByText('Daily Ritual…')` matched both the new concept-card
+and a leftover gallery card with the same title (strict-mode violation).
+Tightening to `getByRole('button', { name: /Daily Ritual/ })` made it
+data-independent.
+
+## Current local commits
+
+```
+396814b test: add Playwright smoke test for hackathon demo flow
+6d0e14d feat: polish hackathon demo flow
+af33af5 docs: record first successful Runway generation smoke
+a18e3d7 feat: require reference image for Runway real mode
+13bec74 feat: bootstrap AdSpark Studio hackathon app
+```
+
+| Commit | Headline |
+|---|---|
+| `13bec74` | Bootstrap — FastAPI + React/Vite scaffolds, mock fallbacks, context-kit docs |
+| `a18e3d7` | Reference image required in Runway real mode (backend 400 + UI input) |
+| `af33af5` | Documented the first successful real Runway generation (Session 001e) |
+| `6d0e14d` | Demo polish — `ModeBanner`, richer `CampaignGallery` cards, README demo script |
+| `396814b` | Playwright browser smoke test for the polished mock flow |
+
+No remote yet. No push performed at any point.
+
 ## Open follow-ups
 - Decide whether the form should support an optional reference image upload —
   Runway's image-to-video path benefits from one.

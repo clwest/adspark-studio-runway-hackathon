@@ -121,6 +121,53 @@ Pick any public image URL (product photo, storefront photo, campaign hero
 image). The text prompt describes the motion and feel; the image anchors
 the look.
 
+## Browser smoke test (Playwright)
+
+A single Chromium-driven end-to-end test exercises the polished mock flow
+in a real browser. It loads the app at `:5173`, asserts the ModeBanner
+mounts, fills the form, walks through Generate Concepts → Generate Video
+(mock task) → Save → gallery, and asserts no uncaught page errors and
+no unfiltered console errors.
+
+**Required runtime** (start these in two separate terminals before running
+the test):
+
+```bash
+# 1) backend in fully mocked mode (does NOT touch the repo-root .env;
+#    the empty shell vars take precedence over the .env file values)
+cd backend && source .venv/bin/activate
+RUNWAY_API_KEY= OPENAI_API_KEY= uvicorn app.main:app --port 8000
+
+# 2) Vite on :5173
+cd frontend && npm run dev
+```
+
+Then run the test:
+
+```bash
+cd frontend && npm run test:e2e
+```
+
+What it verifies:
+- `ModeBanner` renders the per-provider mock pills and the header MOCK
+  MODE chip (proves `/health` round-trip works through the Vite proxy).
+- `POST /api/concepts` returns 3 concept cards and exactly one
+  `recommended` pill.
+- `POST /api/runway/generate` produces a `mock_*` task and the polling
+  loop reaches `SUCCEEDED` inside the 25 s expect timeout.
+- Saving the campaign causes the `CampaignGallery` to render a new
+  card with a `video ready` pill.
+- No uncaught `pageerror` events. Console errors are filtered to drop
+  unrelated `<video>` network noise (`BigBuckBunny`,
+  `MEDIA_ELEMENT_ERROR`, `net::ERR_*`); anything else fails the test.
+
+The test is **single-shot, single-worker** and never calls the real
+Runway or OpenAI APIs. Don't run it against a backend with real keys
+in the shell environment — the assertions specifically expect mock pills.
+
+Test artifacts (`frontend/test-results/`, `frontend/playwright-report/`,
+`frontend/.playwright/`) are gitignored.
+
 ## Endpoints
 
 | Method | Path | Purpose |
