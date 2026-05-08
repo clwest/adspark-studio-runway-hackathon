@@ -17,6 +17,11 @@ def post_generate(
     req: RunwayGenerateRequest,
     settings: Settings = Depends(get_settings),
 ) -> RunwayGenerateResponse:
+    if not settings.runway_mock and not (req.prompt_image and req.prompt_image.strip()):
+        raise HTTPException(
+            status_code=400,
+            detail="prompt_image is required for Runway image_to_video real mode",
+        )
     try:
         return create_task(req, settings)
     except httpx.HTTPStatusError as exc:

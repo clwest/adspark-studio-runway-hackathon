@@ -14,7 +14,8 @@ cd backend
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env       # leave keys blank to stay in mock mode
+cp .env.example ../.env    # repo-root .env is the single source of secrets;
+                           # leave keys blank to stay in mock mode
 uvicorn app.main:app --reload --port 8000
 ```
 
@@ -44,7 +45,7 @@ This is the intended demo path. Nothing reaches a third-party API in mock mode.
 
 ## Adding real keys
 
-Drop them into `backend/.env`:
+Drop them into the **repo-root** `.env` (single source of local secrets):
 
 ```env
 RUNWAY_API_KEY=rwk_...           # https://dev.runwayml.com
@@ -54,10 +55,27 @@ OPENAI_API_KEY=sk-...            # optional, only for concept generation
 OPENAI_MODEL=gpt-4o-mini
 ```
 
-Restart `uvicorn`. The MOCK MODE badge will disappear once both keys are set.
+Restart `uvicorn`. The MOCK MODE badge disappears only when both keys are set;
+if only Runway is set, the badge stays (concepts are still mocked).
 
 > **Heads-up:** real Runway calls cost credits. The app never auto-generates —
 > it only hits Runway when the user clicks **Generate Video**.
+
+### Runway is image-to-video — `prompt_image` is required in real mode
+
+Runway's `/v1/image_to_video` endpoint needs a public image URL to drive the
+motion. The app enforces this:
+
+- **Real mode** (`RUNWAY_API_KEY` set): the backend returns
+  `400 prompt_image is required for Runway image_to_video real mode` if you
+  call `POST /api/runway/generate` without `prompt_image`. The UI shows the
+  reference-image field as **required**.
+- **Mock mode** (no key): `prompt_image` is optional; the in-memory mock
+  task ignores it and still "succeeds" with the sample MP4.
+
+Pick any public image URL (product photo, storefront photo, campaign hero
+image). The text prompt describes the motion and feel; the image anchors
+the look.
 
 ## Endpoints
 
@@ -65,7 +83,7 @@ Restart `uvicorn`. The MOCK MODE badge will disappear once both keys are set.
 |---|---|---|
 | `GET` | `/health` | Liveness + mock-mode flags |
 | `POST` | `/api/concepts` | `{business, product, tone, audience}` → 3 concepts + recommended Runway prompt |
-| `POST` | `/api/runway/generate` | `{prompt_text, prompt_image?, duration, ratio}` → `{task_id, status}` |
+| `POST` | `/api/runway/generate` | `{prompt_text, prompt_image?, duration, ratio}` → `{task_id, status}`. `prompt_image` is required in real mode (backend returns 400 if missing); optional in mock mode. |
 | `GET` | `/api/runway/task/{task_id}` | Poll status; clients should use ≥5s interval + jitter |
 | `POST` | `/api/campaigns` | Save a campaign card to local JSON |
 | `GET` | `/api/campaigns` | List saved campaigns |

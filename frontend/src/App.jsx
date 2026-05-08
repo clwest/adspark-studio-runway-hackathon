@@ -15,6 +15,7 @@ export default function App() {
   const [conceptResp, setConceptResp] = useState(null)
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [prompt, setPrompt] = useState('')
+  const [imageUrl, setImageUrl] = useState('')
   const [task, setTask] = useState(null)
   const [campaigns, setCampaigns] = useState([])
   const [savedId, setSavedId] = useState(null)
@@ -82,7 +83,13 @@ export default function App() {
     setBusy((b) => ({ ...b, runway: true }))
     setSavedId(null)
     try {
-      const resp = await api.startRunway({ prompt_text: prompt, duration: 5, ratio: '1280:720' })
+      const trimmedImage = imageUrl.trim()
+      const resp = await api.startRunway({
+        prompt_text: prompt,
+        prompt_image: trimmedImage || null,
+        duration: 5,
+        ratio: '1280:720',
+      })
       setTask({ task_id: resp.task_id, status: resp.status, progress: 0, output: [], mock_mode: resp.mock_mode })
       startPolling(resp.task_id)
     } catch (e) {
@@ -161,6 +168,9 @@ export default function App() {
         <PromptPreview
           prompt={prompt}
           onChange={setPrompt}
+          imageUrl={imageUrl}
+          onImageUrlChange={setImageUrl}
+          requireImage={health ? health.runway_mock === false : false}
           onGenerate={handleGenerateVideo}
           busy={busy.runway || (task && !['SUCCEEDED', 'FAILED', 'CANCELED'].includes(task.status))}
           disabled={busy.runway}

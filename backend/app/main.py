@@ -1,9 +1,9 @@
 import logging
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .config import get_settings
+from .config import Settings, get_settings
 from .routers.campaigns import router as campaigns_router
 from .routers.concepts import router as concepts_router
 from .routers.runway import router as runway_router
@@ -27,8 +27,7 @@ app.include_router(campaigns_router)
 
 
 @app.get("/health")
-def health() -> dict:
-    s = get_settings()
+def health(s: Settings = Depends(get_settings)) -> dict:
     return {
         "status": "ok",
         "service": "adspark-studio",

@@ -81,6 +81,82 @@ foreign repository content as their body.
   pycache + `data/` + `*.pyc`, frontend `node_modules/` + `dist/` + `.vite/`,
   plus `.DS_Store` and `*.log`. `git init` has not yet been run.
 
+## Session 001c — first real Runway smoke test (FAILED — promptImage required)
+
+One controlled real Runway call was made with the suggested coffee-shop test
+parameters (`promptText` only, no `promptImage`, duration 5, ratio 1280:720,
+default model `gen4_turbo`). Result: Runway returned **HTTP 400** before
+queueing a task — no credits consumed, no task id issued.
+
+**Key finding:** the `/v1/image_to_video` endpoint **requires `promptImage`**.
+The validation error came back with `path: ["promptImage"]`, `code:
+invalid_type`, `message: "Invalid input: expected string, received undefined"`
+(it accepts either a URL string or an array of frame objects). The earlier
+WebFetch summary that called `promptImage` "optional" was wrong; the live API
+contract treats it as required.
+
+Per the operator's stop-rule, no image-generation workaround was added. The
+following session should decide between:
+
+1. **Add an image input to the form** — accept a URL or upload, pass it as
+   `prompt_image` in `RunwayGenerateRequest` (the field is already wired).
+2. **Add a still-image generation step** before the Runway call — e.g. call
+   OpenAI Images / DALL-E from a new backend service, store the URL, then
+   pass that URL to Runway. This is heavier and adds a second paid provider.
+3. **Switch endpoint** if Runway exposes a true text-to-video endpoint for the
+   account/tier in use. (Not confirmed in docs as of this session.)
+
+What still works:
+- Backend `/health` returned `runway_mock:false`, `openai_mock:true` before
+  the call — env loading is correct.
+- Campaign save/list path is independent of Runway and was re-verified
+  end-to-end after the 400 (POST then GET, second saved row visible in
+  `backend/data/campaigns.json`).
+- Mock mode remains fully functional when `RUNWAY_API_KEY` is removed.
+
+**No additional Runway calls were made.** Only the single failed POST plus
+ordinary `/health` and `/api/campaigns` calls.
+
+## Session 001d — `prompt_image` wired through (no second real call yet)
+
+Fix for the 001c blocker (Runway 400 because `promptImage` is required):
+
+- **Backend** `routers/runway.py`: added a guard at the top of
+  `POST /api/runway/generate` that returns
+  `400 prompt_image is required for Runway image_to_video real mode` whenever
+  the backend is in real Runway mode (`settings.runway_mock is False`) and
+  the request omits `prompt_image`. This fails fast in our own code, before
+  any outbound httpx call to Runway — so a misconfigured client costs zero
+  Runway quota.
+- **Backend models**: `RunwayGenerateRequest.prompt_image: Optional[str]` was
+  already in place from 001a; no schema change required. `runway_client.py`
+  already forwards it as `promptImage` when present.
+- **Mock mode** still accepts requests without `prompt_image` — the field is
+  ignored by the in-memory mock task.
+- **Frontend** `PromptPreview.jsx`: added a Reference Image URL input under
+  the prompt textarea. Helper text describes acceptable inputs (product
+  photo, storefront photo, campaign hero). When `health.runway_mock === false`
+  the field is labeled "(required in real mode)" and the Generate Video
+  button stays disabled until the URL is non-empty; an inline rose-colored
+  warning explains why. In mock mode the field is labeled "(optional)" and
+  empty submission is allowed.
+- **Frontend** `App.jsx`: passes `imageUrl` state to PromptPreview, includes
+  `prompt_image` in `POST /api/runway/generate`, derives `requireImage` from
+  `health.runway_mock === false`.
+- **README** updated: repo-root `.env` is documented as the single source of
+  secrets; new section explicitly states image-to-video requires
+  `prompt_image` in real mode and shows the exact 400 message.
+
+**Verification (no real Runway call this session):**
+- `GET /health` → `{openai_mock:true, runway_mock:false, any_mock:true}` ✓
+- Backend's own 400 path verified: real-mode + missing `prompt_image` →
+  HTTP 400 with the documented message, no httpx request to Runway.
+- Mock-mode path verified via TestClient + dependency override (settings
+  with empty `runway_api_key`): same request without `prompt_image` returns
+  200 with a `mock_<id>` task.
+- Frontend `vite build` clean.
+- **Zero real Runway generation calls** were made this session.
+
 ## Open follow-ups
 - Decide whether the form should support an optional reference image upload —
   Runway's image-to-video path benefits from one.
