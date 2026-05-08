@@ -32,6 +32,50 @@ npm run dev
 Open `http://localhost:5173`. Vite proxies `/api` and `/health` to the
 backend on port 8000.
 
+## Hackathon demo script (≈3 minutes live)
+
+This is the path that's been smoke-tested end-to-end against real Runway.
+Have a public reference image URL ready before you start.
+
+1. **Start backend** in one terminal:
+   ```bash
+   cd backend && source .venv/bin/activate
+   uvicorn app.main:app --reload --port 8000
+   ```
+   The Mode banner in the app reads `/health` to label each provider.
+2. **Start frontend** in a second terminal:
+   ```bash
+   cd frontend && npm run dev
+   ```
+   Open `http://localhost:5173`. Note the Mode banner — `Concepts: mock`
+   and `Runway: real` is the typical hackathon configuration.
+3. **Generate concepts.** Fill the form (e.g. business `Local coffee shop`,
+   product `Morning blend`, tone `cinematic`, audience `morning commuters`)
+   and click **Generate Ad Concepts**. Three cards appear; one is flagged
+   `recommended`. The recommended Runway prompt drops into the prompt box.
+4. **Pick a different concept if you want.** Clicking another card swaps
+   selection (the prompt box stays editable).
+5. **Paste a public image URL** into the Reference Image URL field. A
+   product photo or storefront shot works. The field is required because
+   Runway is in real `image_to_video` mode.
+6. **Click Generate Video.** The Runway panel appears with a status pill
+   and progress bar. Polling is automatic (≥5s + jitter, capped at 5 min).
+   Real Gen-4 Turbo at duration 5 typically finishes in 8–30 seconds.
+7. **Preview the video.** When status hits `SUCCEEDED`, the panel renders
+   an inline `<video>` element with a Download link.
+8. **Save the campaign.** Click **Save campaign card**. The Saved
+   campaigns gallery below picks up the new card with the inline video
+   preview, the prompt (collapsed under a `prompt` disclosure), and a
+   small "URL may expire" tag — Runway artifact URLs are presigned and
+   expire after ~a week, so demoing the same saved card the next morning
+   may show a broken video. Re-generate or cache the asset for longer
+   demos.
+
+If anything misbehaves mid-demo, stop the Generate flow and switch the
+Mode banner to fully mocked: remove `RUNWAY_API_KEY` from the repo-root
+`.env`, restart `uvicorn`, and the same UI works on the in-memory mock
+task with the public sample MP4.
+
 ## Demo mode (no keys)
 
 With `RUNWAY_API_KEY` and `OPENAI_API_KEY` blank/missing:

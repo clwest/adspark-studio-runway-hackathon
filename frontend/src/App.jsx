@@ -5,6 +5,7 @@ import ConceptCards from './components/ConceptCards.jsx'
 import PromptPreview from './components/PromptPreview.jsx'
 import RunwayPanel from './components/RunwayPanel.jsx'
 import CampaignGallery from './components/CampaignGallery.jsx'
+import ModeBanner from './components/ModeBanner.jsx'
 
 const POLL_INTERVAL_MS = 5000
 const POLL_MAX_ATTEMPTS = 60
@@ -152,6 +153,8 @@ export default function App() {
           {error}
         </div>
       )}
+
+      <ModeBanner health={health} />
 
       <CampaignForm onSubmit={handleConcepts} busy={busy.concepts} />
 

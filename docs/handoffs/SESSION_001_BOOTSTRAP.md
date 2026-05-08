@@ -200,6 +200,39 @@ Runway quota during the prior empty-image attempt.
 **No additional Runway calls made** — exactly one real generation this
 session.
 
+## Session 001f — demo polish (no real Runway calls)
+
+UI polish to make the app demo-ready, plus a written demo script. Zero
+real Runway calls in this session.
+
+- **`frontend/src/components/ModeBanner.jsx`** (new) — replaces the
+  ambiguous "MOCK MODE" pill with an explicit Mode card that shows two
+  pills (`Concepts: real|mock`, `Runway video: real|mock`) plus an inline
+  `real Runway verified` chip when `runway_mock === false`. Below the
+  pills is a short demo-mode / real-mode / partial-mock explainer. When
+  Runway is real, an additional rose line reminds the user the reference
+  image URL is required.
+- **`frontend/src/App.jsx`** — imports and mounts `<ModeBanner />` between
+  the error banner and the form. The header MOCK MODE pill still shows
+  while any provider is mocked (kept for at-a-glance signal).
+- **`frontend/src/components/CampaignGallery.jsx`** — richer cards: title,
+  caption, collapsible prompt (`<details>`), inline `<video>` preview when
+  `video_url` exists, "video ready / no video" status pill, truncated
+  Runway task id, "URL may expire" hint. No backend schema change — uses
+  fields already saved.
+- **`README.md`** — new "Hackathon demo script" section with the 8-step
+  live walkthrough (start backend → start frontend → generate concepts →
+  pick concept → paste image URL → generate video → preview → save). Also
+  notes the URL-expiry caveat and the fallback to fully mocked mode if
+  anything misbehaves mid-demo.
+
+**No backend changes** — this is pure UI/docs polish.
+
+**Verification**:
+- Live `/health` unchanged: `{openai_mock:true, runway_mock:false, any_mock:true}` ✓
+- `vite build` clean.
+- Zero real Runway calls this session.
+
 ## Open follow-ups
 - Decide whether the form should support an optional reference image upload —
   Runway's image-to-video path benefits from one.
