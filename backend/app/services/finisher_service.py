@@ -46,12 +46,51 @@ def is_ffmpeg_available() -> bool:
     return shutil.which("ffmpeg") is not None
 
 
+def is_ffprobe_available() -> bool:
+    return shutil.which("ffprobe") is not None
+
+
+def has_audio_stream(path: Path) -> bool:
+    """PR S — return True iff the file at ``path`` has at least one audio
+    stream. Uses ffprobe; gracefully returns False when ffprobe is missing
+    or the file is unreadable (caller surfaces the right user-facing
+    message).
+    """
+    if not is_ffprobe_available() or not path.exists():
+        return False
+    cmd = [
+        "ffprobe",
+        "-v", "error",
+        "-select_streams", "a",
+        "-show_entries", "stream=codec_type",
+        "-of", "csv=p=0",
+        str(path),
+    ]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+    except (subprocess.TimeoutExpired, OSError):
+        return False
+    if result.returncode != 0:
+        return False
+    return "audio" in (result.stdout or "")
+
+
 @dataclass
 class FinishResult:
     status: str  # "ok" | "failed" | "unavailable"
     output_path: Optional[Path] = None
     error: Optional[str] = None
     fmt: str = LANDSCAPE
+
+
+# PR S — Commercial with Voice result. Mirrors FinishResult so the router
+# can surface failures the same way Campaign Pack does, but with its own
+# error vocabulary (no_video / no_host / no_audio / unavailable / failed).
+@dataclass
+class CommercialResult:
+    status: str  # "ok" | "no_video" | "no_host" | "no_audio" | "unavailable" | "failed"
+    output_path: Optional[Path] = None
+    error: Optional[str] = None
 
 
 class VideoFinisher:
@@ -90,6 +129,146 @@ class VideoFinisher:
             if p.exists():
                 out[fmt] = p
         return out
+
+    # ---- PR S — Commercial with Voice ------------------------------
+
+    def commercial_path_for(self, campaign_id: str) -> Path:
+        """Where the voiced-commercial MP4 lives (gitignored under
+        backend/data/finished/). Distinct filename so it doesn't collide
+        with the Campaign Pack outputs.
+        """
+        return self.dir / f"{campaign_id}-commercial-voice.mp4"
+
+    def has_commercial_with_voice(self, campaign_id: str) -> bool:
+        return self.commercial_path_for(campaign_id).exists()
+
+    def build_commercial_with_voice(
+        self,
+        campaign_id: str,
+        video_path: Path,
+        host_path: Path,
+        timeout: float = 90.0,
+    ) -> CommercialResult:
+        """Combine the silent campaign visual (input A) with the audio
+        track from the Avatar Host Clip (input B) into a single MP4.
+
+        Strategy: ``-map 0:v -map 1:a -c:v copy -c:a aac -shortest``.
+        Visual stream is copied verbatim (no re-encode) so the visual
+        cut is preserved bit-for-bit; audio is re-encoded to AAC for
+        compatibility; ``-shortest`` trims to the shorter of the two
+        inputs (typically the 5-second visual cut), giving the user
+        the first beat of the host clip's pitch laid over the ad.
+
+        Preconditions are caller-checked (router emits 409s); this
+        method assumes both files exist + host has audio.
+        """
+        if not is_ffmpeg_available():
+            return CommercialResult(
+                status="unavailable",
+                error="ffmpeg not found on PATH",
+            )
+        if not video_path.exists():
+            return CommercialResult(
+                status="no_video",
+                error=f"visual video missing: {video_path.name}",
+            )
+        if not host_path.exists():
+            return CommercialResult(
+                status="no_host",
+                error=f"host clip missing: {host_path.name}",
+            )
+        if not has_audio_stream(host_path):
+            return CommercialResult(
+                status="no_audio",
+                error="host clip has no audio stream",
+            )
+
+        target = self.commercial_path_for(campaign_id)
+        tmp = target.with_suffix(".mp4.tmp")
+        cmd = [
+            "ffmpeg",
+            "-y",
+            "-loglevel", "error",
+            "-i", str(video_path),
+            "-i", str(host_path),
+            "-map", "0:v:0",
+            "-map", "1:a:0",
+            "-c:v", "copy",
+            "-c:a", "aac",
+            "-b:a", "192k",
+            "-shortest",
+            "-movflags", "+faststart",
+            "-f", "mp4",
+            str(tmp),
+        ]
+        try:
+            logger.info(
+                "running ffmpeg commercial-with-voice for campaign %s",
+                campaign_id,
+            )
+            result = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=timeout
+            )
+            if result.returncode != 0:
+                stderr = (result.stderr or "").strip()[-300:]
+                tmp.unlink(missing_ok=True)
+                # Some Runway visual MP4s have unusual codec parameters that
+                # libx264 -copy can't write back into MP4. Retry once with
+                # a re-encode pass — slower but more compatible.
+                cmd_reencode = [
+                    "ffmpeg",
+                    "-y",
+                    "-loglevel", "error",
+                    "-i", str(video_path),
+                    "-i", str(host_path),
+                    "-map", "0:v:0",
+                    "-map", "1:a:0",
+                    "-c:v", "libx264",
+                    "-preset", "veryfast",
+                    "-crf", "23",
+                    "-c:a", "aac",
+                    "-b:a", "192k",
+                    "-shortest",
+                    "-movflags", "+faststart",
+                    "-f", "mp4",
+                    str(tmp),
+                ]
+                result = subprocess.run(
+                    cmd_reencode, capture_output=True, text=True, timeout=timeout * 2,
+                )
+                if result.returncode != 0:
+                    stderr = (result.stderr or "").strip()[-300:]
+                    tmp.unlink(missing_ok=True)
+                    return CommercialResult(
+                        status="failed",
+                        error=f"ffmpeg rc={result.returncode}: {stderr}",
+                    )
+            if not tmp.exists():
+                return CommercialResult(
+                    status="failed",
+                    error="ffmpeg ok but output missing",
+                )
+            tmp.replace(target)
+            return CommercialResult(status="ok", output_path=target)
+        except subprocess.TimeoutExpired:
+            tmp.unlink(missing_ok=True)
+            return CommercialResult(
+                status="failed",
+                error=f"ffmpeg timed out after {timeout}s",
+            )
+        except OSError as exc:
+            tmp.unlink(missing_ok=True)
+            return CommercialResult(
+                status="failed",
+                error=f"io error: {exc}"[:200],
+            )
+        except Exception as exc:
+            tmp.unlink(missing_ok=True)
+            logger.exception("unexpected ffmpeg error (commercial-with-voice)")
+            return CommercialResult(
+                status="failed",
+                error=f"unexpected: {exc!s}"[:200],
+            )
 
     def finish(
         self,

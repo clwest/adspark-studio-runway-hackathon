@@ -191,6 +191,24 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
     ).toBeVisible()
   }
 
+  // 13a.2 — PR S — Commercial with Voice section in the Visuals tab.
+  //         The smoke saves a campaign without a host clip so the
+  //         gated path renders: section header + button is disabled +
+  //         the explanatory amber line points the user at the
+  //         Character tab.
+  await expect(newestCard.getByText(/^Commercial with Voice$/)).toBeVisible()
+  await expect(
+    newestCard.getByText(/Combines the silent visual cut with the Avatar Host Clip audio/i),
+  ).toBeVisible()
+  const buildCommercialBtn = newestCard.getByRole('button', {
+    name: /^Build Commercial with Voice$/i,
+  })
+  await expect(buildCommercialBtn).toBeVisible()
+  await expect(buildCommercialBtn).toBeDisabled()
+  await expect(
+    newestCard.getByText(/Generate the Avatar Host Clip first/i),
+  ).toBeVisible()
+
   // 13b. Character tab — Brand Spokesperson section + Avatar Picker.
   await newestCard.getByRole('tab', { name: 'Character' }).click()
   await expect(newestCard.getByText(/^Brand Spokesperson$/)).toBeVisible()
@@ -242,9 +260,12 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
 
   // 13e. Exports tab — file-ledger renders, with at least the visual
   //      ad row present (every saved campaign has a video URL or a
-  //      "not generated yet" placeholder for it).
+  //      "not generated yet" placeholder for it). PR S — also asserts
+  //      the Commercial with Voice row is in the ledger; gated state
+  //      shows "not generated yet" since the smoke didn't build it.
   await newestCard.getByRole('tab', { name: 'Exports' }).click()
   await expect(newestCard.getByText(/Visual ad \(silent cut\)/i)).toBeVisible()
+  await expect(newestCard.getByText(/^Commercial with Voice$/)).toBeVisible()
 
   // 13. Console / page errors — page errors are always fatal; console errors
   //     are filtered to drop video-network noise.

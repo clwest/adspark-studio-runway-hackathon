@@ -137,6 +137,12 @@ class Campaign(CampaignCreate):
     dubbed_audio_urls: dict[str, str] = {}  # lang_code -> /api/campaigns/{id}/audio/dub-{lang}
     dub_statuses: dict[str, str] = {}       # lang_code -> "ok" | "failed"
     dub_errors: dict[str, str] = {}         # lang_code -> error message
+    # PR S — Commercial with Voice. Combines the silent visual cut with the
+    # Avatar Host Clip's audio track via local ffmpeg. All optional;
+    # backward-compatible with old campaign records that predate the field.
+    voiced_commercial_url: Optional[str] = None
+    voiced_commercial_status: Optional[Literal["ok", "failed", "no_video", "no_host", "no_audio", "unavailable"]] = None
+    voiced_commercial_error: Optional[str] = None
 
 
 class CampaignList(BaseModel):

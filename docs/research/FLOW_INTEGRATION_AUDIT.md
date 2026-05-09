@@ -797,3 +797,73 @@ video caption that points users *to* the Audio Pack).
 instructions probe (P1 #9), Commercial with Voice (P1 #7+#8),
 ffmpeg audio mixing, `/v1/text_to_speech`, webcam, marketplace,
 Character Studio K.5 polish.
+
+---
+
+## PR S — Commercial with Voice — implemented (2026-05-08)
+
+The "the campaign video is silent and there's no voiced final ad"
+gap from §"Flow 3 — Commercial sound / voice connection" is now
+closed. Branch `feature/pr-s-commercial-with-voice`, commit
+[updated separately on push].
+
+**What landed**:
+
+- New `POST /api/campaigns/{id}/commercial-with-voice` (route count
+  37 → 39 with the GET twin; 38 was the upload route on PR R).
+  ffmpeg combines `data/videos/<id>.mp4` (silent visual) with the
+  audio track from `data/host/<id>.mp4` (Avatar Host Clip); output
+  lands at `data/finished/<id>-commercial-voice.mp4`.
+- Strategy: `-map 0:v:0 -map 1:a:0 -c:v copy -c:a aac -shortest` —
+  visual stream is copied verbatim (no re-encode), audio is
+  re-encoded to AAC, output trims to the shorter input (typically
+  the 5-second visual cut). Falls back to `libx264 -crf 23` re-encode
+  if the copy pass fails on unusual codec parameters.
+- Preconditions: 409 with friendly UI-facing copy when (a) no cached
+  video, (b) no host clip, or (c) host clip has no audio stream
+  (mock placeholders are silent — the user gets an honest message).
+- New `GET /api/campaigns/{id}/commercial-with-voice` streams the
+  cached output (`video/mp4`).
+- Three new Campaign fields: `voiced_commercial_url` /
+  `voiced_commercial_status` (`ok | failed | no_video | no_host |
+  no_audio | unavailable`) / `voiced_commercial_error`. Backward
+  compatible — old campaign records read fine without them.
+- Frontend Visuals tab gains a spark-tinted "Commercial with Voice"
+  section with adaptive states (gated → button enabled → playing →
+  rebuild). Exports tab gets a row in the ledger between Pack and
+  Host Clip. Prompt-panel copy points users at the post-save flow.
+- Playwright smoke asserts the section renders + the gated button is
+  disabled with the "Generate the Avatar Host Clip first" copy after
+  a fresh save (no host clip yet).
+
+**Real verification**: campaign `9a717c675ec6` (existing real-mode
+hero) — POST returned `voiced_commercial_status: ok`. ffprobe on
+the output:
+
+| Stream | Codec | Sample rate | Duration |
+|---|---|---|---|
+| video | h264 | — | 5.04 s |
+| audio | aac | 48 kHz | 5.03 s |
+
+GET stream: 200 `video/mp4`, 2.6 MB. Browser-playable. Precondition
+probe: campaign without host clip returned 409 with the friendly
+"Generate the Avatar Host Clip first" message.
+
+**Remaining limitation — same as PR M's audit**: the audio source
+is the Avatar Host Clip's spoken pitch, not direct text-to-speech
+of an arbitrary script. Direct TTS (`/v1/text_to_speech`) remains
+gated. The host clip's first 5 s typically covers "Meet {business}.
+{hook}." which lands the brand identity even though the rest of the
+pitch trails off when `-shortest` trims to the 5-second visual cut.
+Two future improvements would close this:
+
+1. **`-stream_loop` the visual** to match the host audio duration
+   so the full pitch lands. Cost: visual repeats; might feel
+   artificial.
+2. **Direct TTS** if Runway opens the `/v1/text_to_speech` schema
+   (would let the user write any script and have the brand voice
+   read it over the visual cut).
+
+Neither is shipped here. Commercial with Voice today is the
+clearest "final ad" artefact AdSpark can produce without crossing
+those scope lines.

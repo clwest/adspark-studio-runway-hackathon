@@ -128,6 +128,7 @@ function CampaignCard({ c, onUpdated, onDeleted }) {
   const [hostBusy, setHostBusy] = useState(false)
   const [voiceBusy, setVoiceBusy] = useState(false)
   const [busyDubLang, setBusyDubLang] = useState(null)
+  const [commercialBusy, setCommercialBusy] = useState(false)  // PR S
   const [localError, setLocalError] = useState('')
   // PR K — Character attach picker. Lazy-loaded; only shown when the
   // user clicks "Attach Character".
@@ -189,6 +190,11 @@ function CampaignCard({ c, onUpdated, onDeleted }) {
 
   const finishUnavailable = c.finish_status === 'unavailable'
   const finishedCount = PACK_FORMATS.filter((f) => Boolean(finishedUrlFor(c, f.key))).length
+
+  // PR S — Commercial with Voice derivations.
+  const commercialReady = c.voiced_commercial_status === 'ok' && Boolean(c.voiced_commercial_url)
+  const commercialStatus = c.voiced_commercial_status || null
+  const hostReadyForCommercial = c.host_status === 'ok' && Boolean(c.host_video_url)
 
   const handleBuild = async (fmt) => {
     setLocalError('')
@@ -291,6 +297,24 @@ function CampaignCard({ c, onUpdated, onDeleted }) {
       setLocalError(`dub ${lang}: ${e}`)
     } finally {
       setBusyDubLang(null)
+    }
+  }
+
+  // PR S — Commercial with Voice. Combines silent visual cut + Avatar
+  // Host Clip audio. Backend returns 409 with friendly copy when the
+  // preconditions aren't met; we surface that copy verbatim so the
+  // user knows whether to save the campaign, generate a host clip, or
+  // both.
+  const handleBuildCommercial = async () => {
+    setLocalError('')
+    setCommercialBusy(true)
+    try {
+      const updated = await api.buildCommercialWithVoice(c.id)
+      onUpdated?.(updated)
+    } catch (e) {
+      setLocalError(`commercial: ${e}`)
+    } finally {
+      setCommercialBusy(false)
     }
   }
 
@@ -539,6 +563,106 @@ function CampaignCard({ c, onUpdated, onDeleted }) {
           )}
         </div>
       )}
+
+      {/* PR S — Commercial with Voice. Always rendered when the visual
+          tab is open so the user understands the artefact exists; the
+          body adapts based on which preconditions are met. */}
+      <div className="space-y-2 rounded-lg ring-1 ring-spark/20 bg-spark/5 p-3">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-zinc-200">
+              Commercial with Voice
+            </span>
+            <span
+              className="text-[10px] text-zinc-500 font-mono"
+              title="Combines the silent visual cut with the Avatar Host Clip audio via local ffmpeg."
+            >
+              voiced MP4
+            </span>
+          </div>
+          {commercialReady && (
+            <span className="text-[10px] rounded-full bg-emerald-500/20 text-emerald-300 px-2 py-0.5 font-mono">
+              ready
+            </span>
+          )}
+          {commercialStatus && commercialStatus !== 'ok' && !commercialBusy && (
+            <span
+              className="text-[10px] rounded-full bg-rose-500/20 text-rose-300 px-2 py-0.5 font-mono"
+              title={c.voiced_commercial_error || ''}
+            >
+              {commercialStatus}
+            </span>
+          )}
+        </div>
+        <p className="text-[10px] text-zinc-500 leading-relaxed">
+          Combines the silent visual cut with the Avatar Host Clip
+          audio to create a voiced MP4. <span className="text-zinc-300">
+          The clearest "final ad" artefact — visual + spoken pitch in
+          one file.</span>
+        </p>
+        {commercialReady ? (
+          <div className="space-y-1.5">
+            <video
+              key={c.voiced_commercial_url}
+              src={c.voiced_commercial_url}
+              controls
+              preload="metadata"
+              className="w-full max-w-md rounded-lg ring-1 ring-zinc-800"
+            />
+            <div className="flex items-center gap-3 text-xs flex-wrap">
+              <a
+                href={c.voiced_commercial_url}
+                target="_blank"
+                rel="noreferrer"
+                className="text-spark hover:underline"
+                download
+              >
+                open voiced commercial ↗
+              </a>
+              <button
+                type="button"
+                onClick={handleBuildCommercial}
+                disabled={commercialBusy}
+                className="text-[10px] text-zinc-500 hover:text-zinc-300 disabled:opacity-50"
+                title="Re-build using the current visual + host clip"
+              >
+                {commercialBusy ? 'Building…' : 'rebuild'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            {!isCached && (
+              <p className="text-[10px] text-amber-300">
+                Save the campaign first — the cached visual MP4 is the input.
+              </p>
+            )}
+            {isCached && !hostReadyForCommercial && (
+              <p className="text-[10px] text-amber-300">
+                Generate the Avatar Host Clip first (Character tab).
+                Its audio is the voice track.
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={handleBuildCommercial}
+              disabled={commercialBusy || !isCached || !hostReadyForCommercial}
+              className="rounded-md bg-spark/80 hover:bg-spark text-ink text-xs font-semibold px-3 py-1.5 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-spark"
+            >
+              {commercialBusy
+                ? 'Building Commercial with Voice…'
+                : commercialStatus && commercialStatus !== 'ok'
+                ? 'Retry Commercial with Voice'
+                : 'Build Commercial with Voice'}
+            </button>
+            {c.voiced_commercial_error && commercialStatus !== 'ok' && (
+              <p className="text-[10px] text-rose-300" title={c.voiced_commercial_error}>
+                {c.voiced_commercial_error}
+              </p>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   )
 
@@ -1077,6 +1201,13 @@ function CampaignCard({ c, onUpdated, onDeleted }) {
       url: finishedUrlFor(c, f.key),
       meta: 'local ffmpeg output',
     })),
+    // PR S — voiced final ad. Sits between the Pack outputs and the
+    // host clip in the ledger so it reads as the main "final" artefact.
+    {
+      label: 'Commercial with Voice',
+      url: commercialReady ? c.voiced_commercial_url : null,
+      meta: 'visual cut + host clip audio (ffmpeg)',
+    },
     {
       label: 'Avatar Host Clip',
       url: hostReady ? c.host_video_url : null,

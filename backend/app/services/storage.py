@@ -253,6 +253,27 @@ class CampaignStore:
             self._write(new_rows)
             return True
 
+    def update_voiced_commercial_fields(
+        self,
+        campaign_id: str,
+        voiced_commercial_url: Optional[str],
+        voiced_commercial_status: Optional[str],
+        voiced_commercial_error: Optional[str],
+    ) -> Optional[Campaign]:
+        """PR S — persist Commercial with Voice fields. Mirrors the per-feature
+        update helpers used elsewhere in this store.
+        """
+        with _LOCK:
+            rows = self._read()
+            for row in rows:
+                if row.get("id") == campaign_id:
+                    row["voiced_commercial_url"] = voiced_commercial_url
+                    row["voiced_commercial_status"] = voiced_commercial_status
+                    row["voiced_commercial_error"] = voiced_commercial_error
+                    self._write(rows)
+                    return Campaign.model_validate(row)
+        return None
+
     def update_finish_fields(
         self,
         campaign_id: str,

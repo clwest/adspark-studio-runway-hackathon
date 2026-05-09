@@ -33,6 +33,7 @@ from ..services.finisher_service import (
     FORMAT_DIMS,
     LANDSCAPE,
     VideoFinisher,
+    has_audio_stream,
     is_ffmpeg_available,
 )
 from ..services.storage import CampaignStore, VideoCache
@@ -286,6 +287,122 @@ def get_finished_video_format(
         str(path),
         media_type="video/mp4",
         filename=f"adspark-{campaign_id}-finished-{fmt}.mp4",
+    )
+
+
+# ---- PR S — Commercial with Voice -----------------------------------
+
+
+@router.post("/{campaign_id}/commercial-with-voice", response_model=Campaign)
+def post_commercial_with_voice(
+    campaign_id: str,
+    settings: Settings = Depends(get_settings),
+    store: CampaignStore = Depends(_store),
+    cache: VideoCache = Depends(_video_cache),
+    finisher: VideoFinisher = Depends(_finisher),
+) -> Campaign:
+    """PR S — combine the silent visual cut + Avatar Host Clip audio
+    into a single voiced MP4 via local ffmpeg. No new Runway calls.
+
+    Preconditions (all surface as 409 Conflict so the UI can display
+    actionable copy without retrying):
+      - cached visual video exists (Save the campaign first).
+      - Avatar Host Clip exists (Generate the host clip first).
+      - host clip has at least one audio track (mock placeholders may
+        be silent — the user gets an honest message rather than a
+        muted output).
+    """
+    record = store.get(campaign_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="campaign not found")
+
+    video_path = cache.path_for(campaign_id)
+    if not video_path.exists():
+        raise HTTPException(
+            status_code=409,
+            detail="Save the visual video first. The cached MP4 is the input for the voiced commercial.",
+        )
+
+    # Avatar Host Clip path matches character_host_client.path_for —
+    # data/host/<id>.mp4. Computed inline to avoid a circular import
+    # since character_host_client also imports from this router's tree.
+    host_path = settings.data_path / "host" / f"{campaign_id}.mp4"
+    if not host_path.exists():
+        raise HTTPException(
+            status_code=409,
+            detail="Generate the Avatar Host Clip first. Its audio is the voice track for the commercial.",
+        )
+    if not has_audio_stream(host_path):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Host clip has no audio to mix. Mock-mode placeholders "
+                "may be silent — re-record with a real Runway key to get "
+                "a voiced clip."
+            ),
+        )
+
+    if not is_ffmpeg_available():
+        # Persist the unavailable state so the gallery shows a stable
+        # badge instead of a transient 503 the user keeps clicking past.
+        store.update_voiced_commercial_fields(
+            campaign_id,
+            voiced_commercial_url=None,
+            voiced_commercial_status="unavailable",
+            voiced_commercial_error="ffmpeg not found on PATH",
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="ffmpeg is not installed on the server",
+        )
+
+    result = finisher.build_commercial_with_voice(
+        campaign_id, video_path, host_path,
+    )
+
+    if result.status == "ok":
+        logger.info(
+            "commercial-with-voice ok campaign=%s -> %s",
+            campaign_id, result.output_path,
+        )
+        updated = store.update_voiced_commercial_fields(
+            campaign_id,
+            voiced_commercial_url=f"/api/campaigns/{campaign_id}/commercial-with-voice",
+            voiced_commercial_status="ok",
+            voiced_commercial_error=None,
+        )
+    else:
+        logger.warning(
+            "commercial-with-voice %s campaign=%s err=%s",
+            result.status, campaign_id, result.error,
+        )
+        updated = store.update_voiced_commercial_fields(
+            campaign_id,
+            voiced_commercial_url=None,
+            voiced_commercial_status=result.status,
+            voiced_commercial_error=result.error,
+        )
+    return updated or record
+
+
+@router.get("/{campaign_id}/commercial-with-voice")
+def get_commercial_with_voice(
+    campaign_id: str,
+    finisher: VideoFinisher = Depends(_finisher),
+) -> FileResponse:
+    """Stream the cached voiced-commercial MP4. Returns 404 when the
+    user hasn't built it yet — the POST route is the way to generate.
+    """
+    path = finisher.commercial_path_for(campaign_id)
+    if not path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="No voiced commercial for this campaign",
+        )
+    return FileResponse(
+        str(path),
+        media_type="video/mp4",
+        filename=f"adspark-{campaign_id}-commercial-voice.mp4",
     )
 
 

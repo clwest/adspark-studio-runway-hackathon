@@ -29,6 +29,14 @@ export const api = {
       `/api/campaigns/${encodeURIComponent(campaignId)}/finish?format=${encodeURIComponent(format)}`,
       { method: 'POST' },
     ),
+  // PR S — Commercial with Voice. Combines silent visual cut + Avatar
+  // Host Clip audio into a voiced MP4 via local ffmpeg. No new Runway
+  // calls; preconditions are 409s the UI handles.
+  buildCommercialWithVoice: (campaignId) =>
+    jsonFetch(
+      `/api/campaigns/${encodeURIComponent(campaignId)}/commercial-with-voice`,
+      { method: 'POST' },
+    ),
   createSpokesperson: (campaignId, body = {}) =>
     jsonFetch(
       `/api/campaigns/${encodeURIComponent(campaignId)}/avatar`,
