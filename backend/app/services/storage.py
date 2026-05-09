@@ -274,6 +274,115 @@ class CampaignStore:
                     return Campaign.model_validate(row)
         return None
 
+    def update_storyboard_plan(
+        self,
+        campaign_id: str,
+        shots: "list[dict]",
+        storyboard_status: Optional[str],
+        storyboard_error: Optional[str] = None,
+    ) -> Optional[Campaign]:
+        """PR Z — write the planned storyboard shots + status. Resets
+        the stitched MP4 + voiced storyboard fields so a re-plan
+        invalidates any older stitched output.
+        """
+        with _LOCK:
+            rows = self._read()
+            for row in rows:
+                if row.get("id") == campaign_id:
+                    row["storyboard_shots"] = shots
+                    row["storyboard_status"] = storyboard_status
+                    row["storyboard_error"] = storyboard_error
+                    row["storyboard_video_url"] = None
+                    row["storyboard_voiced_url"] = None
+                    row["storyboard_voiced_status"] = None
+                    row["storyboard_voiced_error"] = None
+                    self._write(rows)
+                    return Campaign.model_validate(row)
+        return None
+
+    def update_storyboard_shot(
+        self,
+        campaign_id: str,
+        shot_id: str,
+        *,
+        status: Optional[str] = None,
+        task_id: Optional[str] = None,
+        video_url: Optional[str] = None,
+        cache_filename: Optional[str] = None,
+        error: Optional[str] = None,
+        mock_mode: Optional[bool] = None,
+    ) -> Optional[Campaign]:
+        """PR Z — patch one shot's status / output URL / error. Other
+        shots stay untouched.
+        """
+        with _LOCK:
+            rows = self._read()
+            for row in rows:
+                if row.get("id") == campaign_id:
+                    shots = list(row.get("storyboard_shots") or [])
+                    matched = False
+                    for shot in shots:
+                        if shot.get("id") == shot_id:
+                            matched = True
+                            if status is not None:
+                                shot["status"] = status
+                            if task_id is not None:
+                                shot["task_id"] = task_id
+                            if video_url is not None or status == "ok":
+                                shot["video_url"] = video_url
+                            if cache_filename is not None:
+                                shot["cache_filename"] = cache_filename
+                            shot["error"] = error
+                            if mock_mode is not None:
+                                shot["mock_mode"] = mock_mode
+                            break
+                    if not matched:
+                        return None
+                    row["storyboard_shots"] = shots
+                    self._write(rows)
+                    return Campaign.model_validate(row)
+        return None
+
+    def update_storyboard_stitch(
+        self,
+        campaign_id: str,
+        storyboard_video_url: Optional[str],
+        storyboard_status: Optional[str],
+        storyboard_error: Optional[str],
+    ) -> Optional[Campaign]:
+        """PR Z — persist stitched-output fields after ffmpeg concat."""
+        with _LOCK:
+            rows = self._read()
+            for row in rows:
+                if row.get("id") == campaign_id:
+                    row["storyboard_video_url"] = storyboard_video_url
+                    row["storyboard_status"] = storyboard_status
+                    row["storyboard_error"] = storyboard_error
+                    self._write(rows)
+                    return Campaign.model_validate(row)
+        return None
+
+    def update_storyboard_voiced(
+        self,
+        campaign_id: str,
+        storyboard_voiced_url: Optional[str],
+        storyboard_voiced_status: Optional[str],
+        storyboard_voiced_error: Optional[str],
+    ) -> Optional[Campaign]:
+        """PR Z — persist voiced-storyboard fields. Mirrors
+        update_voiced_commercial_fields shape.
+        """
+        with _LOCK:
+            rows = self._read()
+            for row in rows:
+                if row.get("id") == campaign_id:
+                    row["storyboard_voiced_url"] = storyboard_voiced_url
+                    row["storyboard_voiced_status"] = storyboard_voiced_status
+                    row["storyboard_voiced_error"] = storyboard_voiced_error
+                    self._write(rows)
+                    return Campaign.model_validate(row)
+        return None
+
     def update_finish_fields(
         self,
         campaign_id: str,

@@ -312,6 +312,21 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
     newestCard.getByText(/Attach or create a spokesperson first/i),
   ).toBeVisible()
 
+  // 13a.3 — PR Z — Storyboard Commercial Builder. The Visuals tab also
+  //          renders the Storyboard subsection. Initial state shows the
+  //          "Plan Storyboard" button + the explainer copy. Don't click
+  //          Plan in the smoke — mutating the campaign on disk during
+  //          mock runs is unnecessary; the rendered JSX is the
+  //          load-bearing assertion.
+  await expect(newestCard.getByText(/^Storyboard Commercial$/)).toBeVisible()
+  await expect(newestCard.getByText(/3 shots · ~15 s/)).toBeVisible()
+  await expect(
+    newestCard.getByText(/Plans Hook → Action → Payoff prompts/i),
+  ).toBeVisible()
+  await expect(
+    newestCard.getByRole('button', { name: /^Plan Storyboard$/i }),
+  ).toBeVisible()
+
   // 13b. Character tab — Brand Spokesperson section + Avatar Picker.
   await newestCard.getByRole('tab', { name: 'Character' }).click()
   await expect(newestCard.getByText(/^Brand Spokesperson$/)).toBeVisible()
@@ -371,6 +386,9 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
   await newestCard.getByRole('tab', { name: 'Exports' }).click()
   await expect(newestCard.getByText(/Visual ad \(silent cut\)/i)).toBeVisible()
   await expect(newestCard.getByText(/^Voiced Commercial$/)).toBeVisible()
+  // PR Z — storyboard ledger rows.
+  await expect(newestCard.getByText(/^Storyboard Commercial$/)).toBeVisible()
+  await expect(newestCard.getByText(/^Voiced Storyboard$/)).toBeVisible()
 
   // 13. Console / page errors — page errors are always fatal; console errors
   //     are filtered to drop video-network noise.

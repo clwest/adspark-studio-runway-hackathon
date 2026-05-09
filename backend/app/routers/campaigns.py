@@ -36,6 +36,7 @@ from ..services.finisher_service import (
     has_audio_stream,
     is_ffmpeg_available,
 )
+from ..services import storyboard_service as storyboard_service  # type: ignore[attr-defined]
 from ..services.storage import CampaignStore, VideoCache
 
 logger = logging.getLogger(__name__)
@@ -132,6 +133,13 @@ def delete_campaign(
     candidates.append(data / "audio" / f"{campaign_id}-voice-preview.mp3")
     for lang in (record.dub_statuses or {}).keys():
         candidates.append(data / "audio" / f"{campaign_id}-dub-{lang}.mp3")
+    # PR S/X — voiced single-cut commercial.
+    candidates.append(data / "finished" / f"{campaign_id}-commercial-voice.mp4")
+    # PR Z — Storyboard shot caches + stitched + voiced storyboard outputs.
+    for shot in (record.storyboard_shots or []):
+        candidates.append(data / "storyboard" / f"{campaign_id}-{shot.id}.mp4")
+    candidates.append(data / "finished" / f"{campaign_id}-storyboard.mp4")
+    candidates.append(data / "finished" / f"{campaign_id}-storyboard-voice.mp4")
 
     for path in candidates:
         try:
@@ -510,6 +518,442 @@ def get_commercial_with_voice(
         str(path),
         media_type="video/mp4",
         filename=f"adspark-{campaign_id}-commercial-voice.mp4",
+    )
+
+
+# ---- PR Z — Storyboard Commercial Builder ---------------------------
+
+
+def _shot_video_url(campaign_id: str, shot_id: str) -> str:
+    return f"/api/campaigns/{campaign_id}/storyboard/shot/{shot_id}"
+
+
+@router.post("/{campaign_id}/storyboard/plan", response_model=Campaign)
+def post_storyboard_plan(
+    campaign_id: str,
+    settings: Settings = Depends(get_settings),
+    store: CampaignStore = Depends(_store),
+) -> Campaign:
+    """PR Z — generate a deterministic 3-shot storyboard plan from the
+    campaign's concept + attached character (or campaign reference
+    image fallback). Pure local computation — no Runway calls. Resets
+    any previously stitched storyboard output so a re-plan invalidates
+    stale visuals.
+    """
+    record = store.get(campaign_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="campaign not found")
+
+    shots = storyboard_service.plan_shots(record, settings)
+    if not any(shot.source_image_url for shot in shots):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Attach a Character or save a campaign with a "
+                "reference image first — the storyboard pins the "
+                "same image as prompt_image for every shot."
+            ),
+        )
+
+    serialised = [shot.model_dump() for shot in shots]
+    updated = store.update_storyboard_plan(
+        campaign_id,
+        shots=serialised,
+        storyboard_status="ready",
+        storyboard_error=None,
+    )
+    if not updated:
+        raise HTTPException(status_code=404, detail="campaign not found")
+    logger.info(
+        "storyboard plan campaign=%s shots=%d",
+        campaign_id, len(shots),
+    )
+    return updated
+
+
+@router.post(
+    "/{campaign_id}/storyboard/generate-shot/{shot_id}",
+    response_model=Campaign,
+)
+def post_storyboard_generate_shot(
+    campaign_id: str,
+    shot_id: str,
+    settings: Settings = Depends(get_settings),
+    store: CampaignStore = Depends(_store),
+) -> Campaign:
+    """PR Z — fire one Runway image_to_video task for the named shot.
+    Mock mode produces a deterministic ffmpeg-lavfi placeholder MP4.
+    """
+    record = store.get(campaign_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="campaign not found")
+
+    shots = list(record.storyboard_shots or [])
+    if not shots:
+        raise HTTPException(
+            status_code=409,
+            detail="Plan the storyboard first (POST /storyboard/plan).",
+        )
+
+    target_shot = next((s for s in shots if s.id == shot_id), None)
+    if not target_shot:
+        raise HTTPException(
+            status_code=404,
+            detail=f"shot {shot_id!r} not found in storyboard plan",
+        )
+
+    if not target_shot.source_image_url:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Shot has no source image. Re-plan the storyboard "
+                "after attaching a Character or saving a campaign with "
+                "a reference image."
+            ),
+        )
+
+    # Persist a "running" status so the UI can render a busy state.
+    store.update_storyboard_shot(
+        campaign_id, shot_id,
+        status="running",
+        error=None,
+    )
+
+    result = storyboard_service.generate_shot(record, target_shot, settings)
+    if result.status == "ok":
+        logger.info(
+            "storyboard shot ok campaign=%s shot=%s task=%s mock=%s",
+            campaign_id, shot_id, result.task_id, result.mock_mode,
+        )
+        updated = store.update_storyboard_shot(
+            campaign_id, shot_id,
+            status="ok",
+            task_id=result.task_id,
+            video_url=_shot_video_url(campaign_id, shot_id),
+            cache_filename=(result.output_path.name if result.output_path else None),
+            error=None,
+            mock_mode=result.mock_mode,
+        )
+        # Stitched/voiced storyboard outputs are stale once any shot
+        # changes — clear them so the user re-builds before sharing.
+        if updated:
+            updated = store.update_storyboard_stitch(
+                campaign_id,
+                storyboard_video_url=None,
+                storyboard_status="ready",
+                storyboard_error=None,
+            ) or updated
+            updated = store.update_storyboard_voiced(
+                campaign_id,
+                storyboard_voiced_url=None,
+                storyboard_voiced_status=None,
+                storyboard_voiced_error=None,
+            ) or updated
+    else:
+        logger.warning(
+            "storyboard shot %s campaign=%s shot=%s err=%s",
+            result.status, campaign_id, shot_id, result.error,
+        )
+        updated = store.update_storyboard_shot(
+            campaign_id, shot_id,
+            status="failed",
+            task_id=result.task_id,
+            video_url=None,
+            error=result.error,
+            mock_mode=result.mock_mode,
+        )
+    if not updated:
+        raise HTTPException(status_code=404, detail="campaign not found")
+    return updated
+
+
+@router.post("/{campaign_id}/storyboard/stitch", response_model=Campaign)
+def post_storyboard_stitch(
+    campaign_id: str,
+    settings: Settings = Depends(get_settings),
+    store: CampaignStore = Depends(_store),
+    finisher: VideoFinisher = Depends(_finisher),
+) -> Campaign:
+    """PR Z — concat every shot MP4 into a single landscape MP4 via
+    ffmpeg's filter_complex concat filter. Refuses unless every shot
+    is `ok`.
+    """
+    record = store.get(campaign_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="campaign not found")
+    shots = list(record.storyboard_shots or [])
+    if not shots:
+        raise HTTPException(
+            status_code=409,
+            detail="Plan the storyboard first (POST /storyboard/plan).",
+        )
+    if any(shot.status != "ok" for shot in shots):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "All storyboard shots must be ready before stitching. "
+                "Generate every shot first."
+            ),
+        )
+    if not is_ffmpeg_available():
+        store.update_storyboard_stitch(
+            campaign_id,
+            storyboard_video_url=None,
+            storyboard_status="failed",
+            storyboard_error="ffmpeg not found on PATH",
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="ffmpeg is not installed on the server",
+        )
+
+    shot_paths = [
+        storyboard_service.shot_path(settings, campaign_id, shot.id)
+        for shot in shots
+    ]
+    missing = [p.name for p in shot_paths if not p.exists()]
+    if missing:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "One or more shot caches are missing on disk: "
+                f"{missing}. Re-generate those shots."
+            ),
+        )
+
+    store.update_storyboard_stitch(
+        campaign_id,
+        storyboard_video_url=None,
+        storyboard_status="stitching",
+        storyboard_error=None,
+    )
+
+    result = finisher.build_storyboard(campaign_id, shot_paths)
+    if result.status == "ok":
+        logger.info(
+            "storyboard stitch ok campaign=%s -> %s",
+            campaign_id, result.output_path,
+        )
+        updated = store.update_storyboard_stitch(
+            campaign_id,
+            storyboard_video_url=f"/api/campaigns/{campaign_id}/storyboard-video",
+            storyboard_status="ok",
+            storyboard_error=None,
+        )
+    else:
+        logger.warning(
+            "storyboard stitch %s campaign=%s err=%s",
+            result.status, campaign_id, result.error,
+        )
+        updated = store.update_storyboard_stitch(
+            campaign_id,
+            storyboard_video_url=None,
+            storyboard_status="failed",
+            storyboard_error=result.error,
+        )
+    return updated or record
+
+
+@router.get("/{campaign_id}/storyboard-video")
+def get_storyboard_video(
+    campaign_id: str,
+    finisher: VideoFinisher = Depends(_finisher),
+) -> FileResponse:
+    path = finisher.storyboard_path(campaign_id)
+    if not path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="No storyboard video for this campaign",
+        )
+    return FileResponse(
+        str(path),
+        media_type="video/mp4",
+        filename=f"adspark-{campaign_id}-storyboard.mp4",
+    )
+
+
+@router.get("/{campaign_id}/storyboard/shot/{shot_id}")
+def get_storyboard_shot_video(
+    campaign_id: str,
+    shot_id: str,
+    settings: Settings = Depends(get_settings),
+) -> FileResponse:
+    path = storyboard_service.shot_path(settings, campaign_id, shot_id)
+    if not path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"No cached shot {shot_id!r} for this campaign",
+        )
+    return FileResponse(
+        str(path),
+        media_type="video/mp4",
+        filename=f"adspark-{campaign_id}-{shot_id}.mp4",
+    )
+
+
+@router.post("/{campaign_id}/storyboard/voiced", response_model=Campaign)
+def post_storyboard_voiced(
+    campaign_id: str,
+    body: Optional[CommercialWithVoiceBody] = None,
+    settings: Settings = Depends(get_settings),
+    store: CampaignStore = Depends(_store),
+    finisher: VideoFinisher = Depends(_finisher),
+) -> Campaign:
+    """PR Z — loop the stitched storyboard visual under the Avatar
+    Host Clip audio. Mirrors the PR S/X voiced-commercial flow: same
+    auto-host fallback, same -stream_loop -1 -shortest strategy.
+    """
+    opts = body or CommercialWithVoiceBody()
+
+    record = store.get(campaign_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="campaign not found")
+
+    storyboard_path = finisher.storyboard_path(campaign_id)
+    if not storyboard_path.exists():
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Stitch the storyboard visual first. The voiced "
+                "storyboard mixes host audio over that MP4."
+            ),
+        )
+    if not is_ffmpeg_available():
+        store.update_storyboard_voiced(
+            campaign_id,
+            storyboard_voiced_url=None,
+            storyboard_voiced_status="unavailable",
+            storyboard_voiced_error="ffmpeg not found on PATH",
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="ffmpeg is not installed on the server",
+        )
+
+    host_path = settings.data_path / "host" / f"{campaign_id}.mp4"
+    if not host_path.exists():
+        if not opts.auto_generate_host:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Generate the Avatar Host Clip first. Its audio is "
+                    "the voice track for the storyboard commercial."
+                ),
+            )
+        if (
+            not host_active_avatar_id(record, settings)
+            or host_active_avatar_status(record, settings) not in {"ready", "mock"}
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Create or attach a spokesperson first. The voiced "
+                    "storyboard uses the Avatar Host Clip's audio — "
+                    "which needs a ready Brand Spokesperson Avatar."
+                ),
+            )
+        logger.info(
+            "voiced storyboard campaign=%s — auto-generating host clip",
+            campaign_id,
+        )
+        host_result = generate_host_video(record, settings)
+        if host_result.status == "ok":
+            updated_host = store.update_host_video_fields(
+                campaign_id,
+                host_video_url=f"/api/campaigns/{campaign_id}/host-video",
+                host_status="ok",
+                host_error=None,
+                host_task_id=host_result.task_id,
+                host_mock_mode=host_result.mock_mode,
+            )
+            if updated_host:
+                record = updated_host
+        else:
+            store.update_host_video_fields(
+                campaign_id,
+                host_video_url=None,
+                host_status=host_result.status,
+                host_error=host_result.error,
+                host_task_id=host_result.task_id,
+                host_mock_mode=host_result.mock_mode,
+            )
+            store.update_storyboard_voiced(
+                campaign_id,
+                storyboard_voiced_url=None,
+                storyboard_voiced_status="failed",
+                storyboard_voiced_error=(
+                    f"auto-host failed: {host_result.error or host_result.status}"
+                ),
+            )
+            raise HTTPException(
+                status_code=502,
+                detail=(
+                    "Failed to auto-generate the Avatar Host Clip. "
+                    f"({host_result.error or host_result.status})"
+                ),
+            )
+        if not host_path.exists():
+            raise HTTPException(
+                status_code=502,
+                detail=(
+                    "Avatar Host Clip generation reported success but "
+                    "no file was written."
+                ),
+            )
+
+    if not has_audio_stream(host_path):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Host clip has no audio to mix. Mock-mode placeholders "
+                "may be silent — re-record with a real Runway key for "
+                "voiced output."
+            ),
+        )
+
+    result = finisher.build_voiced_storyboard(
+        campaign_id, storyboard_path, host_path,
+    )
+    if result.status == "ok":
+        logger.info(
+            "voiced storyboard ok campaign=%s -> %s",
+            campaign_id, result.output_path,
+        )
+        updated = store.update_storyboard_voiced(
+            campaign_id,
+            storyboard_voiced_url=f"/api/campaigns/{campaign_id}/storyboard-voiced-video",
+            storyboard_voiced_status="ok",
+            storyboard_voiced_error=None,
+        )
+    else:
+        logger.warning(
+            "voiced storyboard %s campaign=%s err=%s",
+            result.status, campaign_id, result.error,
+        )
+        updated = store.update_storyboard_voiced(
+            campaign_id,
+            storyboard_voiced_url=None,
+            storyboard_voiced_status=result.status,
+            storyboard_voiced_error=result.error,
+        )
+    return updated or record
+
+
+@router.get("/{campaign_id}/storyboard-voiced-video")
+def get_storyboard_voiced_video(
+    campaign_id: str,
+    finisher: VideoFinisher = Depends(_finisher),
+) -> FileResponse:
+    path = finisher.storyboard_voiced_path(campaign_id)
+    if not path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="No voiced storyboard for this campaign",
+        )
+    return FileResponse(
+        str(path),
+        media_type="video/mp4",
+        filename=f"adspark-{campaign_id}-storyboard-voice.mp4",
     )
 
 

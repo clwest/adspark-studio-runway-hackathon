@@ -311,6 +311,242 @@ class VideoFinisher:
                 error=f"unexpected: {exc!s}"[:200],
             )
 
+    # ---- PR Z — Storyboard Commercial Builder -----------------------
+
+    def storyboard_dir(self) -> Path:
+        d = self.dir.parent / "storyboard"
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
+    def storyboard_shot_path(self, campaign_id: str, shot_id: str) -> Path:
+        return self.storyboard_dir() / f"{campaign_id}-{shot_id}.mp4"
+
+    def storyboard_path(self, campaign_id: str) -> Path:
+        """Where the stitched (silent) storyboard MP4 lives."""
+        return self.dir / f"{campaign_id}-storyboard.mp4"
+
+    def has_storyboard(self, campaign_id: str) -> bool:
+        return self.storyboard_path(campaign_id).exists()
+
+    def storyboard_voiced_path(self, campaign_id: str) -> Path:
+        """Where the voiced storyboard MP4 lives."""
+        return self.dir / f"{campaign_id}-storyboard-voice.mp4"
+
+    def has_storyboard_voiced(self, campaign_id: str) -> bool:
+        return self.storyboard_voiced_path(campaign_id).exists()
+
+    def build_storyboard(
+        self,
+        campaign_id: str,
+        shot_paths: list[Path],
+        *,
+        target_w: int = 1280,
+        target_h: int = 720,
+        fps: int = 30,
+        timeout: float = 180.0,
+    ) -> CommercialResult:
+        """PR Z — concat N cached shot MP4s into a single landscape MP4
+        via ffmpeg's filter_complex `concat` filter. Each input is
+        normalised to the target dims / fps / square pixels first so
+        the output has a uniform stream regardless of any small
+        differences across Runway clips.
+
+        Mirrors `build_commercial_with_voice` in shape: never raises,
+        returns a `CommercialResult` whose status the caller maps to
+        an HTTP response. Output is **silent** — voiced storyboard is
+        a separate ffmpeg pass.
+        """
+        if not is_ffmpeg_available():
+            return CommercialResult(
+                status="unavailable",
+                error="ffmpeg not found on PATH",
+            )
+        if not shot_paths:
+            return CommercialResult(
+                status="failed",
+                error="no shot inputs supplied",
+            )
+        for p in shot_paths:
+            if not p.exists():
+                return CommercialResult(
+                    status="failed",
+                    error=f"missing shot input: {p.name}",
+                )
+
+        target = self.storyboard_path(campaign_id)
+        tmp = target.with_suffix(".mp4.tmp")
+
+        # Build filter_complex: normalise each input then concat.
+        norm_filters = []
+        concat_in = ""
+        for idx in range(len(shot_paths)):
+            norm_filters.append(
+                f"[{idx}:v]scale={target_w}:{target_h}:force_original_aspect_ratio=increase,"
+                f"crop={target_w}:{target_h},setsar=1,fps={fps}[v{idx}]"
+            )
+            concat_in += f"[v{idx}]"
+        filter_complex = (
+            ";".join(norm_filters)
+            + f";{concat_in}concat=n={len(shot_paths)}:v=1:a=0[outv]"
+        )
+
+        cmd = ["ffmpeg", "-y", "-loglevel", "error"]
+        for p in shot_paths:
+            cmd += ["-i", str(p)]
+        cmd += [
+            "-filter_complex", filter_complex,
+            "-map", "[outv]",
+            "-c:v", "libx264",
+            "-preset", "veryfast",
+            "-crf", "23",
+            "-pix_fmt", "yuv420p",
+            "-movflags", "+faststart",
+            "-f", "mp4",
+            str(tmp),
+        ]
+        try:
+            logger.info(
+                "ffmpeg storyboard concat campaign=%s shots=%d",
+                campaign_id, len(shot_paths),
+            )
+            result = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=timeout
+            )
+            if result.returncode != 0:
+                stderr = (result.stderr or "").strip()[-400:]
+                tmp.unlink(missing_ok=True)
+                return CommercialResult(
+                    status="failed",
+                    error=f"ffmpeg rc={result.returncode}: {stderr}",
+                )
+            if not tmp.exists():
+                return CommercialResult(
+                    status="failed",
+                    error="ffmpeg ok but storyboard output missing",
+                )
+            tmp.replace(target)
+            return CommercialResult(status="ok", output_path=target)
+        except subprocess.TimeoutExpired:
+            tmp.unlink(missing_ok=True)
+            return CommercialResult(
+                status="failed",
+                error=f"ffmpeg timed out after {timeout}s",
+            )
+        except OSError as exc:
+            tmp.unlink(missing_ok=True)
+            return CommercialResult(
+                status="failed",
+                error=f"io error: {exc}"[:200],
+            )
+        except Exception as exc:
+            tmp.unlink(missing_ok=True)
+            logger.exception("unexpected ffmpeg error (storyboard concat)")
+            return CommercialResult(
+                status="failed",
+                error=f"unexpected: {exc!s}"[:200],
+            )
+
+    def build_voiced_storyboard(
+        self,
+        campaign_id: str,
+        storyboard_path: Path,
+        host_path: Path,
+        *,
+        timeout: float = 180.0,
+    ) -> CommercialResult:
+        """PR Z — loop the stitched storyboard visual under the Avatar
+        Host Clip audio. Same -stream_loop / -shortest strategy PR X
+        uses for the single-cut voiced commercial. Output ends when
+        host audio ends; storyboard visual loops if shorter.
+
+        Caller is responsible for confirming both inputs exist + host
+        has audio.
+        """
+        if not is_ffmpeg_available():
+            return CommercialResult(
+                status="unavailable",
+                error="ffmpeg not found on PATH",
+            )
+        if not storyboard_path.exists():
+            return CommercialResult(
+                status="no_video",
+                error=f"storyboard missing: {storyboard_path.name}",
+            )
+        if not host_path.exists():
+            return CommercialResult(
+                status="no_host",
+                error=f"host clip missing: {host_path.name}",
+            )
+        if not has_audio_stream(host_path):
+            return CommercialResult(
+                status="no_audio",
+                error="host clip has no audio stream",
+            )
+
+        target = self.storyboard_voiced_path(campaign_id)
+        tmp = target.with_suffix(".mp4.tmp")
+        cmd = [
+            "ffmpeg",
+            "-y",
+            "-loglevel", "error",
+            "-stream_loop", "-1",
+            "-i", str(storyboard_path),
+            "-i", str(host_path),
+            "-map", "0:v:0",
+            "-map", "1:a:0",
+            "-c:v", "libx264",
+            "-preset", "veryfast",
+            "-crf", "23",
+            "-pix_fmt", "yuv420p",
+            "-c:a", "aac",
+            "-b:a", "192k",
+            "-shortest",
+            "-movflags", "+faststart",
+            "-f", "mp4",
+            str(tmp),
+        ]
+        try:
+            logger.info(
+                "ffmpeg voiced storyboard campaign=%s",
+                campaign_id,
+            )
+            result = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=timeout
+            )
+            if result.returncode != 0:
+                stderr = (result.stderr or "").strip()[-400:]
+                tmp.unlink(missing_ok=True)
+                return CommercialResult(
+                    status="failed",
+                    error=f"ffmpeg rc={result.returncode}: {stderr}",
+                )
+            if not tmp.exists():
+                return CommercialResult(
+                    status="failed",
+                    error="ffmpeg ok but voiced storyboard output missing",
+                )
+            tmp.replace(target)
+            return CommercialResult(status="ok", output_path=target)
+        except subprocess.TimeoutExpired:
+            tmp.unlink(missing_ok=True)
+            return CommercialResult(
+                status="failed",
+                error=f"ffmpeg timed out after {timeout}s",
+            )
+        except OSError as exc:
+            tmp.unlink(missing_ok=True)
+            return CommercialResult(
+                status="failed",
+                error=f"io error: {exc}"[:200],
+            )
+        except Exception as exc:
+            tmp.unlink(missing_ok=True)
+            logger.exception("unexpected ffmpeg error (voiced storyboard)")
+            return CommercialResult(
+                status="failed",
+                error=f"unexpected: {exc!s}"[:200],
+            )
+
     def finish(
         self,
         campaign_id: str,

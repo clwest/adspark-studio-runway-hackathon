@@ -94,6 +94,25 @@ FinishStatus = Literal["ok", "failed", "unavailable"]
 HostStatus = Literal["ok", "failed", "unavailable"]
 
 
+# ---- PR Z — Storyboard Commercial Builder --------------------------
+
+StoryboardShotStatus = Literal["idle", "pending", "running", "ok", "failed"]
+
+
+class StoryboardShot(BaseModel):
+    id: str  # "shot-1" / "shot-2" / "shot-3"
+    label: str  # human-readable beat label ("Hook" / "Action" / "Payoff")
+    prompt: str
+    source_image_url: Optional[str] = None
+    task_id: Optional[str] = None
+    status: StoryboardShotStatus = "idle"
+    video_url: Optional[str] = None  # /api/campaigns/{id}/storyboard/shot/<shot_id>
+    cache_filename: Optional[str] = None  # filename only; full path resolved server-side
+    duration: int = 5
+    error: Optional[str] = None
+    mock_mode: Optional[bool] = None
+
+
 class Campaign(CampaignCreate):
     id: str
     created_at: datetime
@@ -143,6 +162,20 @@ class Campaign(CampaignCreate):
     voiced_commercial_url: Optional[str] = None
     voiced_commercial_status: Optional[Literal["ok", "failed", "no_video", "no_host", "no_audio", "unavailable"]] = None
     voiced_commercial_error: Optional[str] = None
+    # PR Z — Storyboard Commercial Builder. Three image-to-video shots
+    # stitched into a longer commercial via ffmpeg. Shots are
+    # individually retryable; stitch refuses until all are `ok`.
+    storyboard_shots: list["StoryboardShot"] = []
+    storyboard_status: Optional[Literal[
+        "idle", "planning", "ready", "stitching", "ok", "failed"
+    ]] = None
+    storyboard_video_url: Optional[str] = None
+    storyboard_error: Optional[str] = None
+    storyboard_voiced_url: Optional[str] = None
+    storyboard_voiced_status: Optional[Literal[
+        "ok", "failed", "no_video", "no_host", "no_audio", "unavailable"
+    ]] = None
+    storyboard_voiced_error: Optional[str] = None
 
 
 class CampaignList(BaseModel):

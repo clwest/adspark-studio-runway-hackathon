@@ -141,6 +141,13 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
   const [voiceBusy, setVoiceBusy] = useState(false)
   const [busyDubLang, setBusyDubLang] = useState(null)
   const [commercialBusy, setCommercialBusy] = useState(false)  // PR S
+  // PR Z — Storyboard Commercial Builder. busy flags scoped per
+  // operation so multiple shot generations don't collide and the
+  // stitch / voiced-storyboard buttons stay independently togglable.
+  const [storyboardPlanBusy, setStoryboardPlanBusy] = useState(false)
+  const [storyboardShotBusy, setStoryboardShotBusy] = useState(null) // shot id or null
+  const [storyboardStitchBusy, setStoryboardStitchBusy] = useState(false)
+  const [storyboardVoicedBusy, setStoryboardVoicedBusy] = useState(false)
   const [localError, setLocalError] = useState('')
   // PR K — Character attach picker. Lazy-loaded; only shown when the
   // user clicks "Attach Character".
@@ -210,6 +217,17 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
   const commercialReady = c.voiced_commercial_status === 'ok' && Boolean(c.voiced_commercial_url)
   const commercialStatus = c.voiced_commercial_status || null
   const hostReadyForCommercial = c.host_status === 'ok' && Boolean(c.host_video_url)
+
+  // PR Z — Storyboard Commercial Builder derivations. Mirrors the
+  // PR S/X derivation shape so the gating UX is consistent.
+  const storyboardShots = Array.isArray(c.storyboard_shots) ? c.storyboard_shots : []
+  const storyboardPlanned = storyboardShots.length > 0
+  const storyboardAllShotsReady =
+    storyboardPlanned && storyboardShots.every((s) => s.status === 'ok')
+  const storyboardReady =
+    c.storyboard_status === 'ok' && Boolean(c.storyboard_video_url)
+  const storyboardVoicedReady =
+    c.storyboard_voiced_status === 'ok' && Boolean(c.storyboard_voiced_url)
   // Avatar resolution chain: character > selected > host_avatar_id.
   // PR X uses this to decide whether the Build Voiced Commercial
   // button is enabled (true if EITHER a host clip exists OR an avatar
@@ -339,6 +357,59 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
       setLocalError(`commercial: ${e}`)
     } finally {
       setCommercialBusy(false)
+    }
+  }
+
+  // PR Z — Storyboard Commercial Builder handlers.
+  const handlePlanStoryboard = async () => {
+    setLocalError('')
+    setStoryboardPlanBusy(true)
+    try {
+      const updated = await api.planStoryboard(c.id)
+      onUpdated?.(updated)
+    } catch (e) {
+      setLocalError(`storyboard plan: ${e}`)
+    } finally {
+      setStoryboardPlanBusy(false)
+    }
+  }
+
+  const handleGenerateStoryboardShot = async (shotId) => {
+    setLocalError('')
+    setStoryboardShotBusy(shotId)
+    try {
+      const updated = await api.generateStoryboardShot(c.id, shotId)
+      onUpdated?.(updated)
+    } catch (e) {
+      setLocalError(`storyboard ${shotId}: ${e}`)
+    } finally {
+      setStoryboardShotBusy(null)
+    }
+  }
+
+  const handleStitchStoryboard = async () => {
+    setLocalError('')
+    setStoryboardStitchBusy(true)
+    try {
+      const updated = await api.stitchStoryboard(c.id)
+      onUpdated?.(updated)
+    } catch (e) {
+      setLocalError(`storyboard stitch: ${e}`)
+    } finally {
+      setStoryboardStitchBusy(false)
+    }
+  }
+
+  const handleBuildVoicedStoryboard = async () => {
+    setLocalError('')
+    setStoryboardVoicedBusy(true)
+    try {
+      const updated = await api.buildVoicedStoryboard(c.id)
+      onUpdated?.(updated)
+    } catch (e) {
+      setLocalError(`voiced storyboard: ${e}`)
+    } finally {
+      setStoryboardVoicedBusy(false)
     }
   }
 
@@ -731,6 +802,289 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
               <p className="text-[10px] text-rose-300" title={c.voiced_commercial_error}>
                 {c.voiced_commercial_error}
               </p>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* PR Z — Storyboard Commercial Builder. 3 shots × 5 s stitched
+          into a longer commercial. Shots reuse the attached
+          Character's portrait as prompt_image so the spokesperson
+          stays consistent across the 15-second result. */}
+      <div className="space-y-2 rounded-lg ring-1 ring-violet-400/30 bg-violet-500/5 p-3">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-zinc-200">
+              Storyboard Commercial
+            </span>
+            <span
+              className="text-[10px] text-zinc-500 font-mono"
+              title="Three image-to-video shots stitched via local ffmpeg into a 15-second landscape MP4."
+            >
+              3 shots · ~15 s
+            </span>
+          </div>
+          {storyboardReady && (
+            <span className="text-[10px] rounded-full bg-emerald-500/20 text-emerald-300 px-2 py-0.5 font-mono">
+              stitched
+            </span>
+          )}
+          {!storyboardReady && c.storyboard_status === 'failed' && (
+            <span
+              className="text-[10px] rounded-full bg-rose-500/20 text-rose-300 px-2 py-0.5 font-mono"
+              title={c.storyboard_error || ''}
+            >
+              failed
+            </span>
+          )}
+        </div>
+        <p className="text-[10px] text-zinc-500 leading-relaxed">
+          Plans Hook → Action → Payoff prompts from the campaign + active
+          character, then runs each shot through Runway image-to-video.
+          Stitches all three with ffmpeg into a longer commercial.
+        </p>
+
+        {!storyboardPlanned && (
+          <div className="space-y-1.5">
+            {!isCached && !hasCharacter && (
+              <p className="text-[10px] text-amber-300">
+                Save the campaign with an attached character first — the
+                storyboard pins the same portrait as prompt_image for every
+                shot.
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={handlePlanStoryboard}
+              disabled={storyboardPlanBusy}
+              className="rounded-md bg-violet-500/80 hover:bg-violet-500 text-zinc-100 text-xs font-semibold px-3 py-1.5 disabled:opacity-50"
+            >
+              {storyboardPlanBusy ? 'Planning…' : 'Plan Storyboard'}
+            </button>
+          </div>
+        )}
+
+        {storyboardPlanned && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <span className="text-[10px] text-zinc-400 font-mono">
+                {storyboardShots.filter((s) => s.status === 'ok').length}/{storyboardShots.length} shots ready
+              </span>
+              <button
+                type="button"
+                onClick={handlePlanStoryboard}
+                disabled={storyboardPlanBusy}
+                className="text-[10px] text-zinc-500 hover:text-violet-300 disabled:opacity-50"
+                title="Re-plan resets all shot prompts but keeps cached MP4s"
+              >
+                {storyboardPlanBusy ? 'replanning…' : 're-plan'}
+              </button>
+            </div>
+            <ul className="space-y-1.5">
+              {storyboardShots.map((shot) => {
+                const shotBusy = storyboardShotBusy === shot.id
+                const ok = shot.status === 'ok'
+                const failed = shot.status === 'failed'
+                const running = shot.status === 'running'
+                return (
+                  <li
+                    key={shot.id}
+                    className="rounded-md ring-1 ring-zinc-800/80 bg-zinc-950/50 p-2 space-y-1"
+                  >
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <span className="text-[11px] font-semibold text-zinc-200">
+                        Shot {shot.id.replace('shot-', '')} · {shot.label}
+                      </span>
+                      <span
+                        className={`text-[10px] rounded-full px-2 py-0.5 font-mono ${
+                          ok
+                            ? 'bg-emerald-500/20 text-emerald-300'
+                            : failed
+                            ? 'bg-rose-500/20 text-rose-300'
+                            : running || shotBusy
+                            ? 'bg-amber-500/20 text-amber-300'
+                            : 'bg-zinc-800 text-zinc-400'
+                        }`}
+                        title={shot.error || ''}
+                      >
+                        {ok ? 'ok' : failed ? 'failed' : running || shotBusy ? 'running' : 'idle'}
+                      </span>
+                    </div>
+                    {shot.prompt && (
+                      <p
+                        className="text-[10px] text-zinc-400 leading-snug line-clamp-3"
+                        title={shot.prompt}
+                      >
+                        {shot.prompt}
+                      </p>
+                    )}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => handleGenerateStoryboardShot(shot.id)}
+                        disabled={shotBusy || Boolean(storyboardShotBusy) || storyboardStitchBusy}
+                        className="rounded-md bg-violet-500/80 hover:bg-violet-500 text-zinc-100 text-[11px] font-semibold px-2.5 py-1 disabled:opacity-50"
+                      >
+                        {shotBusy
+                          ? `Generating ${shot.label}…`
+                          : ok
+                          ? `Re-generate ${shot.label}`
+                          : `Generate Shot ${shot.id.replace('shot-', '')}`}
+                      </button>
+                      {ok && shot.video_url && (
+                        <a
+                          href={shot.video_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[10px] text-spark hover:underline"
+                        >
+                          preview ↗
+                        </a>
+                      )}
+                    </div>
+                    {failed && shot.error && (
+                      <p className="text-[10px] text-rose-300" title={shot.error}>
+                        {shot.error}
+                      </p>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
+
+            <div className="space-y-1.5 pt-1">
+              {storyboardReady ? (
+                <div className="space-y-1.5">
+                  <div className="text-[11px] font-semibold text-emerald-300">
+                    Stitched storyboard
+                  </div>
+                  <video
+                    key={c.storyboard_video_url}
+                    src={c.storyboard_video_url}
+                    controls
+                    preload="metadata"
+                    className="w-full max-w-md rounded-lg ring-1 ring-zinc-800"
+                  />
+                  <div className="flex items-center gap-3 text-xs flex-wrap">
+                    <a
+                      href={c.storyboard_video_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-spark hover:underline"
+                      download
+                    >
+                      open storyboard ↗
+                    </a>
+                    <button
+                      type="button"
+                      onClick={handleStitchStoryboard}
+                      disabled={storyboardStitchBusy}
+                      className="text-[10px] text-zinc-500 hover:text-zinc-300 disabled:opacity-50"
+                      title="Re-stitch the cached shots"
+                    >
+                      {storyboardStitchBusy ? 'Re-stitching…' : 'rebuild'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleStitchStoryboard}
+                  disabled={
+                    storyboardStitchBusy
+                    || !storyboardAllShotsReady
+                    || Boolean(storyboardShotBusy)
+                  }
+                  className="rounded-md bg-violet-500/80 hover:bg-violet-500 text-zinc-100 text-xs font-semibold px-3 py-1.5 disabled:opacity-50"
+                >
+                  {storyboardStitchBusy
+                    ? 'Stitching Storyboard…'
+                    : 'Stitch Storyboard Commercial'}
+                </button>
+              )}
+              {!storyboardAllShotsReady && !storyboardReady && (
+                <p className="text-[10px] text-zinc-500">
+                  Generate every shot before stitching.
+                </p>
+              )}
+              {c.storyboard_error && c.storyboard_status === 'failed' && (
+                <p className="text-[10px] text-rose-300" title={c.storyboard_error}>
+                  {c.storyboard_error}
+                </p>
+              )}
+            </div>
+
+            {storyboardReady && (
+              <div className="pt-2 border-t border-violet-500/20 space-y-1.5">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <span className="text-[11px] font-semibold text-zinc-200">
+                    Voiced storyboard
+                  </span>
+                  {storyboardVoicedReady && (
+                    <span className="text-[10px] rounded-full bg-emerald-500/20 text-emerald-300 px-2 py-0.5 font-mono">
+                      ready
+                    </span>
+                  )}
+                </div>
+                <p className="text-[10px] text-zinc-500 leading-relaxed">
+                  Loops the stitched visual under the Avatar Host Clip
+                  audio. AdSpark auto-creates the host clip first when
+                  missing.
+                </p>
+                {storyboardVoicedReady ? (
+                  <div className="space-y-1.5">
+                    <video
+                      key={c.storyboard_voiced_url}
+                      src={c.storyboard_voiced_url}
+                      controls
+                      preload="metadata"
+                      className="w-full max-w-md rounded-lg ring-1 ring-zinc-800"
+                    />
+                    <div className="flex items-center gap-3 text-xs flex-wrap">
+                      <a
+                        href={c.storyboard_voiced_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-spark hover:underline"
+                        download
+                      >
+                        open voiced storyboard ↗
+                      </a>
+                      <button
+                        type="button"
+                        onClick={handleBuildVoicedStoryboard}
+                        disabled={storyboardVoicedBusy}
+                        className="text-[10px] text-zinc-500 hover:text-zinc-300 disabled:opacity-50"
+                      >
+                        {storyboardVoicedBusy ? 'Building…' : 'rebuild'}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    <button
+                      type="button"
+                      onClick={handleBuildVoicedStoryboard}
+                      disabled={storyboardVoicedBusy || !hasUsableAvatar}
+                      className="rounded-md bg-violet-500/80 hover:bg-violet-500 text-zinc-100 text-xs font-semibold px-3 py-1.5 disabled:opacity-50"
+                    >
+                      {storyboardVoicedBusy
+                        ? 'Building Voiced Storyboard…'
+                        : 'Build Voiced Storyboard'}
+                    </button>
+                    {!hasUsableAvatar && (
+                      <p className="text-[10px] text-amber-300">
+                        Attach or create a spokesperson first (Character tab).
+                      </p>
+                    )}
+                    {c.storyboard_voiced_error && (
+                      <p className="text-[10px] text-rose-300" title={c.storyboard_voiced_error}>
+                        {c.storyboard_voiced_error}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
             )}
           </div>
         )}
@@ -1280,6 +1634,17 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
       label: 'Voiced Commercial',
       url: commercialReady ? c.voiced_commercial_url : null,
       meta: 'looped visual + host clip audio (ffmpeg)',
+    },
+    // PR Z — Storyboard outputs.
+    {
+      label: 'Storyboard Commercial',
+      url: storyboardReady ? c.storyboard_video_url : null,
+      meta: '3 shots stitched via ffmpeg (~15 s)',
+    },
+    {
+      label: 'Voiced Storyboard',
+      url: storyboardVoicedReady ? c.storyboard_voiced_url : null,
+      meta: 'storyboard visual + host clip audio (ffmpeg)',
     },
     {
       label: 'Avatar Host Clip',

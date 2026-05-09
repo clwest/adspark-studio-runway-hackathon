@@ -113,4 +113,26 @@ export const api = {
       `/api/campaigns/${encodeURIComponent(campaignId)}/attach-character`,
       { method: 'POST', body: JSON.stringify({ character_id: characterId }) },
     ),
+  // PR Z — Storyboard Commercial Builder. Plan, generate per shot,
+  // stitch, and (optionally) build the voiced storyboard.
+  planStoryboard: (campaignId) =>
+    jsonFetch(
+      `/api/campaigns/${encodeURIComponent(campaignId)}/storyboard/plan`,
+      { method: 'POST' },
+    ),
+  generateStoryboardShot: (campaignId, shotId) =>
+    jsonFetch(
+      `/api/campaigns/${encodeURIComponent(campaignId)}/storyboard/generate-shot/${encodeURIComponent(shotId)}`,
+      { method: 'POST' },
+    ),
+  stitchStoryboard: (campaignId) =>
+    jsonFetch(
+      `/api/campaigns/${encodeURIComponent(campaignId)}/storyboard/stitch`,
+      { method: 'POST' },
+    ),
+  buildVoicedStoryboard: (campaignId) =>
+    jsonFetch(
+      `/api/campaigns/${encodeURIComponent(campaignId)}/storyboard/voiced`,
+      { method: 'POST' },
+    ),
 }
