@@ -1,4 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
+// PR BD — Shared audit-row helpers live in ../uiHelpers.js so future
+// spokesperson-first surfaces (PR BE+) can render the same swatches /
+// timestamp formatter without re-defining them here.
+import {
+  HISTORY_ACTION_PILLS,
+  formatHistoryTimestamp,
+  historyDriftClass,
+  historyStatusClass,
+} from '../uiHelpers.js'
 
 // PR AO — In-browser MediaRecorder support detection. Computed once at
 // module load; the recording UI hides itself + falls back to upload-only
@@ -76,63 +85,6 @@ export function formatVerifyFreshness(isoString, nowMs = Date.now()) {
   if (hours < 24) return `Last checked ${hours}h ago`
   const days = Math.floor(hours / 24)
   return `Last checked ${days}d ago`
-}
-
-// PR BB — compact relative-time formatter for history entries.
-// Same bucket boundaries as formatVerifyFreshness but with no
-// "Last checked " prefix; designed to fit at the right end of each
-// row in the audit-trail list.
-export function formatHistoryTimestamp(isoString, nowMs = Date.now()) {
-  if (!isoString) return ''
-  const ts = Date.parse(isoString)
-  if (!Number.isFinite(ts)) return ''
-  const deltaMs = nowMs - ts
-  if (deltaMs < 45_000) return 'just now'
-  const minutes = Math.floor(deltaMs / 60_000)
-  if (minutes < 60) return `${minutes}m ago`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  return `${days}d ago`
-}
-
-// PR BB — colour swatches per audit-trail action so the operator
-// can scan the column at a glance without reading every label.
-const HISTORY_ACTION_PILLS = {
-  clone:
-    'bg-emerald-500/20 text-emerald-200 ring-1 ring-emerald-400/40',
-  apply:
-    'bg-indigo-500/20 text-indigo-200 ring-1 ring-indigo-400/40',
-  repair:
-    'bg-amber-500/20 text-amber-200 ring-1 ring-amber-400/40',
-  refresh:
-    'bg-zinc-700 text-zinc-200 ring-1 ring-zinc-500',
-  verify:
-    'bg-zinc-700 text-zinc-200 ring-1 ring-zinc-500',
-}
-
-function historyStatusClass(status) {
-  if (!status) return 'bg-zinc-800 text-zinc-400 ring-1 ring-zinc-700'
-  const s = String(status).toLowerCase()
-  if (
-    s === 'ready' ||
-    s === 'applied' ||
-    s === 'verified'
-  )
-    return 'bg-emerald-500/20 text-emerald-200 ring-1 ring-emerald-400/40'
-  if (s === 'mock' || s === 'mock_patched' || s === 'mock_verified')
-    return 'bg-emerald-500/15 text-emerald-200/90 ring-1 ring-emerald-400/30'
-  if (s === 'failed' || s === 'unverified' || s === 'pending_avatar')
-    return 'bg-rose-500/20 text-rose-200 ring-1 ring-rose-400/40'
-  return 'bg-zinc-800 text-zinc-300 ring-1 ring-zinc-700'
-}
-
-function historyDriftClass(drift) {
-  if (drift === 'match')
-    return 'bg-emerald-500/20 text-emerald-200 ring-1 ring-emerald-400/40'
-  if (drift === 'drift')
-    return 'bg-rose-500/20 text-rose-200 ring-1 ring-rose-400/40'
-  return 'bg-zinc-800 text-zinc-400 ring-1 ring-zinc-700'
 }
 
 /**

@@ -23,6 +23,11 @@ import RunwayPanel from './components/RunwayPanel.jsx'
 import CampaignGallery from './components/CampaignGallery.jsx'
 import ModeBanner from './components/ModeBanner.jsx'
 import CharacterStudio from './components/CharacterStudio.jsx'
+// PR BD — UX v2 feature flag (foundation for the spokesperson-first
+// redesign). The flag itself is read on every getUxMode() call; the
+// footer toggle below is the only surface that mutates it. Default
+// remains the legacy v1 UX so v13 demos stay unchanged.
+import { getUxMode, setUxMode, UX_MODES } from './uxFlag.js'
 
 const POLL_INTERVAL_MS = 5000
 const POLL_MAX_ATTEMPTS = 60
@@ -641,11 +646,73 @@ export default function App() {
           />
         </Stage>
 
-        <footer className="text-xs text-zinc-600 pt-6 border-t border-zinc-900/60">
-          AdSpark Studio · hackathon build · {new Date().getFullYear()}
+        <footer className="text-xs text-zinc-600 pt-6 border-t border-zinc-900/60 flex items-center justify-between gap-2 flex-wrap">
+          <span>
+            AdSpark Studio · hackathon build · {new Date().getFullYear()}
+          </span>
+          {/* PR BD — UX v2 preview toggle. Reads the flag at render
+              time so a deep-link with ?ux=v2 surfaces the "classic"
+              escape hatch immediately. Reload after toggling so the
+              entire app picks up the flag (future v2 components are
+              gated at mount, not via hot-swappable hooks). */}
+          <UxModeToggle />
         </footer>
       </div>
     </div>
+  )
+}
+
+/**
+ * PR BD — Tiny footer link that flips the UX v2 flag and reloads.
+ * Renders one of two states depending on the resolved mode:
+ *
+ *   v1 (default) → "Try preview UX →"
+ *   v2 active    → "Use classic UX"
+ *
+ * The flag itself lives in localStorage; toggling here writes the
+ * new value and triggers a reload so every module re-resolves
+ * `getUxMode()` from a clean slate. Future v2 components are
+ * gated at mount, so a hot re-render isn't enough to swap them in.
+ */
+function UxModeToggle() {
+  const mode = getUxMode()
+  const target = mode === UX_MODES.V2 ? UX_MODES.V1 : UX_MODES.V2
+  const label =
+    mode === UX_MODES.V2 ? 'Use classic UX' : 'Try preview UX →'
+  const handleClick = (e) => {
+    e?.preventDefault?.()
+    setUxMode(target)
+    if (typeof window !== 'undefined') {
+      // Strip ?ux=… so the next pageload's URL doesn't override the
+      // flag we just persisted. Then full reload so v2-gated
+      // components (PR BE+) remount with the fresh flag value.
+      try {
+        const url = new URL(window.location.href)
+        url.searchParams.delete('ux')
+        window.history.replaceState({}, '', url.toString())
+      } catch {
+        // Older browsers / restricted contexts — fall through to
+        // a plain reload; the localStorage value still drives the
+        // resolved mode.
+      }
+      window.location.reload()
+    }
+  }
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      data-testid="ux-mode-toggle"
+      data-ux-mode={mode}
+      className="text-[10px] text-zinc-500 hover:text-spark underline-offset-2 hover:underline"
+      title={
+        mode === UX_MODES.V2
+          ? 'Switch back to the classic UX (PR BD).'
+          : 'Preview the spokesperson-first UX (in development; PR BD foundation).'
+      }
+    >
+      {label}
+    </button>
   )
 }
 

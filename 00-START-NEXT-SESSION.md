@@ -6,42 +6,44 @@ PR AM `3e12d27`; PR AN `f255c22`; PR AO `5bca7c4`; PR AP
 `3c6483e`; PR AQ `ec35c0e`; PR AR `5aa5579`; PR AS `2321fd7`;
 PR AT `632b696`; PR AU `485310a`; PR AV `b9b7fee`; PR AW
 `555ebf9`; PR AX `9d86f2e`; PR AY `0a93c79`; PR AZ `2c16d30`;
-PR BA `9d0a99d`; PR BB `8702660 feat: voice repair history
-audit trail`; PR BC Per-Campaign Transcript History in flight
-on top — SESSION_012–SESSION_034 handoffs added).
+PR BA `9d0a99d`; PR BB `8702660`; PR BC `9eae15f feat: per-
+campaign transcript history audit trail`; PR BD UX v2 Flag +
+Shared Helpers in flight on top — SESSION_012–SESSION_035
+handoffs added).
 
 ## Where things stand
 
-- **Branch:** `main` at `8702660` (`feat: voice repair history
-  audit trail`) on `origin/main`. PR BC patch in flight on top
-  — no new commit / tag yet, both pending explicit user
-  approval.
+- **Branch:** `main` at `9eae15f` (`feat: per-campaign
+  transcript history audit trail`) on `origin/main`. PR BD
+  patch in flight on top — no new commit / tag yet, both
+  pending explicit user approval.
 - **Latest tag:** still **`hackathon-submission-v13`** at `ec446e4`
-  (PR AF). PR AG–BB shipped the full voice arc + recording
+  (PR AF). PR AG–BC shipped the full voice arc + recording
   feedback + auto-tick + library-level refresh-all + per-
-  character audit trail. PR BC adds a parallel
-  `realtime_transcript_history` audit trail on Campaign so
-  operators can review prior transcript fetches over time
-  rather than seeing only the most recent.
+  character + per-campaign audit trails. PR BD opens the
+  foundation for the spokesperson-first UX redesign — adds the
+  UX v2 flag + a tiny footer toggle + lifts the PR BB audit-
+  row helpers into a shared module. **Default UX is
+  unchanged**; v2 is gated behind `?ux=v2` / localStorage so
+  v13 demos stay safe.
 - **Backend routes:** **68** application + FastAPI built-ins
-  (unchanged from PR BB; PR BC doesn't add new endpoints — it
-  appends history entries inside the existing
-  POST /realtime-transcript handler).
-- **Frontend build:** 333.15 KB initial JS / 93.29 KB gzip +
-  561.97 KB lazy `@runwayml/avatars-react` chunk (+1.98 KB
-  initial / +0.41 KB gzip vs PR BB — PR BC adds the disclosure
-  + state hook to CampaignGallery.jsx).
-- **Playwright smoke:** `1 passed (~21.6 s)` against the mock
-  backend; existing PR BB assertions still pass. PR BC adds
-  resilient assertions on the post-fetch disclosure + per-entry
-  shape (status pill matches the literal set, count between 1
-  and 20 inclusive, latest preview + export buttons unaffected
-  by the new surface).
-- **Targeted probes:** baseline → fetch → 2 more fetches →
-  +25 rapid fetches all append correctly; cap holds at 20;
-  latest_status / latest_turns / latest_fetched_at /
-  latest_conversation_id all still update across the burst;
-  bogus campaign id 404s without breaking server.
+  (unchanged from PR BC; PR BD is frontend-only and adds no
+  endpoints).
+- **Frontend build:** 334.75 KB initial JS / 93.84 KB gzip +
+  561.97 KB lazy `@runwayml/avatars-react` chunk (+1.60 KB
+  initial / +0.55 KB gzip vs PR BC — PR BD adds two small
+  modules and a footer toggle; helper extraction is a wash).
+- **Playwright smoke:** `1 passed (~20.9 s)` against the mock
+  backend; existing PR BC assertions still pass. PR BD adds
+  one minimal assertion that the footer's `ux-mode-toggle`
+  testid renders with `data-ux-mode="v1"` and copy `Try
+  preview UX`. The toggle itself is never clicked in the smoke
+  so the rest of the run stays on the legacy v1 path.
+- **Targeted probes:** 8/8 `uxFlag.js` precedence scenarios
+  pass via a Node probe (default → v1; URL param wins +
+  persists; storage v2 sticks; invalid storage / URL values
+  fall back to default; setUxMode write + read; setUxMode
+  invalid is a no-op).
 - **Repo:** https://github.com/clwest/adspark-studio-runway-hackathon
   (private). Pushes happen on explicit user approval.
 - **Stale local feature branches:** 22 left over from PR A through
@@ -49,6 +51,30 @@ on top — SESSION_012–SESSION_034 handoffs added).
   (the user can run `git branch -d feature/...` whenever).
 
 ## What's implemented (full feature stack on `main`)
+
+### UX redesign foundation (PR BD — UX v2 Flag + Shared Helpers)
+
+- **UX v2 feature flag** at `frontend/src/uxFlag.js`. Resolves
+  precedence URL `?ux=v2|v1` > localStorage `adspark.ux` >
+  default `v1`. Exports `getUxMode()`, `isUxV2()`,
+  `setUxMode(mode)`, plus `UX_MODES` + `UX_STORAGE_KEY`
+  constants. SSR-safe (guards `window` / `localStorage`).
+- **Shared audit-row helpers** at `frontend/src/uiHelpers.js`.
+  Lifts `formatHistoryTimestamp`, `HISTORY_ACTION_PILLS`,
+  `historyStatusClass`, `historyDriftClass` out of
+  CharacterCard.jsx so the upcoming v2 spokesperson-first
+  surfaces (PR BE through PR BO) can render the same
+  audit-row vocabulary without re-defining it.
+- **Tiny footer toggle** in App.jsx — reads the resolved mode
+  at render time and surfaces either `"Try preview UX →"`
+  (v1 default) or `"Use classic UX"` (v2 active). Click flips
+  the flag in localStorage, strips `?ux=…` from the URL, and
+  reloads. data-testid: `ux-mode-toggle` with
+  `data-ux-mode="v1|v2"`.
+- **Default behaviour unchanged.** v13 demos still load into
+  the legacy 4-stage flow + 7-tab CampaignGallery + Character
+  Studio panel. v2 path is gated; nothing visible changes
+  until the operator flips the flag.
 
 ### Character layer (PR AN — Custom Voice Cloning Foundation · PR AO — In-Browser Recording)
 

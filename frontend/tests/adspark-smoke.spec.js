@@ -840,6 +840,17 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
     newestCard.getByText(/Dialogue Scene Reels · 720×1280 · Captioned/i),
   ).toBeVisible()
 
+  // 13c. PR BD — UX v2 preview toggle in the footer. Default load
+  //      resolves to v1 (legacy UX), so the toggle must read
+  //      "Try preview UX →" and carry data-ux-mode="v1". Clicking
+  //      it would reload the page; we just assert the affordance
+  //      exists in its default state without flipping the flag so
+  //      the rest of the smoke continues against the legacy path.
+  const uxToggle = page.getByTestId('ux-mode-toggle')
+  await expect(uxToggle).toBeVisible()
+  await expect(uxToggle).toHaveAttribute('data-ux-mode', 'v1')
+  await expect(uxToggle).toHaveText(/Try preview UX/i)
+
   // 13. Console / page errors — page errors are always fatal; console errors
   //     are filtered to drop video-network noise.
   const realConsoleErrors = consoleErrors.filter(

@@ -1,20 +1,18 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after PR BC (Per-Campaign Transcript History)
-on top of the PR AG–BB / SESSION 011 anchors. Backend route count
-is **68** application routes — PR BC is a small slice that adds a
-compact `realtime_transcript_history: list[TranscriptHistoryEntry]`
-field on Campaign (capped at the most recent 20 entries) plus
-audit-trail appends inside every branch of the existing
-`POST /api/campaigns/{id}/realtime-transcript` handler, plus an
-inline disclosure list in the existing Conversation transcript
-card. Latest-fetch state stays in the `realtime_transcript_*`
-fields so all existing UI surfaces (preview, Copy Markdown /
-Download TXT exports) continue operating against the latest
-fetch unchanged. No new backend route, no analytics dashboard,
-no recording URLs, no memory learning — just a per-campaign
-trail of what was fetched when.
+context-kit refresh after PR BD (UX v2 Flag + Shared Helpers
+Extraction) on top of the PR AG–BC / SESSION 011 anchors. Backend
+route count is **68** application routes — PR BD is the
+foundation slice for the spokesperson-first UX redesign tracked
+in `docs/handoffs/SESSION_035_UX_V2_FLAG.md`. PR BD adds a
+gated UX v2 flag (`frontend/src/uxFlag.js`), extracts the
+PR BB audit-row helpers into `frontend/src/uiHelpers.js` for
+reuse by the upcoming spokesperson-first surfaces (PR BE+),
+and surfaces a tiny "Try preview UX" footer toggle. The default
+load remains the legacy v1 UX so v13 demos stay unchanged; the
+v2 path will be built behind the flag in subsequent PRs (BE
+through BO).
 
 ## Backend (`backend/`)
 
@@ -58,13 +56,15 @@ trail of what was fetched when.
 | `tailwind.config.js`, `postcss.config.js`, `index.html` | real | Tailwind wired |
 | `package.json` | real | Adds `@runwayml/avatars-react ^0.15.0` for realtime |
 | `src/api.js` | real | Thin fetch wrapper; helpers for every backend route incl. all PR Z/AC storyboard helpers, PR AA `saveCommercialScript`, PR AB `generateSpokespersonAd`, PR AF dialogue helpers (`planDialogue`, `saveDialogueLine`, `generateDialogueLine`, `stitchDialogue`) |
+| `src/uxFlag.js` | real | **PR BD** — UX v2 feature flag. `getUxMode()` resolves precedence (URL `?ux=v1\|v2` > localStorage `adspark.ux` > default `v1`). `isUxV2()` convenience predicate, `setUxMode(mode)` mutator, `UX_MODES` + `UX_STORAGE_KEY` constants. SSR-safe (guards window/localStorage). Foundation for the spokesperson-first redesign — every v2 surface (PR BE+) gates its render at mount via this module |
+| `src/uiHelpers.js` | real | **PR BD** — shared audit-row helpers extracted from CharacterCard.jsx so future spokesperson-first surfaces can reuse them: `formatHistoryTimestamp(iso, nowMs)` (compact relative-time bucket formatter, no `"Last checked "` prefix), `HISTORY_ACTION_PILLS` (frozen action→Tailwind class map), `historyStatusClass(status)`, `historyDriftClass(drift)`. Behaviour identical to the originals from PR BB; pure relocation slice |
 | `src/settings.js` | real | localStorage persistence with safety clamps; `STORAGE_KEY = 'adspark.settings.v1'` |
 | `src/errors.js` | real | `friendlyError(e, hint)` + `ERROR_HINTS` per call site |
 | `src/scriptBuilder.js` | real | **PR AA + PR AC** — `buildCommercialScript({ campaign, character })` deterministic generator + 300-char cap |
 | `src/voicePresets.js` | real | **PR AA** — curated descriptions for 12 featured voice presets + `describeVoicePreset()` fallback |
 | `src/promptBuilder.js` | real | **PR T** — structured Runway video prompt builder |
 | `src/characterPromptBuilder.js` | real | **PR V** — editable Portrait Prompt builder + helper text |
-| `src/App.jsx` | real | Orchestrates form → concepts → image → video → save; loads + persists settings; **mounts CharacterStudio** at Stage 1; **threads commercialScriptDraft + onCommercialScriptChange + onGenerateCommercialScript through PromptPreview** (PR AC follow-up); error banner has `role=alert` + auto-scroll-into-view (PR AC fix) |
+| `src/App.jsx` | real | Orchestrates form → concepts → image → video → save; loads + persists settings; **mounts CharacterStudio** at Stage 1; **threads commercialScriptDraft + onCommercialScriptChange + onGenerateCommercialScript through PromptPreview** (PR AC follow-up); error banner has `role=alert` + auto-scroll-into-view (PR AC fix). **PR BD** — footer renders a small `<UxModeToggle />` that flips the v2 flag (writes localStorage + reloads); legacy default unchanged |
 | `src/components/CampaignForm.jsx` | real | **PR AC fix** — per-field char counters + maxLength caps mirroring backend ConceptRequest validator |
 | `src/components/ConceptCards.jsx` | real | 3 selectable cards, "recommended" badge |
 | `src/components/PromptPreview.jsx` | real | **"Creative direction" panel** with two visually distinct sections: Section A Commercial Script editor (textarea, char counter, Generate Script, breadcrumb pill), Section B Runway Video Prompt textarea + selectors. PR AD identity-drift helper on the Use Character branch. |
@@ -73,7 +73,7 @@ trail of what was fetched when.
 | `src/components/AvatarPicker.jsx` | real | PR I+ — fetches `/api/runway/avatars`; 4-up grid; click → `POST /select-avatar` |
 | `src/components/RealtimeSpokesperson.jsx` | real | PR I — lazy-loaded `<AvatarCall>` wrapper; **PR AE caption update** ("This avatar knows the campaign brief and saved script…") + chip tooltip + aria-label reframed as starter questions |
 | `src/components/CharacterStudio.jsx` | real | **PR K + V + AA + BA** — top-level studio panel with editable Portrait Prompt textarea + voice preset dropdown with **PR AA description chip** + create form + character library + **PR BA** library-level "Refresh all voice statuses" button + compact `idle / refreshing X/Y / refreshed N skipped M failed K` status caption that reuses the per-character PR AV refresh-avatar-voice + PR AX refresh-voice-preview routes |
-| `src/components/CharacterCard.jsx` | real | Single tile component reused in studio library and per-campaign attach picker. **PR BB** — adds `formatHistoryTimestamp(iso, nowMs)` helper (same buckets as `formatVerifyFreshness` minus the prefix) + `HISTORY_ACTION_PILLS` colour map (clone→emerald / apply→indigo / repair→amber / refresh→zinc / verify→zinc) + `historyStatusClass()` + `historyDriftClass()` + a "Voice history" disclosure rendered at the bottom of the voice section. Default 5 newest visible; "Show all (N)" link expands up to the 20-entry cap. data-testid: `custom-voice-history`, `custom-voice-history-entry` |
+| `src/components/CharacterCard.jsx` | real | Single tile component reused in studio library and per-campaign attach picker. **PR BB** — adds a "Voice history" disclosure rendered at the bottom of the voice section using `formatHistoryTimestamp` / `HISTORY_ACTION_PILLS` / `historyStatusClass` / `historyDriftClass` helpers. Default 5 newest visible; "Show all (N)" link expands up to the 20-entry cap. data-testid: `custom-voice-history`, `custom-voice-history-entry`. **PR BD** — those four helpers were moved out to `frontend/src/uiHelpers.js`; CharacterCard now imports them so the upcoming spokesperson-first surfaces (PR BE+) can reuse the same audit-row vocabulary |
 | `src/components/ModeBanner.jsx` | real | Readiness chip, per-provider pills, optional credits/cap chip |
 | `tests/adspark-smoke.spec.js` | real | Playwright single-shot mock-mode end-to-end; covers PR A through PR AW (Stage-3 Commercial Script + breadcrumb, Storyboard subsection, Ad Mode picker w/ 3 cards, Spokesperson Ad rename, Dialogue tab + Plan button, all Exports rows + the captioned reels labels, Realtime grounding card + Conversation transcript card with **export button assertions: copy-markdown, download-txt, post-fetch enable + status banner**, brand colour control, Character custom-voice section + **MediaRecorder Start recording button** + **negative assertions for the PR AP preview audio + helper text in idle state** + **PR AS/AT/AU/AV/AW resilient assertions for resolved/drift/unverified pills, repair button, refresh button, and freshness label**) |
 | `src/transcriptExport.js` | real | **PR AL** — pure helpers `buildTranscriptMarkdown`, `buildTranscriptText`, `transcriptFilename`, `copyToClipboard`, `downloadTextFile`. No backend round-trip — operates on the turns persisted by PR AJ on the Campaign payload. Markdown output uses bold-speaker syntax + the campaign / conversation-id / fetched-at preamble; text output is plain ASCII with `Speaker:` prefixes |
@@ -230,6 +230,7 @@ the line's own `avatar_id`).
 | PR BA | Character Library Refresh All (frontend-only library-level "Refresh all voice statuses" button on the Character Studio header; iterates the library and reuses the per-character PR AV refresh-avatar-voice + PR AX refresh-voice-preview routes; compact status caption reports refreshed/skipped/failed; one failure does not abort the loop) | (post-v13) |
 | PR BB | Voice Repair History Audit Trail (`VoiceRepairHistoryEntry` model + `voice_repair_history: list[…]` on Character capped at 20 entries; appended from clone-voice / apply-voice / refresh-avatar-voice; apply-voice gains an optional `mode` body so the PR AU repair button is distinguishable from a plain apply; CharacterCard renders a compact "Voice history" disclosure with action / status / drift / time pills, default 5 newest, "Show all (N)" expand) | (post-v13) |
 | PR BC | Per-Campaign Transcript History (`TranscriptHistoryEntry` model + `realtime_transcript_history: list[…]` on Campaign capped at 20 entries; every branch of `POST /realtime-transcript` appends a row including no_session / failed / empty / mock / ok; latest-fetch state preserved in the existing `realtime_transcript_*` fields so preview + Copy Markdown / Download TXT exports continue operating against the latest fetch; CampaignGallery transcript card adds a compact "Transcript history" disclosure with status / turn-count / conversation-id / fetched-time per row) | (post-v13) |
+| PR BD | UX v2 Flag + Shared Helpers Extraction (foundation for the spokesperson-first redesign tracked in SESSION_035; new `frontend/src/uxFlag.js` resolves URL `?ux=…` → localStorage `adspark.ux` → default `v1`; new `frontend/src/uiHelpers.js` lifts `formatHistoryTimestamp` / `HISTORY_ACTION_PILLS` / `historyStatusClass` / `historyDriftClass` out of CharacterCard.jsx for reuse; tiny `<UxModeToggle />` footer link flips the flag and reloads; default UX unchanged) | (post-v13) |
 
 ## Known limitations (current main)
 
