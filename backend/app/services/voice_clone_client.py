@@ -273,6 +273,160 @@ class VoiceApplyResult:
     error: Optional[str] = None
 
 
+@dataclass
+class AvatarVoiceState:
+    """PR AS — resolved voice state from `GET /v1/avatars/{id}`. The
+    route persists every field on the Character record so the UI can
+    surface a pill that confirms the bind survived the PATCH (vs.
+    just trusting Runway's 2xx).
+
+    ``status`` mirrors the persisted enum:
+    - ``verified`` — real fetch returned a parseable voice block
+    - ``mock_verified`` — runway_mock OR avatar id starts with
+      ``mock_``; the resolved fields are derived deterministically
+      from the character's existing custom_voice_id without any HTTP
+    - ``unverified`` — fetch attempted but returned no voice block
+      (e.g. Runway response shape changed or block is null)
+    - ``failed`` — fetch errored (non-2xx / network / non-JSON)
+    """
+
+    status: str  # "verified" | "mock_verified" | "unverified" | "failed"
+    resolved_type: Optional[str] = None
+    resolved_id: Optional[str] = None
+    resolved_label: Optional[str] = None
+    error: Optional[str] = None
+
+
+def _extract_voice_block(payload: Optional[dict]) -> Optional[dict]:
+    """PR AS — Runway has shipped multiple voice-block shapes across
+    revisions (`voice`, `voiceBlock`, `voice_block`). Tolerate them
+    all so the introspection survives a server-side rename.
+    """
+    if not isinstance(payload, dict):
+        return None
+    for key in ("voice", "voiceBlock", "voice_block"):
+        block = payload.get(key)
+        if isinstance(block, dict):
+            return block
+    return None
+
+
+def _resolve_voice_fields(
+    block: Optional[dict],
+) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    """PR AS — pull ``(type, voiceId, label)`` out of a voice block.
+    Tolerant of `type` / `voiceType`, `voiceId` / `voice_id` / `id`,
+    `name` / `label`. Returns the first non-empty match per slot;
+    missing values stay ``None`` so the persistence layer can write
+    a partial record without raising.
+    """
+    if not isinstance(block, dict):
+        return None, None, None
+
+    def _first(*keys: str) -> Optional[str]:
+        for key in keys:
+            value = block.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        return None
+
+    return (
+        _first("type", "voiceType"),
+        _first("voiceId", "voice_id", "id"),
+        _first("name", "label", "presetId"),
+    )
+
+
+def fetch_avatar_voice(
+    avatar_id: Optional[str],
+    settings: Settings,
+    *,
+    avatar_is_mock: bool = False,
+    expected_voice_id: Optional[str] = None,
+    timeout: float = 15.0,
+) -> AvatarVoiceState:
+    """PR AS — `GET /v1/avatars/{avatar_id}` and pull the resolved
+    voice block out of the response. Used by the clone-voice +
+    apply-voice routes to confirm the PATCH actually landed (rather
+    than trusting the 2xx from PR AQ's PATCH alone).
+
+    Mock mode: short-circuits with a deterministic ``mock_verified``
+    state derived from ``expected_voice_id`` so the demo flow shows
+    the verification end-to-end without any HTTP.
+
+    Never raises. Failure modes surface as ``unverified`` (no voice
+    block in the payload) or ``failed`` (network / non-2xx / parse).
+    """
+    if not avatar_id:
+        return AvatarVoiceState(
+            status="failed",
+            error="no avatar id to introspect",
+        )
+    if settings.runway_mock or avatar_is_mock or str(avatar_id).startswith("mock_"):
+        # Deterministic mock: assume the prior PATCH succeeded with
+        # the supplied voice id. Label keeps the mock prefix so the
+        # UI can tell the resolved value apart from a real binding.
+        if expected_voice_id:
+            return AvatarVoiceState(
+                status="mock_verified",
+                resolved_type="custom",
+                resolved_id=expected_voice_id,
+                resolved_label=f"mock · {expected_voice_id}",
+            )
+        return AvatarVoiceState(
+            status="mock_verified",
+            resolved_type="runway-live-preset",
+            resolved_label="mock · preset",
+        )
+
+    url = f"{settings.runway_api_base}/v1/avatars/{avatar_id}"
+    headers = {
+        "Authorization": f"Bearer {settings.runway_api_key}",
+        "X-Runway-Version": settings.runway_api_version,
+    }
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            resp = client.get(url, headers=headers)
+    except httpx.HTTPError as exc:
+        logger.warning("avatar GET http error for %s: %s", avatar_id, exc)
+        return AvatarVoiceState(
+            status="failed",
+            error=f"http error: {exc!s}"[:200],
+        )
+    except Exception as exc:  # pragma: no cover — defensive
+        logger.exception("avatar GET unexpected")
+        return AvatarVoiceState(
+            status="failed",
+            error=f"unexpected: {exc!s}"[:200],
+        )
+    if resp.status_code >= 400:
+        return AvatarVoiceState(
+            status="failed",
+            error=f"GET rc={resp.status_code}: {resp.text[:200]}",
+        )
+    try:
+        payload = resp.json()
+    except ValueError:
+        return AvatarVoiceState(
+            status="failed",
+            error="non-json avatar response",
+        )
+
+    block = _extract_voice_block(payload)
+    rtype, rid, rlabel = _resolve_voice_fields(block)
+    if not (rtype or rid or rlabel):
+        return AvatarVoiceState(
+            status="unverified",
+            error="avatar response carried no voice block",
+        )
+    return AvatarVoiceState(
+        status="verified",
+        resolved_type=rtype,
+        resolved_id=rid,
+        resolved_label=rlabel,
+    )
+
+
 def apply_voice_to_avatar(
     avatar_id: Optional[str],
     voice_id: Optional[str],

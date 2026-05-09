@@ -100,6 +100,25 @@ export default function CharacterCard({
   const patchMock = patchStatus === 'mock_patched'
   const patchFailed = patchStatus === 'failed'
   const [patchPending2, setPatchPending2] = useState(false)
+  // PR AS — avatar resource introspection. After PR AQ's PATCH lands
+  // we GET /v1/avatars/{id} to confirm the voice block actually
+  // resolves to the cloned voice. ``verifyStatus`` drives a third
+  // pill so the operator can tell at a glance whether the bind
+  // survived the PATCH (vs. just trusting the 2xx).
+  const verifyStatus = c.avatar_voice_verify_status
+  const verifyVerified = verifyStatus === 'verified'
+  const verifyMock = verifyStatus === 'mock_verified'
+  const verifyUnverified = verifyStatus === 'unverified'
+  const verifyFailed = verifyStatus === 'failed'
+  const verifyResolvedId = c.avatar_voice_resolved_id
+  const verifyResolvedType = c.avatar_voice_resolved_type
+  const verifyResolvedLabel = c.avatar_voice_resolved_label
+  // The verification pill only makes sense when the avatar is
+  // actually meant to be bound to the cloned voice (PR AQ patch
+  // succeeded with applied / mock_patched). Pending / failed
+  // patches show their own state via the PR AQ pill.
+  const verifyShouldRender =
+    customVoiceReady && (patchApplied || patchMock) && Boolean(verifyStatus)
 
   const handleApplyVoice = async () => {
     if (!onApplyVoiceToAvatar) return
@@ -473,6 +492,61 @@ export default function CharacterCard({
                 title={c.custom_voice_avatar_patch_error || 'PATCH failed'}
               >
                 patch failed
+              </span>
+            )}
+            {/* PR AS — avatar resource introspection pill. Only
+                renders when the patch state implies the bind
+                should have landed (applied / mock_patched). The
+                operator gets a second confirmation that the voice
+                block on the avatar actually resolves to the cloned
+                voice rather than just trusting the PATCH 2xx. */}
+            {verifyShouldRender && verifyVerified && (
+              <span
+                data-testid="custom-voice-avatar-resolved"
+                className="text-[9px] rounded-full bg-emerald-500/30 text-emerald-100 ring-1 ring-emerald-400/50 px-1.5 py-0.5 font-mono"
+                title={
+                  verifyResolvedId
+                    ? `voice.${verifyResolvedType || '?'} = ${verifyResolvedId}`
+                    : 'avatar voice block resolved'
+                }
+              >
+                Avatar using cloned voice
+              </span>
+            )}
+            {verifyShouldRender && verifyMock && (
+              <span
+                data-testid="custom-voice-avatar-resolved"
+                className="text-[9px] rounded-full bg-amber-500/25 text-amber-200 ring-1 ring-amber-400/40 px-1.5 py-0.5 font-mono"
+                title={verifyResolvedLabel || 'mock-mode resolved binding'}
+              >
+                Avatar using cloned voice · mock
+              </span>
+            )}
+            {verifyShouldRender && verifyUnverified && (
+              <span
+                data-testid="custom-voice-avatar-unverified"
+                className="text-[9px] rounded-full bg-zinc-800 text-zinc-300 ring-1 ring-zinc-700 px-1.5 py-0.5 font-mono"
+                title={c.avatar_voice_verify_error || 'avatar response carried no voice block'}
+              >
+                Avatar voice unverified
+              </span>
+            )}
+            {verifyShouldRender && verifyFailed && (
+              <span
+                data-testid="custom-voice-avatar-unverified"
+                className="text-[9px] rounded-full bg-rose-500/20 text-rose-200 ring-1 ring-rose-400/40 px-1.5 py-0.5 font-mono"
+                title={c.avatar_voice_verify_error || 'verify failed'}
+              >
+                Avatar voice unverified
+              </span>
+            )}
+            {customVoiceReady && (patchApplied || patchMock) && !verifyStatus && (
+              <span
+                data-testid="custom-voice-avatar-unverified"
+                className="text-[9px] rounded-full bg-zinc-800 text-zinc-300 ring-1 ring-zinc-700 px-1.5 py-0.5 font-mono"
+                title="Verification not yet attempted"
+              >
+                Avatar voice pending
               </span>
             )}
           </div>

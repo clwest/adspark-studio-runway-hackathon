@@ -1,12 +1,13 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after PR AR (Cloned Voice Preview Surface)
-on top of the PR AG–AQ / SESSION 011 anchors. Backend route
-count is **66** application routes — PR AR is a finishing slice
-that captures the Runway voice `previewUrl` during the existing
-PR AN clone polling and surfaces it inline in Character Studio
-without adding any new endpoint.
+context-kit refresh after PR AS (Avatar Resource Introspection
+After Voice Patch) on top of the PR AG–AR / SESSION 011 anchors.
+Backend route count is **66** application routes — PR AS is a
+finishing slice that runs `GET /v1/avatars/{id}` after every
+successful PR AQ PATCH (and inside PR AN's clone-then-apply
+flow) so operators can confirm the cloned voice actually bound
+to the avatar. No new endpoint added.
 
 ## Backend (`backend/`)
 
@@ -26,7 +27,7 @@ without adding any new endpoint.
 | `app/services/color_utils.py` | real | **PR AK** — `normalize_brand_color` accepts `#RRGGBB` / `RRGGBB` / `0xRRGGBB` / `#RGB`, normalises to lowercase `#RRGGBB` for storage, returns `None` on unparseable input. `to_ffmpeg_color` wraps the value as `0xRRGGBB` for ffmpeg's `pad=…:color=…`, falling back to `DEFAULT_REELS_BACKDROP` (`0x0b1220`) when the input is missing or invalid. **PR AM** — adds `hex_to_rgb`, WCAG `relative_luminance`, `is_light_color` (>= 0.5 luminance threshold), and `caption_style_for_backdrop(value) -> {font_color, box_color, box_alpha, is_light_backdrop}`. The dark default style mirrors PR AH exactly (white text / black@0.6 box) so untouched callers see no rendering change |
 | `app/services/documents_client.py` | real + mock | **PR AI** — thin wrapper around `POST /v1/documents` (`{name, content}` ≤ 40,000 chars, plain text + Markdown), `PATCH /v1/avatars/{id}` (`{documentIds: [...]}` best-effort), and `build_campaign_brief_markdown(campaign, character)` for the standard brand-brief shape. Mock mode returns deterministic `mock_doc_<sha256-of-name+content>` ids so smoke + offline demo flows can flip the grounding badge end-to-end without burning credits |
 | `app/services/audio_client.py` | real + mock | `/v1/voices` text design + `/v1/voice_dubbing`; 29-language `SUPPORTED_DUB_LANGS`; ffmpeg lavfi mock MP3s |
-| `app/services/voice_clone_client.py` | real + mock | **PR AN** — wraps `POST /v1/voices` with `from.type=audio` for custom voice cloning. `clone_voice_from_audio(name, audio_bytes, mime, settings)` returns a `VoiceCloneResult`; mock mode emits a deterministic `mock_voice_<sha256(name + bytes)[:16]>` so re-uploads of the same sample are idempotent and a fresh sample yields a new id. Caps audio at 15 MB (Runway docs say 10 MB) so an oversized sample fails with a friendly 413 before hitting the wire. Allowlist of `audio/mpeg`, `audio/wav`, `audio/m4a`, `audio/mp4`, `audio/aac`, `audio/webm`, `audio/ogg`. **PR AQ** — adds `apply_voice_to_avatar(avatar_id, voice_id, settings)` which `PATCH /v1/avatars/{id}` with `{voice: {type: "custom", voiceId: ...}}` so a freshly cloned voice swaps into an existing avatar without re-creating it. Mock-aware (mock id or runway_mock → returns `mock_patched`); never raises. **PR AR** — captures Runway's `previewUrl` from the READY poll response (with a tolerant `_extract_preview_url` helper that accepts `previewUrl` / `preview_url` / `preview`); surfaces it on `VoiceCloneResult.preview_url`. Adds `fetch_voice_preview(voice_id, settings)` for future refresh routes |
+| `app/services/voice_clone_client.py` | real + mock | **PR AN** — wraps `POST /v1/voices` with `from.type=audio` for custom voice cloning. `clone_voice_from_audio(name, audio_bytes, mime, settings)` returns a `VoiceCloneResult`; mock mode emits a deterministic `mock_voice_<sha256(name + bytes)[:16]>` so re-uploads of the same sample are idempotent and a fresh sample yields a new id. Caps audio at 15 MB (Runway docs say 10 MB) so an oversized sample fails with a friendly 413 before hitting the wire. Allowlist of `audio/mpeg`, `audio/wav`, `audio/m4a`, `audio/mp4`, `audio/aac`, `audio/webm`, `audio/ogg`. **PR AQ** — adds `apply_voice_to_avatar(avatar_id, voice_id, settings)` which `PATCH /v1/avatars/{id}` with `{voice: {type: "custom", voiceId: ...}}` so a freshly cloned voice swaps into an existing avatar without re-creating it. Mock-aware (mock id or runway_mock → returns `mock_patched`); never raises. **PR AR** — captures Runway's `previewUrl` from the READY poll response (with a tolerant `_extract_preview_url` helper that accepts `previewUrl` / `preview_url` / `preview`); surfaces it on `VoiceCloneResult.preview_url`. Adds `fetch_voice_preview(voice_id, settings)` for future refresh routes. **PR AS** — adds `fetch_avatar_voice(avatar_id, settings, *, expected_voice_id, avatar_is_mock)` running `GET /v1/avatars/{id}` to confirm the bind landed; returns an `AvatarVoiceState` (`verified` / `mock_verified` / `unverified` / `failed`) with resolved type / id / label fields. Tolerant `_extract_voice_block` (accepts `voice` / `voiceBlock` / `voice_block`) + `_resolve_voice_fields` (accepts `type` / `voiceType`, `voiceId` / `voice_id` / `id`, `name` / `label` / `presetId`) survive future Runway shape renames |
 | `app/services/character_studio_client.py` | real + mock | **PR K** — `PORTRAIT_TEMPLATES` (4 locked: mascot, founder, coach, local_guide); `build_prompt()`; `generate_portrait()` calls `/v1/text_to_image`; `create_avatar()` reads cached portrait → data URI → `POST /v1/avatars` → poll READY. **PR AN** — when `character.custom_voice_id` is set, the avatar create body uses `voice: {type: "custom", voiceId: ...}` instead of the runway-live-preset binding |
 | `app/services/character_store.py` | real | **PR K** — JSON-file Character store at `backend/data/characters.json`; threading.Lock; atomic writes |
 | `app/services/storyboard_service.py` | real + mock | **PR Z + PR AC** — script-aware `_split_script_beats` planner + per-shot `image_to_video` generation + ffmpeg lavfi mock; `_shot_prompt` weaves narrative cues from `campaign.commercial_script` |
@@ -209,6 +210,7 @@ the line's own `avatar_id`).
 | PR AP | In-Card Voice Recording Playback Preview (frontend-only `<audio controls>` bound to URL.createObjectURL of the captured Blob, with full lifecycle revoke on discard / clone / unmount / next start) | (post-v13) |
 | PR AQ | Avatar PATCH for Custom Voice Swap (auto-PATCH /v1/avatars/{id} with the cloned voice after every successful clone; manual retry route + UI pill on patch failure; mock_patched / pending_avatar / applied / failed state machine on Character) | (post-v13) |
 | PR AR | Cloned Voice Preview Surface (capture Runway voice previewUrl during the PR AN clone poll; persist on Character; render inline `<audio controls>` in CharacterCard with a friendly fallback when the URL is missing or in mock mode) | (post-v13) |
+| PR AS | Avatar Resource Introspection After Voice Patch (run GET /v1/avatars/{id} after every successful PR AQ PATCH; persist resolved voice block + verify status on Character; surface a third pill "Avatar using cloned voice" / "Avatar voice unverified" in CharacterCard) | (post-v13) |
 
 ## Known limitations (current main)
 

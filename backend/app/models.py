@@ -329,6 +329,21 @@ class Character(BaseModel):
     ]] = None
     custom_voice_avatar_patch_error: Optional[str] = None
     custom_voice_avatar_patched_at: Optional[datetime] = None
+    # PR AS — Avatar resource introspection. After a successful
+    # PATCH (PR AQ), `GET /v1/avatars/{id}` confirms the avatar's
+    # voice binding actually landed. ``avatar_voice_resolved_*`` are
+    # the values pulled from the avatar's voice block (defensive
+    # extraction tolerates Runway shape changes); ``status`` /
+    # ``verified_at`` / ``verify_error`` mirror the introspection
+    # outcome (verified / mock_verified / unverified / failed).
+    avatar_voice_resolved_type: Optional[str] = None
+    avatar_voice_resolved_id: Optional[str] = None
+    avatar_voice_resolved_label: Optional[str] = None
+    avatar_voice_verify_status: Optional[Literal[
+        "verified", "mock_verified", "unverified", "failed"
+    ]] = None
+    avatar_voice_verified_at: Optional[datetime] = None
+    avatar_voice_verify_error: Optional[str] = None
 
     # Portrait — local cache lives at backend/data/characters/<id>-portrait.png
     portrait_url: Optional[str] = None  # /api/characters/{id}/portrait

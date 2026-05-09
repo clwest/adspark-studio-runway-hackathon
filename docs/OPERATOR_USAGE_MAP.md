@@ -211,6 +211,46 @@ preview, which renders inside the Or-record row above and shows
 the captured Blob *before* the clone fires. PR AR's preview
 shows what Runway returned *after* the clone landed.
 
+#### Verifying the avatar bind (PR AS)
+
+PR AQ trusts a 2xx `PATCH /v1/avatars/{id}` response as proof
+the bind landed. PR AS adds a verification step: after every
+successful PATCH (auto from `clone-voice` + manual from
+`apply-voice`), AdSpark runs `GET /v1/avatars/{id}` and pulls
+the resolved voice block out of the response. Result is
+persisted on the character and surfaced as a third pill in the
+voice section:
+
+| Pill copy | When |
+|---|---|
+| **Avatar using cloned voice** (emerald) | Real GET returned a parseable voice block ✅ |
+| **Avatar using cloned voice · mock** (amber) | Mock mode short-circuits to `mock_verified` |
+| **Avatar voice unverified** (grey / rose) | GET returned no voice block, or the GET itself failed |
+| **Avatar voice pending** (grey) | Patch landed but verification hasn't run yet |
+
+Tolerant extraction handles three Runway voice-block shapes
+(`voice`, `voiceBlock`, `voice_block`) and three field-name
+variants per slot (`type` / `voiceType`, `voiceId` / `voice_id`
+/ `id`, `name` / `label` / `presetId`) so a future server-side
+rename never silently drops the verification.
+
+Persisted on `Character`:
+
+```python
+avatar_voice_resolved_type:    Optional[str]   # "custom" / "preset" / ...
+avatar_voice_resolved_id:      Optional[str]   # voice id from avatar block
+avatar_voice_resolved_label:   Optional[str]   # human-readable label
+avatar_voice_verify_status:    Optional[Literal[...]]
+avatar_voice_verified_at:      Optional[datetime]
+avatar_voice_verify_error:     Optional[str]
+```
+
+Verification failure is non-fatal — the cloned voice + PATCH
+state survive intact; only the third pill flips to
+*unverified*. `data-testid` hooks: `custom-voice-avatar-resolved`
+(green / amber states), `custom-voice-avatar-unverified`
+(grey / rose states).
+
 #### Recording in-browser (PR AO)
 
 Below the file picker on each library tile sits a small

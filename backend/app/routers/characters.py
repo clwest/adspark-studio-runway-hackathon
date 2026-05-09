@@ -31,6 +31,7 @@ from ..services.voice_clone_client import (
     SUPPORTED_AUDIO_MIMES,
     apply_voice_to_avatar,
     clone_voice_from_audio,
+    fetch_avatar_voice,
 )
 
 logger = logging.getLogger(__name__)
@@ -40,6 +41,43 @@ router = APIRouter(prefix="/api/characters", tags=["characters"])
 
 def _store(settings: Settings = Depends(get_settings)) -> CharacterStore:
     return CharacterStore(settings.data_path)
+
+
+# ---- PR AS — introspection helper shared by clone + apply routes ----
+
+
+def _verify_avatar_voice_after_patch(
+    record: Character,
+    expected_voice_id: Optional[str],
+    settings: Settings,
+    apply_status: str,
+):
+    """PR AS — run `GET /v1/avatars/{id}` to confirm the freshly-
+    patched voice binding actually landed. Returns
+    ``(AvatarVoiceState, verified_at | None)``. The caller persists
+    every field; a verification failure is logged but never blocks
+    the clone or apply flows.
+
+    When the prior PATCH was ``pending_avatar`` (no avatar bound
+    yet) we skip the GET entirely — there's nothing to introspect.
+    """
+    from ..services.voice_clone_client import (  # noqa: WPS433 lazy-import
+        AvatarVoiceState,
+    )
+    if apply_status == "pending_avatar":
+        return AvatarVoiceState(status="failed", error="no avatar bound"), None
+    state = fetch_avatar_voice(
+        record.runway_avatar_id,
+        settings,
+        avatar_is_mock=(record.runway_avatar_status == "mock"),
+        expected_voice_id=expected_voice_id,
+    )
+    verified_at = (
+        datetime.now(timezone.utc)
+        if state.status in {"verified", "mock_verified"}
+        else None
+    )
+    return state, verified_at
 
 
 # ---- request bodies ----------------------------------------------
@@ -310,6 +348,14 @@ async def post_clone_voice(
         else None
     )
 
+    # PR AS — introspect the avatar resource so the operator can
+    # confirm the bind actually landed (rather than trusting the
+    # 2xx alone). Best-effort: a verify failure never blocks the
+    # cloned voice or the patch state.
+    verify_state, verified_at = _verify_avatar_voice_after_patch(
+        record, result.voice_id, settings, apply_result.status,
+    )
+
     updated = store.update(
         character_id,
         custom_voice_id=result.voice_id,
@@ -324,6 +370,15 @@ async def post_clone_voice(
         custom_voice_avatar_patch_status=apply_result.status,
         custom_voice_avatar_patch_error=apply_result.error,
         custom_voice_avatar_patched_at=(patched_at.isoformat() if patched_at else None),
+        # PR AS — resolved voice fields from the avatar GET.
+        avatar_voice_resolved_type=verify_state.resolved_type,
+        avatar_voice_resolved_id=verify_state.resolved_id,
+        avatar_voice_resolved_label=verify_state.resolved_label,
+        avatar_voice_verify_status=verify_state.status,
+        avatar_voice_verified_at=(
+            verified_at.isoformat() if verified_at else None
+        ),
+        avatar_voice_verify_error=verify_state.error,
     )
     logger.info(
         "character %s voice cloned -> %s (status=%s mock=%s; patch=%s)",
@@ -378,11 +433,23 @@ def post_apply_voice_to_avatar(
         if apply_result.status in {"applied", "mock_patched"}
         else None
     )
+    # PR AS — verify the bind landed.
+    verify_state, verified_at = _verify_avatar_voice_after_patch(
+        record, record.custom_voice_id, settings, apply_result.status,
+    )
     updated = store.update(
         character_id,
         custom_voice_avatar_patch_status=apply_result.status,
         custom_voice_avatar_patch_error=apply_result.error,
         custom_voice_avatar_patched_at=(patched_at.isoformat() if patched_at else None),
+        avatar_voice_resolved_type=verify_state.resolved_type,
+        avatar_voice_resolved_id=verify_state.resolved_id,
+        avatar_voice_resolved_label=verify_state.resolved_label,
+        avatar_voice_verify_status=verify_state.status,
+        avatar_voice_verified_at=(
+            verified_at.isoformat() if verified_at else None
+        ),
+        avatar_voice_verify_error=verify_state.error,
     )
     if apply_result.status == "failed":
         raise HTTPException(
