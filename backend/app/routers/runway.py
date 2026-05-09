@@ -36,6 +36,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/runway", tags=["runway"])
 
 
+_CHARACTER_PORTRAIT_PREFIX = "/api/characters/"
+_CHARACTER_PORTRAIT_SUFFIX = "/portrait"
+
+
 @router.post("/generate", response_model=RunwayGenerateResponse)
 def post_generate(
     req: RunwayGenerateRequest,
@@ -56,6 +60,35 @@ def post_generate(
         )
     except GenerationSettingsError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    # PR W — when the user selects "Use Character" as Visual Source,
+    # the frontend posts prompt_image="/api/characters/<id>/portrait".
+    # If the backing portrait file doesn't exist, return 404 immediately
+    # rather than passing the unresolvable URL through to Runway (which
+    # would burn a credit chasing a localhost URL and respond with a
+    # confusing upstream error). In mock mode we skip — the mock task
+    # ignores prompt_image content and would succeed regardless.
+    if not settings.runway_mock and has_image:
+        pi = (req.prompt_image or "").strip()
+        if pi.startswith(_CHARACTER_PORTRAIT_PREFIX) and pi.endswith(_CHARACTER_PORTRAIT_SUFFIX):
+            char_id = pi[len(_CHARACTER_PORTRAIT_PREFIX):-len(_CHARACTER_PORTRAIT_SUFFIX)]
+            if not char_id or "/" in char_id or ".." in char_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"invalid character id in prompt_image: {pi!r}"
+                    ),
+                )
+            portrait = settings.data_path / "characters" / f"{char_id}-portrait.png"
+            if not portrait.exists():
+                raise HTTPException(
+                    status_code=404,
+                    detail=(
+                        f"character portrait not found for {char_id!r}. "
+                        "Generate the portrait in Character Studio first, "
+                        "then retry."
+                    ),
+                )
 
     try:
         return create_task(req, settings)

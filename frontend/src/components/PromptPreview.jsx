@@ -170,10 +170,16 @@ export default function PromptPreview({
     // Any non-text-only path needs textOnly off.
     if (textOnly) onTextOnlyChange?.(false)
     if (next === 'character') {
-      // If a character is already selected, refresh the URL; otherwise
-      // wait for the user to pick one from the inline list.
+      // PR W — selection priority: previously-picked tile > active
+      // spokesperson (PR U) > clear. Pre-PR-W this branch always
+      // cleared imageUrl when localCharacterId was null, even when an
+      // active spokesperson existed — forcing the user to manually
+      // re-pick the tile after the radio flip.
       if (localCharacterId) {
         onImageUrlChange?.(`/api/characters/${localCharacterId}/portrait`)
+      } else if (activeCharacter?.id && activeCharacter?.portrait_url) {
+        setLocalCharacterId(activeCharacter.id)
+        onImageUrlChange?.(activeCharacter.portrait_url)
       } else {
         onImageUrlChange?.('')
       }
@@ -199,8 +205,31 @@ export default function PromptPreview({
       onImageUrlChange?.('')
       return
     }
+    // PR W — force textOnly off whenever a character is picked so
+    // /api/runway/generate gets a real prompt_image instead of falling
+    // through to text_to_video. handleSourceChange already does this
+    // when the radio flips to 'character', but a direct tile click
+    // (without changing the radio) needs the same guarantee.
+    if (textOnly) onTextOnlyChange?.(false)
     onImageUrlChange?.(`/api/characters/${id}/portrait`)
   }
+
+  // PR W — when "Use Character" is selected with no specific tile
+  // picked but an active spokesperson exists, default to the active
+  // spokesperson. Closes the user-perceived bug where switching to
+  // the character source after PR U auto-fill cleared the imageUrl
+  // and required a manual tile re-click.
+  useEffect(() => {
+    if (visualSource !== 'character') return
+    if (localCharacterId) return
+    const active = activeCharacter
+    if (active?.id && active?.portrait_url && charactersWithPortrait.some((c) => c.id === active.id)) {
+      setLocalCharacterId(active.id)
+      onImageUrlChange?.(active.portrait_url)
+      if (textOnly) onTextOnlyChange?.(false)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visualSource, activeCharacter])
 
   // When the chooser is on the character path but the picked character
   // disappears from the library (e.g. deletion via Studio), gracefully
