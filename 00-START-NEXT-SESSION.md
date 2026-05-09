@@ -183,6 +183,23 @@ Storyboard, **Dialogue Scene Ad**, Spokesperson Ad).
 - **Webcam/screen-share affordances on realtime** — gated behind
   custom-voice limitations; safer to keep it mic-only for V1 demos.
 
+## Context-kit drift guard
+
+Context-kit anchors drifted badly during v6 → v13 (14 PRs / 17
+commits / 7 tags landed before SESSION_011 caught up). Before
+pushing `main` or tagging `hackathon-submission-vN`, run:
+
+```bash
+bash scripts/check-context-kit-drift.sh
+```
+
+Warning-only (never exits non-zero). If it prints
+`⚠️ context-kit drift: …`, propose a `docs:` refresh commit
+(matching the SESSION_011 shape — refresh the three anchors +
+write a new SESSION_NNN handoff) **before** push/tag.
+
+Full rules in `CLAUDE.md`.
+
 ## Hard rules for any future session
 
 - Do not modify `unified-donkey-betz` (read-only inspection only).

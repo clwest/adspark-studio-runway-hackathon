@@ -852,6 +852,25 @@ hasn't fired (would log "retrying without personality/startScript").
 
 ---
 
+## Maintenance — context-kit drift guard
+
+Context-kit anchors (`00-START-NEXT-SESSION.md`, `docs/WHAT_IT_IS.md`,
+`docs/INVENTORY.md`, `docs/handoffs/`) drifted ~14 PRs behind the
+code during the v6 → v13 push. To prevent silent drift before a
+push or tag, run:
+
+```bash
+bash scripts/check-context-kit-drift.sh
+```
+
+Warning-only — never blocks the command. Default threshold is 5
+commits since the last anchor edit. Override with
+`CONTEXT_KIT_DRIFT_LIMIT=N`. Full rules in `CLAUDE.md`.
+
+If the script prints `⚠️ context-kit drift: …`, propose a `docs:`
+refresh commit before pushing / tagging — same shape as
+`docs/handoffs/SESSION_011_OPERATOR_USAGE_MAP.md`.
+
 ## Where to read more
 
 - `docs/WHAT_IT_IS.md` — narrative anchor.
