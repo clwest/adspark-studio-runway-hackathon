@@ -984,11 +984,46 @@ test('AdSpark Studio UX v2 SpokespersonStudio scaffold', async ({ page }) => {
       ).toContainText(/No linked campaigns yet/i)
     }
 
-    // Same shape for Appearances.
+    // PR BG — Appearances tab now wires real campaign data. Same
+    // disjunction shape as Knowledge: exactly one of an
+    // `spokesperson-appearance-row` list OR the
+    // `spokesperson-appearance-empty` state must render. Resilient
+    // to fixture state — first spokesperson may or may not have
+    // linked campaigns depending on what's in characters.json.
     await firstCard.getByTestId('spokesperson-tab-appearances').click()
-    await expect(
-      firstCard.getByTestId('spokesperson-appearances-tab'),
-    ).toContainText(/Campaign appearances land next/i)
+    const appearancesTab = firstCard.getByTestId(
+      'spokesperson-appearances-tab',
+    )
+    await expect(appearancesTab).toBeVisible()
+    const appearanceRows = firstCard.getByTestId(
+      'spokesperson-appearance-row',
+    )
+    const appearanceEmpty = firstCard.getByTestId(
+      'spokesperson-appearance-empty',
+    )
+    const appearanceRowCount = await appearanceRows.count()
+    const appearanceEmptyCount = await appearanceEmpty.count()
+    // Exactly one branch must render.
+    expect(appearanceRowCount + appearanceEmptyCount).toBeGreaterThan(0)
+    if (appearanceRowCount > 0) {
+      // Row carries a mode badge whose text matches one of the
+      // seven literal mode strings.
+      await expect(
+        appearanceRows.first().getByTestId('spokesperson-appearance-mode'),
+      ).toContainText(
+        /^(Cinematic|Spokesperson Ad|Dialogue Scene|Storyboard|Realtime|Mixed|Draft)$/,
+      )
+      // Click-through is intentionally disabled until PR BJ–BL.
+      await expect(
+        appearanceRows
+          .first()
+          .getByTestId('spokesperson-appearance-open'),
+      ).toBeDisabled()
+    } else {
+      await expect(appearanceEmpty).toContainText(
+        /No appearances yet/i,
+      )
+    }
   }
 
   // Console / page errors stay clean on the v2 path too.
