@@ -11,6 +11,7 @@ import {
 import CampaignModeModal from './CampaignModeModal.jsx'
 import SpokespersonCard from './SpokespersonCard.jsx'
 import CinematicLane from './lanes/CinematicLane.jsx'
+import DialogueLane from './lanes/DialogueLane.jsx'
 import SpokespersonLane from './lanes/SpokespersonLane.jsx'
 
 // PR BH — operator-friendly labels per campaign mode. Backend has
@@ -321,8 +322,8 @@ export default function SpokespersonStudio({
               )}
               {activeMode === CAMPAIGN_MODES.DIALOGUE && (
                 <>
-                  <span className="font-semibold">Mode selected.</span>{' '}
-                  Dialogue lane lands next (PR BL).
+                  <span className="font-semibold">Dialogue Scene lane open.</span>{' '}
+                  Multi-character stitched skit + reels targets below.
                 </>
               )}
             </span>
@@ -363,6 +364,24 @@ export default function SpokespersonStudio({
           chosen the cinematic mode. */}
       {activeMode === CAMPAIGN_MODES.CINEMATIC && (
         <CinematicLane
+          activeSpokesperson={
+            activeCharacterId
+              ? characters.find((c) => c.id === activeCharacterId) || null
+              : null
+          }
+          linkedCampaigns={
+            activeCharacterId
+              ? campaignsByCharacter[activeCharacterId] || []
+              : []
+          }
+        />
+      )}
+      {/* PR BL — Dialogue Scene lane scaffold. Mirrors PR BI / PR BK
+          shape; mounts only when the operator has chosen the
+          dialogue mode. Cast list derives from
+          `dialogue_lines[*]` on the focused campaign. */}
+      {activeMode === CAMPAIGN_MODES.DIALOGUE && (
+        <DialogueLane
           activeSpokesperson={
             activeCharacterId
               ? characters.find((c) => c.id === activeCharacterId) || null

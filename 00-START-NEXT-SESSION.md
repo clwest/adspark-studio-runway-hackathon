@@ -9,14 +9,14 @@ PR AT `632b696`; PR AU `485310a`; PR AV `b9b7fee`; PR AW
 PR BA `9d0a99d`; PR BB `8702660`; PR BC `9eae15f`; PR BD
 `0171078`; PR BE `e2ed1ee`; PR BF `d897437`; PR BG
 `af48e28`; SESSION REAL-API `4a68278`; PR BH `600eec9`; PR BI
-`42a8054`; PR BJ `c04aced chore: local real-mode runtime guard
-(PR BJ)`; PR BK Cinematic Lane Scaffold in flight on top —
-SESSION_012–SESSION_042 handoffs added).
+`42a8054`; PR BJ `c04aced`; PR BK `7185554 feat: cinematic ad lane
+scaffold (gated v2)`; PR BL Dialogue Lane Scaffold in flight
+on top — SESSION_012–SESSION_043 handoffs added).
 
 ## Where things stand
 
-- **Branch:** `main` at `c04aced` (`chore: local real-mode
-  runtime guard (PR BJ)`) on `origin/main`. PR BK patch in
+- **Branch:** `main` at `7185554` (`feat: cinematic ad lane
+  scaffold (gated v2)`) on `origin/main`. PR BL patch in
   flight on top — no new commit / tag yet, both pending
   explicit user approval.
 - **Latest tag:** still **`hackathon-submission-v13`** at `ec446e4`
@@ -34,17 +34,19 @@ SESSION_012–SESSION_042 handoffs added).
   switches modes. **Default load remains v1**; v2 reachable
   via footer toggle or `?ux=v2`.
 - **Backend routes:** **68** application + FastAPI built-ins
-  (unchanged from PR BJ; PR BK is frontend-only).
-- **Frontend build:** 370.30 KB initial JS / 101.06 KB gzip +
-  561.97 KB lazy `@runwayml/avatars-react` chunk (+7.52 KB
-  initial / +1.07 KB gzip vs PR BI — CinematicLane scaffold).
+  (unchanged from PR BK; PR BL is frontend-only).
+- **Frontend build:** 378.16 KB initial JS / 102.00 KB gzip +
+  561.97 KB lazy `@runwayml/avatars-react` chunk (+7.86 KB
+  initial / +0.94 KB gzip vs PR BK — DialogueLane scaffold
+  with cast list derivation).
 - **Playwright smoke:** `2 passed (~22.9 s)` against the mock
   backend booted via `bash scripts/start-local-mock.sh`. v1
-  test ~21.3 s unchanged. v2 test ~934 ms now also covers the
-  spokesperson → cinematic mode switch + 3 cinematic-lane
-  step testids + 3 disabled cinematic render buttons +
-  cinematic lane unmount on dismiss. The smoke command
-  sequence:
+  test ~21.2 s unchanged. v2 test ~1.1 s now exercises the
+  full mode-switch chain — spokesperson → cinematic →
+  dialogue → dismiss — asserting only one lane is visible at
+  a time + each lane carries its three step testids and
+  three disabled render buttons with matching
+  `data-render-target` attributes.
   ```bash
   bash scripts/start-local-mock.sh
   (cd frontend && npm run test:e2e)
@@ -63,7 +65,7 @@ SESSION_012–SESSION_042 handoffs added).
 
 ## What's implemented (full feature stack on `main`)
 
-### UX redesign foundation (PR BD — UX v2 Flag + Shared Helpers · PR BE — SpokespersonStudio Scaffold · PR BF — Knowledge Tab Wiring · PR BG — Appearances Tab Wiring · PR BH — Mode-First Creation Modal · PR BI — Spokesperson Lane Scaffold · PR BK — Cinematic Lane Scaffold)
+### UX redesign foundation (PR BD — UX v2 Flag + Shared Helpers · PR BE — SpokespersonStudio Scaffold · PR BF — Knowledge Tab Wiring · PR BG — Appearances Tab Wiring · PR BH — Mode-First Creation Modal · PR BI — Spokesperson Lane Scaffold · PR BK — Cinematic Lane Scaffold · PR BL — Dialogue Lane Scaffold)
 
 - **UX v2 feature flag** at `frontend/src/uxFlag.js`. Resolves
   precedence URL `?ux=v2|v1` > localStorage `adspark.ux` >
@@ -143,6 +145,20 @@ SESSION_012–SESSION_042 handoffs added).
   `campaign-mode-modal`, `campaign-mode-modal-backdrop`,
   `campaign-mode-modal-close`, `campaign-mode-modal-cards`,
   `campaign-mode-card-{cinematic,spokesperson,dialogue}`.
+- **Dialogue Scene lane scaffold** (PR BL) — third lane in the
+  trio, completing the v2 mode lineup. New
+  `frontend/src/components/lanes/DialogueLane.jsx` mirrors
+  PR BI / PR BK shape with dialogue-specific steps:
+  Step 1 Brief (campaign business + product), Step 2 Cast
+  (speaker list inferred from `dialogue_lines[*]`), Step 3
+  Lines & Stitch (three disabled render buttons — Generate
+  Dialogue Lines / Stitch Dialogue Scene / Captioned Reels
+  720×1280). Mounts when `activeMode === "dialogue"`; sky
+  chrome to match the mode pill. Pill copy flips to
+  "Dialogue Scene lane open." data-testid: `dialogue-lane`,
+  `dialogue-lane-step-{brief,cast,lines}`,
+  `dialogue-lane-{lines,stitch,reels}`,
+  `dialogue-lane-cast-list`, `dialogue-lane-empty-hint`.
 - **Cinematic Ad lane scaffold** (PR BK) — second lane in the
   trio. New `frontend/src/components/lanes/CinematicLane.jsx`
   mirrors PR BI's shape with a 3-step Brief / Visual Source /

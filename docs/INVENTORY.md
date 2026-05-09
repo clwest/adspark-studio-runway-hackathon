@@ -1,19 +1,20 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after PR BK (Cinematic Lane Scaffold) on
-top of the PR AG–BJ / SESSION 011 anchors. Backend route count
-is **68** application routes — PR BK adds the second v2 mode
-lane (after BI Spokesperson). A new
-`frontend/src/components/lanes/CinematicLane.jsx` mirrors
-PR BI's 3-step shape with mode-specific copy (Brief / Visual
-Source / Render) and three disabled placeholder render buttons
-(Cinematic Video / Voiced Cinematic / Storyboard Commercial).
-Mounts in SpokespersonStudio when `activeMode === "cinematic"`;
-SpokespersonLane unmounts when the operator switches modes.
-Active-mode pill copy is now mode-specific so the operator
-sees a clear "Cinematic Ad lane open." status when cinematic
-is selected. Backend untouched. PR BL ships DialogueLane next. **Real-mode credit-burn session preserved on disk:**
+context-kit refresh after PR BL (Dialogue Lane Scaffold) on top
+of the PR AG–BK / SESSION 011 anchors. Backend route count is
+**68** application routes — PR BL ships the third and final v2
+mode lane, completing the trio (BI Spokesperson · BK Cinematic ·
+BL Dialogue). A new
+`frontend/src/components/lanes/DialogueLane.jsx` mirrors PR BI
+/ PR BK with dialogue-specific steps (Brief / Cast / Lines &
+Stitch) and three disabled placeholder render buttons
+(Generate Dialogue Lines / Stitch Dialogue Scene / Captioned
+Reels). Cast list derives from `dialogue_lines[*]` on the
+focused campaign. All three modes now mount their own lane
+when picked from the PR BH modal; switching unmounts the prior
+lane. PR BM is a regression-pass slice that hardens the smoke
+across all three lanes + the v1↔v2 toggle. Backend untouched. **Real-mode credit-burn session preserved on disk:**
 Brewster / CEO Buzz spokesperson MP4 (1088×704, 18.4 s, 6.1 MB),
 captioned reels (720×1280), voiced cinematic mux (1280×720),
 real Runway grounding doc — all gitignored, served from cached
@@ -247,6 +248,7 @@ the line's own `avatar_id`).
 | PR BI | Spokesperson Lane Scaffold (gated v2 slice tracked in SESSION_040; first lane in the trio — Cinematic / Dialogue lanes ship in PR BK / PR BL; new `frontend/src/components/lanes/SpokespersonLane.jsx` with 3-step Brief / Script / Render layout; mounts in SpokespersonStudio below the pill when `activeMode === "spokesperson"`; render buttons are disabled placeholders pending later wiring; receives active spokesperson + linked campaigns; friendly empty-state hint when neither set; backend untouched — uses existing campaign data already indexed in PR BF) | (post-v13) |
 | PR BJ | Local Real-Mode Runtime Guard (runtime + docs slice tracked in SESSION_041; flips local-testing default from mock-mode to real-mode; new `scripts/start-local-real.sh` sources `.env` without overrides for manual / in-browser testing, `scripts/start-local-mock.sh` is the explicit mock-mode boot for Playwright smoke + CI, `scripts/stop-local.sh` kills both servers; CLAUDE.md hard-rules section rewritten — `RUNWAY_API_KEY= OPENAI_API_KEY= IMAGE_GEN_PROVIDER=mock` inline overrides are now an anti-pattern; no frontend/backend code changes; frontend bundle unchanged) | (post-v13) |
 | PR BK | Cinematic Lane Scaffold (gated v2 slice tracked in SESSION_042; second lane in the trio; new `frontend/src/components/lanes/CinematicLane.jsx` mirrors PR BI shape with 3-step Brief / Visual Source / Render layout + 3 disabled placeholder buttons mapping to Cinematic Video / Voiced Cinematic / Storyboard Commercial; mounts in SpokespersonStudio when `activeMode === "cinematic"`; fuchsia chrome to match the mode pill; pill copy now mode-specific — "Cinematic Ad lane open." for cinematic mode; smoke covers spokesperson → cinematic mode switch with assertion that previous lane unmounts; backend untouched) | (post-v13) |
+| PR BL | Dialogue Lane Scaffold (gated v2 slice tracked in SESSION_043; third lane in the trio — completes the v2 mode lineup; new `frontend/src/components/lanes/DialogueLane.jsx` mirrors PR BI / PR BK shape with 3-step Brief / Cast / Lines & Stitch layout + 3 disabled placeholder buttons mapping to Generate Dialogue Lines / Stitch Dialogue Scene / Captioned Reels; mounts when `activeMode === "dialogue"`; sky chrome to match the mode pill; cast list derives from `dialogue_lines[*]` on the focused campaign; pill copy flips to "Dialogue Scene lane open."; smoke covers cinematic → dialogue mode switch; backend untouched) | (post-v13) |
 
 ## Known limitations (current main)
 

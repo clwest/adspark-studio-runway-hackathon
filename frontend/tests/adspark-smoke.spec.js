@@ -1141,10 +1141,48 @@ test('AdSpark Studio UX v2 SpokespersonStudio scaffold', async ({ page }) => {
     await expect(btn).toHaveAttribute('data-render-target', target)
   }
 
-  // Dismiss link clears the pill + the localStorage entry. PR BK —
-  // the active lane (whichever it is) unmounts at the same time.
-  // The smoke ends with cinematic active, so the cinematic lane
-  // should be gone after dismiss.
+  // PR BL — re-open the modal and pick Dialogue Scene. The
+  // cinematic lane should unmount and DialogueLane should mount
+  // in its place.
+  await newCampaignButton.click()
+  const modalDialogue = page.getByTestId('campaign-mode-modal')
+  await expect(modalDialogue).toBeVisible()
+  await modalDialogue.getByTestId('campaign-mode-card-dialogue').click()
+  await expect(modalDialogue).toHaveCount(0)
+  await expect(activeModePill).toHaveAttribute('data-mode', 'dialogue')
+  await expect(activeModePill).toContainText(/Dialogue Scene/i)
+  await expect(activeModePill).toContainText(/Dialogue Scene lane open/i)
+  // Cinematic lane must be gone.
+  await expect(
+    page.getByTestId('cinematic-lane'),
+  ).toHaveCount(0)
+  const dialogueLane = page.getByTestId('dialogue-lane')
+  await expect(dialogueLane).toBeVisible()
+  await expect(dialogueLane).toHaveAttribute('data-mode', 'dialogue')
+  await expect(dialogueLane).toContainText(/Dialogue Scene lane/i)
+  await expect(
+    dialogueLane.getByTestId('dialogue-lane-step-brief'),
+  ).toBeVisible()
+  await expect(
+    dialogueLane.getByTestId('dialogue-lane-step-cast'),
+  ).toBeVisible()
+  await expect(
+    dialogueLane.getByTestId('dialogue-lane-step-lines'),
+  ).toBeVisible()
+  for (const [tid, target] of [
+    ['dialogue-lane-lines', 'dialogue-lines'],
+    ['dialogue-lane-stitch', 'dialogue-stitch'],
+    ['dialogue-lane-reels', 'dialogue-reels'],
+  ]) {
+    const btn = dialogueLane.getByTestId(tid)
+    await expect(btn).toBeVisible()
+    await expect(btn).toBeDisabled()
+    await expect(btn).toHaveAttribute('data-render-target', target)
+  }
+
+  // Dismiss link clears the pill + the localStorage entry. The
+  // smoke ends with dialogue active, so the dialogue lane should
+  // be gone after dismiss.
   await page.getByTestId('spokesperson-active-mode-dismiss').click()
   await expect(
     page.getByTestId('spokesperson-active-mode'),
@@ -1154,6 +1192,9 @@ test('AdSpark Studio UX v2 SpokespersonStudio scaffold', async ({ page }) => {
   ).toHaveCount(0)
   await expect(
     page.getByTestId('cinematic-lane'),
+  ).toHaveCount(0)
+  await expect(
+    page.getByTestId('dialogue-lane'),
   ).toHaveCount(0)
   const cleared = await page.evaluate(() =>
     window.localStorage.getItem('adspark.activeMode'),
