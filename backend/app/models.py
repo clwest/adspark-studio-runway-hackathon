@@ -176,6 +176,13 @@ class Campaign(CampaignCreate):
         "ok", "failed", "no_video", "no_host", "no_audio", "unavailable"
     ]] = None
     storyboard_voiced_error: Optional[str] = None
+    # PR AA — Script-first voiced commercial flow. The user (or the
+    # deterministic builder) writes a Commercial Script before the
+    # spokesperson clip is generated; downstream host-video + voiced-
+    # commercial passes use this when present, falling back to
+    # `character_host_client.build_script` otherwise.
+    commercial_script: Optional[str] = None
+    commercial_script_updated_at: Optional[datetime] = None
 
 
 class CampaignList(BaseModel):

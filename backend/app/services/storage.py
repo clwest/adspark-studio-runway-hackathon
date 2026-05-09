@@ -362,6 +362,30 @@ class CampaignStore:
                     return Campaign.model_validate(row)
         return None
 
+    def update_commercial_script(
+        self,
+        campaign_id: str,
+        commercial_script: Optional[str],
+    ) -> Optional[Campaign]:
+        """PR AA — persist the editable Commercial Script. Pass an empty
+        string / None to clear (downstream falls back to the deterministic
+        ``character_host_client.build_script``).
+        """
+        with _LOCK:
+            rows = self._read()
+            for row in rows:
+                if row.get("id") == campaign_id:
+                    cleaned = (commercial_script or "").strip() or None
+                    row["commercial_script"] = cleaned
+                    row["commercial_script_updated_at"] = (
+                        datetime.now(timezone.utc).isoformat()
+                        if cleaned
+                        else None
+                    )
+                    self._write(rows)
+                    return Campaign.model_validate(row)
+        return None
+
     def update_storyboard_voiced(
         self,
         campaign_id: str,

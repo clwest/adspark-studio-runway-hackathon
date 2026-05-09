@@ -414,7 +414,12 @@ def post_commercial_with_voice(
             "commercial-with-voice campaign=%s — auto-generating host clip",
             campaign_id,
         )
-        host_result = generate_host_video(record, settings)
+        # PR AA — pass the saved Commercial Script through so the auto-
+        # generated host clip speaks the user's script verbatim.
+        host_result = generate_host_video(
+            record, settings,
+            script_override=record.commercial_script or None,
+        )
         if host_result.status == "ok":
             updated_host = store.update_host_video_fields(
                 campaign_id,
@@ -856,7 +861,11 @@ def post_storyboard_voiced(
             "voiced storyboard campaign=%s — auto-generating host clip",
             campaign_id,
         )
-        host_result = generate_host_video(record, settings)
+        # PR AA — same script-first rule for storyboard auto-host.
+        host_result = generate_host_video(
+            record, settings,
+            script_override=record.commercial_script or None,
+        )
         if host_result.status == "ok":
             updated_host = store.update_host_video_fields(
                 campaign_id,
@@ -1046,6 +1055,47 @@ class HostVideoBody(BaseModel):
     )
 
 
+# PR AA — Commercial Script field. Persists the user-edited script so
+# downstream host-video / commercial-with-voice / storyboard voiced
+# passes can speak it verbatim.
+class CommercialScriptBody(BaseModel):
+    script: Optional[str] = Field(
+        default=None,
+        max_length=300,
+        description=(
+            "Editable spoken-pitch script. Persisted on the campaign. "
+            "Pass null/empty to clear (downstream falls back to the "
+            "deterministic build_script template). Capped at 300 chars "
+            "to match Runway avatar_videos' speech limit."
+        ),
+    )
+
+
+@router.post("/{campaign_id}/script", response_model=Campaign)
+def post_commercial_script(
+    campaign_id: str,
+    body: CommercialScriptBody,
+    store: CampaignStore = Depends(_store),
+) -> Campaign:
+    """Persist or clear the saved Commercial Script for this campaign.
+    Read by the host-video route (when no explicit override is sent)
+    and by the auto-host paths inside commercial-with-voice and the
+    voiced storyboard.
+    """
+    record = store.get(campaign_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="campaign not found")
+    updated = store.update_commercial_script(campaign_id, body.script)
+    if not updated:
+        raise HTTPException(status_code=404, detail="campaign not found")
+    logger.info(
+        "campaign %s commercial_script %s",
+        campaign_id,
+        f"set ({len(body.script or '')} chars)" if body.script else "cleared",
+    )
+    return updated
+
+
 @router.post("/{campaign_id}/avatar", response_model=Campaign)
 def post_create_avatar(
     campaign_id: str,
@@ -1149,7 +1199,12 @@ def post_host_video(
             ),
         )
 
-    script_override = body.script_override if body else None
+    # PR AA — host clip prefers the saved Commercial Script when no
+    # explicit override is supplied. character_host_client.build_script
+    # remains the deterministic fallback when neither exists.
+    script_override = body.script_override if body and body.script_override else None
+    if not script_override and record.commercial_script:
+        script_override = record.commercial_script
     result = generate_host_video(record, settings, script_override=script_override)
     if result.status == "ok":
         logger.info(

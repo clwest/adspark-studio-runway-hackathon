@@ -135,4 +135,12 @@ export const api = {
       `/api/campaigns/${encodeURIComponent(campaignId)}/storyboard/voiced`,
       { method: 'POST' },
     ),
+  // PR AA — Commercial Script. Persists the editable spoken-pitch
+  // script on the campaign so host-video / commercial-with-voice
+  // auto-host paths speak it verbatim. Pass null/empty to clear.
+  saveCommercialScript: (campaignId, script) =>
+    jsonFetch(
+      `/api/campaigns/${encodeURIComponent(campaignId)}/script`,
+      { method: 'POST', body: JSON.stringify({ script }) },
+    ),
 }

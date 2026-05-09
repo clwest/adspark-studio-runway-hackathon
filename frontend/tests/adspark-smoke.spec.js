@@ -171,6 +171,15 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
   await portraitPromptTextarea.fill(`${portraitOriginal} TEST_PORTRAIT_EDIT`)
   await expect(portraitPromptTextarea).toHaveValue(/TEST_PORTRAIT_EDIT$/)
   await expect(page.getByText(/^reset to default$/i)).toBeVisible()
+  // 7b.5c. PR AA — voice preset description chip + helper text render
+  //         when the create form is open. Default voice is `vincent`,
+  //         so the curated "smooth, classic spokesperson" copy renders.
+  const voiceDescBlock = page.getByLabel(/^voice preset description$/i)
+  await expect(voiceDescBlock).toBeVisible()
+  await expect(voiceDescBlock).toContainText(/smooth, classic spokesperson/i)
+  await expect(
+    page.getByText(/Runway preset previews aren't available without/i),
+  ).toBeVisible()
   // Close the form so the rest of the smoke runs against a clean
   // state. The "+ Create Character" button toggles to "Cancel" while
   // the form is open.
@@ -352,8 +361,26 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
     newestCard.getByRole('button', { name: /Music Superstar/i }),
   ).toBeVisible()
 
-  // 13c. Voice tab — Audio Pack with PR M honest labels.
+  // 13c. Voice tab — PR AA Commercial Script + PR M honest Audio Pack
+  //       labels. Script section renders first now; Audio Pack stays
+  //       below as the brand-voice identity surface.
   await newestCard.getByRole('tab', { name: 'Voice' }).click()
+  await expect(newestCard.getByText(/^Commercial Script$/)).toBeVisible()
+  await expect(
+    newestCard.getByText(/Write the spoken pitch first/i),
+  ).toBeVisible()
+  const scriptTextarea = newestCard.getByLabel(/^Commercial Script$/)
+  await expect(scriptTextarea).toBeVisible()
+  await expect(
+    newestCard.getByRole('button', { name: /^Generate Script$/i }),
+  ).toBeVisible()
+  await expect(
+    newestCard.getByRole('button', { name: /^Save Script$/i }),
+  ).toBeVisible()
+  await expect(
+    newestCard.getByRole('button', { name: /Record Host Clip from Script/i }),
+  ).toBeVisible()
+  // Audio Pack still renders below the Script section.
   await expect(newestCard.getByText(/^Audio Pack$/)).toBeVisible()
   await expect(newestCard.getByText(/^Brand Voice Identity$/)).toBeVisible()
   await expect(

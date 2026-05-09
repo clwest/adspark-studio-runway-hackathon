@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../api'
+import { buildCommercialScript, COMMERCIAL_SCRIPT_MAX } from '../scriptBuilder'
+import { describeVoicePreset } from '../voicePresets'
 import AvatarPicker from './AvatarPicker.jsx'
 import CharacterCard from './CharacterCard.jsx'
 import RealtimeSpokesperson from './RealtimeSpokesperson.jsx'
@@ -160,6 +162,24 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
   const [storyboardShotBusy, setStoryboardShotBusy] = useState(null) // shot id or null
   const [storyboardStitchBusy, setStoryboardStitchBusy] = useState(false)
   const [storyboardVoicedBusy, setStoryboardVoicedBusy] = useState(false)
+  // PR AA — Commercial Script editor state. Local draft tracks
+  // unsaved edits; scriptSaved pulses a 1.5 s "saved" indicator after
+  // a successful save.
+  const [scriptDraft, setScriptDraft] = useState(c.commercial_script || '')
+  const [scriptDraftSeed, setScriptDraftSeed] = useState(c.commercial_script || '')
+  const [scriptBusy, setScriptBusy] = useState(false)
+  const [scriptSavedFlash, setScriptSavedFlash] = useState(false)
+  // When the upstream campaign record changes (e.g. a save updates
+  // the persisted script), reset the local draft so we don't show a
+  // stale value.
+  useEffect(() => {
+    const next = c.commercial_script || ''
+    if (next !== scriptDraftSeed) {
+      setScriptDraft(next)
+      setScriptDraftSeed(next)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [c.commercial_script])
   const [localError, setLocalError] = useState('')
   // PR K — Character attach picker. Lazy-loaded; only shown when the
   // user clicks "Attach Character".
@@ -420,6 +440,44 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
     }
   }
 
+  // PR AA — Commercial Script handlers.
+  const handleGenerateScript = () => {
+    const generated = buildCommercialScript({ campaign: c, character })
+    if (generated) setScriptDraft(generated)
+  }
+
+  const handleSaveScript = async () => {
+    setLocalError('')
+    setScriptBusy(true)
+    try {
+      const updated = await api.saveCommercialScript(c.id, scriptDraft || null)
+      onUpdated?.(updated)
+      setScriptDraftSeed(updated.commercial_script || '')
+      setScriptSavedFlash(true)
+      window.setTimeout(() => setScriptSavedFlash(false), 1500)
+    } catch (e) {
+      setLocalError(`script save: ${e}`)
+    } finally {
+      setScriptBusy(false)
+    }
+  }
+
+  const handleRecordHostFromScript = async () => {
+    if (scriptDraft && scriptDraft !== scriptDraftSeed) {
+      // Save the latest draft first so the host clip uses the visible
+      // text, not a stale persisted version.
+      try {
+        const saved = await api.saveCommercialScript(c.id, scriptDraft || null)
+        onUpdated?.(saved)
+        setScriptDraftSeed(saved.commercial_script || '')
+      } catch (e) {
+        setLocalError(`script save: ${e}`)
+        return
+      }
+    }
+    await handlePresent()
+  }
+
   const handleBuildVoicedStoryboard = async () => {
     setLocalError('')
     setStoryboardVoicedBusy(true)
@@ -498,22 +556,30 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
   // since the voiced ad is now the headline final artefact and PR X's
   // auto-host means the user can build it without first manually
   // generating the host clip.
+  // PR AA — script-first ordering. Once a visual + spokesperson exist,
+  // nudge the user to write the Commercial Script before recording the
+  // host clip (previously the host clip silently used a deterministic
+  // template, leading to a generic-sounding voiced ad).
   let nextActionLabel = null
   let nextActionTab = null
+  const hasScript = Boolean((c.commercial_script || '').trim())
   if (!hasVideo) {
     nextActionLabel = 'Generate the visual ad first (Stage 2)'
   } else if (!hasUsableAvatar) {
     nextActionLabel = 'Choose spokesperson →'
     nextActionTab = 'character'
+  } else if (!hasScript) {
+    nextActionLabel = 'Write commercial script →'
+    nextActionTab = 'voice'
+  } else if (!hostReady) {
+    nextActionLabel = 'Record spokesperson voice →'
+    nextActionTab = 'voice'
   } else if (!commercialReady) {
-    nextActionLabel = 'Build voiced commercial →'
+    nextActionLabel = 'Build final voiced ad →'
     nextActionTab = 'visuals'
   } else if (finishedCount < 3) {
     nextActionLabel = 'Build Campaign Pack →'
     nextActionTab = 'visuals'
-  } else if (!hostReady) {
-    nextActionLabel = 'Record Avatar Host Clip →'
-    nextActionTab = 'character'
   } else if (!voiceReady) {
     nextActionLabel = 'Design Brand Voice Identity →'
     nextActionTab = 'voice'
@@ -804,9 +870,19 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
         </div>
         <p className="text-[10px] text-zinc-400 leading-relaxed">
           This is the export with sound: looped visual + spokesperson
-          audio. <span className="text-zinc-300">If the host clip is
-          missing, AdSpark will create it first</span>, then loop the
-          visual until the full pitch finishes — no early audio cutoff.
+          audio. {c.commercial_script ? (
+            <span className="text-zinc-300">
+              Uses the saved Commercial Script
+            </span>
+          ) : (
+            <span className="text-zinc-300">
+              Falls back to a templated pitch when no Commercial Script
+              is saved
+            </span>
+          )}{' '}
+          spoken by the selected spokesperson. If the host clip is
+          missing, AdSpark will create it first, then loop the visual
+          until the full pitch finishes — no early audio cutoff.
         </p>
         {commercialReady ? (
           <div className="space-y-1.5">
@@ -1442,13 +1518,51 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
                 >
                   {hostBusy ? 'Recording…' : 'regenerate'}
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('voice')}
+                  className="text-[10px] text-zinc-500 hover:text-pink-300"
+                  title="Open the Voice tab to edit the Commercial Script"
+                >
+                  edit script ↗
+                </button>
               </div>
+              {/* PR AA — script provenance. Surfaces which script was
+                  used so the user knows whether the audio reflects
+                  the saved Commercial Script or the fallback template. */}
+              <p className="text-[10px] text-zinc-500">
+                Script:{' '}
+                <span className="text-zinc-300">
+                  {c.commercial_script
+                    ? 'saved Commercial Script'
+                    : 'templated build_script fallback'}
+                </span>
+                {c.commercial_script && (
+                  <span className="text-zinc-500" title={c.commercial_script}>
+                    {' — '}{(c.commercial_script || '').slice(0, 60).trim()}
+                    {c.commercial_script.length > 60 ? '…' : ''}
+                  </span>
+                )}
+              </p>
             </div>
           ) : (
             <div className="space-y-1">
               <p className="text-[10px] text-zinc-500">
-                Uses the Brand Spokesperson Avatar above to record a short
-                campaign pitch.
+                Records the Brand Spokesperson Avatar speaking the{' '}
+                {c.commercial_script ? (
+                  <span className="text-zinc-300">saved Commercial Script</span>
+                ) : (
+                  <span className="text-zinc-300">templated campaign pitch</span>
+                )}.
+                {' '}
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('voice')}
+                  className="text-pink-300 hover:underline"
+                  title="Open the Voice tab to edit the Commercial Script"
+                >
+                  Edit script in Voice tab ↗
+                </button>
               </p>
               <button
                 type="button"
@@ -1475,7 +1589,116 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
   )
 
   const voiceBody = (
-    <div className="space-y-3">
+    <div className="space-y-4">
+      {/* PR AA — Commercial Script. Authored before the Avatar Host
+          Clip is generated; downstream host-video + commercial-with-
+          voice paths speak this verbatim when present. */}
+      <div className="space-y-2 rounded-lg ring-1 ring-pink-400/30 bg-pink-500/5 p-3">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-zinc-200">
+              Commercial Script
+            </span>
+            <span
+              className="text-[10px] text-zinc-500 font-mono"
+              title="Spoken pitch the spokesperson reads in the Avatar Host Clip. Saved on the campaign so re-builds replay the same script."
+            >
+              spoken pitch · ≤ {COMMERCIAL_SCRIPT_MAX} chars
+            </span>
+          </div>
+          {c.commercial_script && (
+            <span className="text-[10px] rounded-full bg-pink-500/20 text-pink-200 px-2 py-0.5 font-mono">
+              saved
+            </span>
+          )}
+          {scriptSavedFlash && (
+            <span className="text-[10px] rounded-full bg-emerald-500/20 text-emerald-300 px-2 py-0.5 font-mono">
+              ✓ saved
+            </span>
+          )}
+        </div>
+        <p className="text-[10px] text-zinc-500 leading-relaxed">
+          Write the spoken pitch first, then record the Avatar Host
+          Clip with that script.{' '}
+          <span className="text-zinc-300">Build Voiced Commercial</span>{' '}
+          mixes the host-clip audio over the visual cut.
+        </p>
+        <textarea
+          aria-label="Commercial Script"
+          value={scriptDraft}
+          onChange={(e) =>
+            setScriptDraft(e.target.value.slice(0, COMMERCIAL_SCRIPT_MAX))
+          }
+          rows={3}
+          placeholder={`Meet ${c.business || 'your brand'}. ${
+            (c.selected_concept && c.selected_concept.hook) || 'Hook line.'
+          } ${(c.selected_concept && c.selected_concept.cta) || 'Call to action.'}`}
+          className="w-full rounded-md bg-zinc-950 border border-zinc-800 px-2 py-1.5 text-xs text-zinc-100 focus:border-pink-400 outline-none font-mono leading-relaxed"
+        />
+        <div className="flex items-center justify-between gap-2 flex-wrap text-[10px]">
+          <span className="text-zinc-500 font-mono">
+            {scriptDraft.length}/{COMMERCIAL_SCRIPT_MAX}
+            {scriptDraft && scriptDraft !== scriptDraftSeed && (
+              <span className="text-amber-300"> · unsaved</span>
+            )}
+          </span>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={handleGenerateScript}
+              className="rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-100 text-[11px] px-2 py-1"
+              title="Regenerate from business + concept + character"
+            >
+              Generate Script
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveScript}
+              disabled={
+                scriptBusy
+                || (scriptDraft || '') === (scriptDraftSeed || '')
+              }
+              className="rounded-md bg-pink-500/80 hover:bg-pink-500 text-zinc-100 text-[11px] font-semibold px-2 py-1 disabled:opacity-50"
+            >
+              {scriptBusy ? 'Saving…' : 'Save Script'}
+            </button>
+            <button
+              type="button"
+              onClick={handleRecordHostFromScript}
+              disabled={hostBusy || !avatarReady || !scriptDraft.trim()}
+              className="rounded-md bg-spark/80 hover:bg-spark text-ink text-[11px] font-semibold px-2 py-1 disabled:opacity-50"
+              title={
+                avatarReady
+                  ? 'Saves the script then runs Avatar Host Clip generation'
+                  : 'Attach or create a spokesperson first'
+              }
+            >
+              {hostBusy ? 'Recording…' : 'Record Host Clip from Script'}
+            </button>
+          </div>
+        </div>
+        {!avatarReady && (
+          <p className="text-[10px] text-amber-300">
+            Attach or create a spokesperson first (Character tab) so the
+            host clip can speak this script.
+          </p>
+        )}
+        {(() => {
+          const charDesc = character && describeVoicePreset(character.voice_preset)
+          if (!character || !charDesc) return null
+          return (
+            <p className="text-[10px] text-zinc-500">
+              Voiced by{' '}
+              <span className="text-pink-300">{character.name}</span>
+              {' · '}
+              <span className="text-zinc-300">
+                {charDesc.label} — {charDesc.summary}
+              </span>
+            </p>
+          )
+        })()}
+      </div>
+
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <span className="text-xs font-semibold text-zinc-300">Audio Pack</span>

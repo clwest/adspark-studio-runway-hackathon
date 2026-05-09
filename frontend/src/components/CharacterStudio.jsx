@@ -5,6 +5,10 @@ import {
   PORTRAIT_PROMPT_HELPER,
   buildCharacterPortraitPrompt,
 } from '../characterPromptBuilder'
+import {
+  FEATURED_VOICE_PRESETS,
+  describeVoicePreset,
+} from '../voicePresets'
 import CharacterCard from './CharacterCard.jsx'
 
 const TEMPLATES = [
@@ -298,10 +302,47 @@ export default function CharacterStudio({
                 onChange={(e) => updateField('voice_preset', e.target.value)}
                 className="rounded-md bg-zinc-950 border border-zinc-800 px-2 py-1 text-sm focus:border-pink-400 outline-none"
               >
-                {VOICE_PRESETS.map((v) => (
-                  <option key={v} value={v}>{v}</option>
-                ))}
+                {VOICE_PRESETS.map((v) => {
+                  const desc = describeVoicePreset(v)
+                  return (
+                    <option key={v} value={v}>
+                      {desc?.label || v}
+                      {desc?.summary ? ` — ${desc.summary}` : ''}
+                    </option>
+                  )
+                })}
               </select>
+              {/* PR AA — featured-preset description chip + helper text.
+                  Runway doesn't expose preset preview audio without
+                  creating an avatar, so we surface curated descriptions
+                  instead of firing extra credits for previews. */}
+              {(() => {
+                const desc = describeVoicePreset(form.voice_preset)
+                if (!desc) return null
+                const featured = FEATURED_VOICE_PRESETS.includes(
+                  String(form.voice_preset || '').toLowerCase(),
+                )
+                return (
+                  <div
+                    className="rounded-md ring-1 ring-pink-400/20 bg-pink-500/5 p-2 mt-1 text-[11px] space-y-0.5"
+                    aria-label="voice preset description"
+                  >
+                    <div className="text-pink-200">
+                      <span className="font-semibold">{desc.label}</span>
+                      <span className="text-pink-300/80"> — {desc.summary}</span>
+                      {!featured && (
+                        <span className="text-zinc-500"> · curated description not available</span>
+                      )}
+                    </div>
+                    <div className="text-zinc-400 leading-snug">{desc.detail}</div>
+                    <div className="text-zinc-500 text-[10px] italic">
+                      Runway preset previews aren't available without
+                      creating an avatar — listen to the Avatar Host Clip
+                      after binding to confirm the timbre.
+                    </div>
+                  </div>
+                )
+              })()}
             </label>
 
             <label className="text-xs text-zinc-300 flex flex-col gap-1 sm:col-span-2">
