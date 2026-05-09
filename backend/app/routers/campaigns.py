@@ -2407,6 +2407,59 @@ class TranscriptFetchBody(BaseModel):
     )
 
 
+# ---- PR BC — transcript history helper ----------------------------
+#
+# Centralised so every branch of the transcript route appends entries
+# with a consistent shape. Best-effort: the wrapper logs a warning on
+# failure but never aborts the underlying transcript fetch flow.
+
+
+def _append_transcript_history_safe(
+    store: CampaignStore,
+    campaign_id: str,
+    *,
+    fetched_at,
+    conversation_id: Optional[str],
+    status: Optional[str],
+    turns,
+    mock_mode: Optional[bool],
+    error: Optional[str] = None,
+) -> Optional[Campaign]:
+    """Append one entry; returns the updated Campaign so the route
+    can return the post-append snapshot. ``None`` when the campaign
+    id is unknown OR when the append raises (best-effort).
+    """
+    from datetime import datetime as _dt, timezone as _tz  # local import keeps top tidy
+    serialised_turns: list = []
+    if turns:
+        for t in turns:
+            try:
+                if hasattr(t, "model_dump"):
+                    serialised_turns.append(t.model_dump())
+                elif isinstance(t, dict):
+                    serialised_turns.append(dict(t))
+            except Exception:  # pragma: no cover - history is best-effort
+                continue
+    when = fetched_at or _dt.now(_tz.utc)
+    entry = {
+        "fetched_at": when.isoformat() if hasattr(when, "isoformat") else str(when),
+        "conversation_id": conversation_id,
+        "status": status,
+        "turn_count": len(serialised_turns),
+        "turns": serialised_turns,
+        "mock_mode": mock_mode,
+        "error": error,
+    }
+    try:
+        return store.append_transcript_history(campaign_id, entry)
+    except Exception as exc:  # pragma: no cover - audit is best-effort
+        logger.warning(
+            "transcript history append failed for campaign %s status=%s: %s",
+            campaign_id, status, exc,
+        )
+        return None
+
+
 @router.post("/{campaign_id}/realtime-transcript", response_model=Campaign)
 def post_fetch_realtime_transcript(
     campaign_id: str,
@@ -2446,6 +2499,19 @@ def post_fetch_realtime_transcript(
             realtime_transcript_fetched_at=None,
             realtime_transcript_turns=None,  # leave any cached turns alone
             realtime_transcript_mock_mode=False,
+        )
+        # PR BC — record the no-session resolution in the audit trail
+        # so the operator can see when a fetch was attempted before
+        # any session existed.
+        _append_transcript_history_safe(
+            store,
+            campaign_id,
+            fetched_at=None,
+            conversation_id=None,
+            status="no_session",
+            turns=None,
+            mock_mode=False,
+            error="no realtime session has been created for this campaign yet",
         )
         raise HTTPException(
             status_code=409,
@@ -2490,12 +2556,27 @@ def post_fetch_realtime_transcript(
             realtime_transcript_turns=None,
             realtime_transcript_mock_mode=result.mock_mode,
         )
+        # PR BC — log the failure / empty / no-session resolution in
+        # the audit trail. Turns stay empty for these states so the
+        # row carries diagnostic value (status + error) rather than
+        # replayable content. Captures the post-append snapshot so
+        # the response includes the freshly-added history row.
+        post_history = _append_transcript_history_safe(
+            store,
+            campaign_id,
+            fetched_at=result.fetched_at,
+            conversation_id=persisted_id,
+            status=result.status,
+            turns=None,
+            mock_mode=result.mock_mode,
+            error=result.error,
+        )
         if result.status == "failed":
             raise HTTPException(
                 status_code=502,
                 detail=f"transcript fetch failed: {result.error}",
             )
-        return updated or record
+        return post_history or updated or record
 
     updated = store.update_realtime_transcript_fields(
         campaign_id,
@@ -2510,7 +2591,22 @@ def post_fetch_realtime_transcript(
         "transcript fetched campaign=%s conversation=%s turns=%d mock=%s",
         campaign_id, persisted_id, len(turns_serialised), result.mock_mode,
     )
-    return updated or record
+    # PR BC — log the successful (or mock) fetch in the audit trail.
+    # Stores the full turns array so a future surface can render
+    # historical replays without a second backend call. Captures the
+    # post-append snapshot so the response includes the freshly-
+    # added history row.
+    post_history = _append_transcript_history_safe(
+        store,
+        campaign_id,
+        fetched_at=result.fetched_at,
+        conversation_id=persisted_id,
+        status=result.status,
+        turns=result.turns,
+        mock_mode=result.mock_mode,
+        error=None,
+    )
+    return post_history or updated or record
 
 
 @router.delete("/{campaign_id}/spokesperson-session/{session_id}")

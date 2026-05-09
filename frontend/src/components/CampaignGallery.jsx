@@ -215,6 +215,11 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
     status: null,  // 'ok' | 'failed' | null
     message: '',
   })
+  // PR BC — Transcript history disclosure expand/collapse. Defaults
+  // to 5 visible; clicking the toggle reveals up to the full 20-entry
+  // store cap. Local-only — never re-shown across mounts.
+  const [transcriptHistoryExpanded, setTranscriptHistoryExpanded] =
+    useState(false)
   // PR AK — Brand colour control. Local draft mirrors the saved
   // value so a quick swatch swap doesn't fire an API call until the
   // user finishes choosing (commit-on-blur / change).
@@ -3033,6 +3038,15 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
   const transcriptFailed = transcriptStatus === 'failed'
   const transcriptEmpty = transcriptStatus === 'empty'
   const transcriptNoSession = transcriptStatus === 'no_session'
+  // PR BC — per-campaign transcript audit trail. Newest first;
+  // capped at 20 by the backend store. Default 5 visible with a
+  // small "Show all (N)" toggle to expand. List-only by design —
+  // the latest fetched transcript stays in the card preview above
+  // and continues to drive the Copy Markdown / Download TXT
+  // exports.
+  const transcriptHistory = Array.isArray(c.realtime_transcript_history)
+    ? c.realtime_transcript_history
+    : []
 
   const realtimeBody = (
     <div className="space-y-2">
@@ -3266,6 +3280,99 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
           <p className="text-[10px] text-zinc-600 font-mono">
             fetched {String(c.realtime_transcript_fetched_at).slice(0, 19)}Z
           </p>
+        )}
+        {/* PR BC — Per-campaign transcript audit trail. Renders only
+            when at least one history entry exists. Default 5 visible
+            with a "Show all (N)" toggle expanding up to the 20-entry
+            cap. List-only by design: the latest fetched transcript
+            stays in the preview block above and continues driving
+            the Copy Markdown / Download TXT buttons. */}
+        {transcriptHistory.length > 0 && (
+          <div
+            data-testid="transcript-history"
+            className="space-y-0.5 pt-1 border-t border-zinc-800/40"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] uppercase tracking-wide text-zinc-500 font-mono">
+                Transcript history
+              </span>
+              {transcriptHistory.length > 5 && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setTranscriptHistoryExpanded((v) => !v)
+                  }
+                  className="text-[10px] text-zinc-500 hover:text-sky-300"
+                  title={
+                    transcriptHistoryExpanded
+                      ? 'Collapse to the 5 most recent fetches.'
+                      : `Show all ${transcriptHistory.length} entries (capped at 20).`
+                  }
+                >
+                  {transcriptHistoryExpanded
+                    ? 'Show 5 newest'
+                    : `Show all (${transcriptHistory.length})`}
+                </button>
+              )}
+            </div>
+            <ul className="space-y-0.5">
+              {(transcriptHistoryExpanded
+                ? transcriptHistory
+                : transcriptHistory.slice(0, 5)
+              ).map((entry, idx) => {
+                const status = String(entry.status || '').toLowerCase()
+                const statusClass =
+                  status === 'ok'
+                    ? 'bg-emerald-500/20 text-emerald-200 ring-1 ring-emerald-400/40'
+                    : status === 'mock'
+                    ? 'bg-amber-500/20 text-amber-200 ring-1 ring-amber-400/40'
+                    : status === 'empty'
+                    ? 'bg-zinc-700 text-zinc-200 ring-1 ring-zinc-500'
+                    : status === 'no_session'
+                    ? 'bg-zinc-700 text-zinc-300 ring-1 ring-zinc-600'
+                    : status === 'failed'
+                    ? 'bg-rose-500/20 text-rose-200 ring-1 ring-rose-400/40'
+                    : 'bg-zinc-800 text-zinc-300 ring-1 ring-zinc-700'
+                const convoShort = entry.conversation_id
+                  ? `${String(entry.conversation_id).slice(0, 12)}…`
+                  : '—'
+                const fetchedShort = entry.fetched_at
+                  ? String(entry.fetched_at).slice(0, 16).replace('T', ' ')
+                  : '—'
+                return (
+                  <li
+                    key={`${entry.fetched_at || ''}-${idx}`}
+                    data-testid="transcript-history-entry"
+                    className="flex items-center gap-1 text-[10px] leading-snug flex-wrap"
+                    title={
+                      entry.error
+                        ? `${entry.fetched_at || ''} — ${entry.error}`
+                        : `${entry.fetched_at || ''}${
+                            entry.conversation_id
+                              ? ' · ' + entry.conversation_id
+                              : ''
+                          }`
+                    }
+                  >
+                    <span
+                      className={`rounded px-1 py-0.5 font-mono ${statusClass}`}
+                    >
+                      {status || 'unknown'}
+                    </span>
+                    <span className="text-zinc-400 font-mono">
+                      {entry.turn_count ?? 0} turns
+                    </span>
+                    <span className="text-zinc-500 font-mono truncate max-w-[12ch]">
+                      {convoShort}
+                    </span>
+                    <span className="ml-auto text-zinc-500 font-mono">
+                      {fetchedShort}
+                    </span>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
         )}
       </div>
 

@@ -1181,6 +1181,81 @@ auto-clears after 2.5 s.
 Frontend-only — no new backend route. The export operates on
 the turns already persisted by PR AJ.
 
+#### Per-campaign transcript history (PR BC)
+
+Every fetch of `POST /api/campaigns/{id}/realtime-transcript`
+also appends one row to `Campaign.realtime_transcript_history`
+— a compact audit list capped at the most recent 20 entries.
+The card surfaces the trail under the existing fetched-at
+caption as a "Transcript history" disclosure (default 5
+visible, "Show all (N)" toggle expands to the full cap).
+Latest-fetch state stays in the existing
+`realtime_transcript_*` fields so the preview block above + the
+PR AL Copy Markdown / Download TXT buttons continue operating
+against the latest fetch unchanged.
+
+Backend persistence:
+
+```
+Campaign.realtime_transcript_history: list[TranscriptHistoryEntry]
+                                                cap = 20
+
+TranscriptHistoryEntry {
+  fetched_at:        datetime  (UTC, ISO format)
+  conversation_id:   str | None
+  status:            "ok" | "failed" | "mock" | "empty" | "no_session" | None
+  turn_count:        int
+  turns:             list[TranscriptTurn]   (full structured turns)
+  mock_mode:         bool | None
+  error:             str | None
+}
+```
+
+Where entries are appended:
+
+| Branch of `POST /realtime-transcript` | Status |
+|---|---|
+| Real-mode early 409 (no session yet) | `"no_session"` (no turns, error captured) |
+| `result.status` ∈ {`failed`, `empty`, `no_session`} | mirror of result status (no new turns recorded) |
+| `result.status` ∈ {`ok`, `mock`} | full turns array recorded for replay |
+
+The append goes through `_append_transcript_history_safe(...)`
+— a thin wrapper that wraps the store write in `try/except` so
+an audit failure logs a warning but never aborts the underlying
+transcript fetch flow. The route returns the post-append
+Campaign so the response includes the freshly-added row.
+
+**Mock-mode behavior:** the deterministic 3-turn mock replay
+appends an entry on every fetch (no dedupe — the cap covers the
+unbounded-rows case). `mock_mode: true` flags each row so the
+audit row is distinguishable from a real recording.
+
+UI render — each row shows four compact pieces:
+
+```
+[mock]   3 turns   mock_conv_44b…   2026-05-09 20:18
+[empty]  0 turns   conv-9f3a4b…    2026-05-09 19:55
+[ok]     11 turns  conv-7e2c1d…    2026-05-09 19:42
+```
+
+Status colours: `ok`→emerald, `mock`→amber, `failed`→rose,
+`empty`/`no_session`→zinc. The conversation id is truncated to
+the first 12 chars with an ellipsis; the full id lives in the
+row's `title` tooltip alongside the full ISO timestamp + any
+error message.
+
+Behaviour boundaries:
+- **List-only.** Clicking a history row does not load it back
+  into the preview; the latest fetch stays in the preview block
+  above. Loading older entries into the preview is a future
+  slice.
+- **Recording URLs are NOT surfaced.** Runway's transcript
+  endpoint can return audio/video URLs but PR BC intentionally
+  ignores them; the audit row carries only the structured turns.
+
+`data-testid` hooks: `transcript-history` (the disclosure
+wrapper), `transcript-history-entry` (one per row).
+
 ### Lifecycle
 
 ```

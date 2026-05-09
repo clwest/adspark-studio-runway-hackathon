@@ -1,18 +1,20 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after PR BB (Voice Repair History Audit Trail)
-on top of the PR AG–BA / SESSION 011 anchors. Backend route count
-is **68** application routes — PR BB is a small slice that adds a
-compact `voice_repair_history: list[VoiceRepairHistoryEntry]`
-field on Character (capped at the most recent 20 entries) plus
-audit-trail appends inside the existing clone-voice / apply-voice
-/ refresh-avatar-voice handlers, plus an inline disclosure list
-in CharacterCard's voice section. No new backend route, no full
-audit dashboard, no analytics — just a per-character trail of
-what happened when. The PR AQ apply-voice route gains an optional
-`mode: "apply" | "repair"` body so the audit trail can
-distinguish a normal apply from the PR AU drift-repair click.
+context-kit refresh after PR BC (Per-Campaign Transcript History)
+on top of the PR AG–BB / SESSION 011 anchors. Backend route count
+is **68** application routes — PR BC is a small slice that adds a
+compact `realtime_transcript_history: list[TranscriptHistoryEntry]`
+field on Campaign (capped at the most recent 20 entries) plus
+audit-trail appends inside every branch of the existing
+`POST /api/campaigns/{id}/realtime-transcript` handler, plus an
+inline disclosure list in the existing Conversation transcript
+card. Latest-fetch state stays in the `realtime_transcript_*`
+fields so all existing UI surfaces (preview, Copy Markdown /
+Download TXT exports) continue operating against the latest
+fetch unchanged. No new backend route, no analytics dashboard,
+no recording URLs, no memory learning — just a per-campaign
+trail of what was fetched when.
 
 ## Backend (`backend/`)
 
@@ -20,7 +22,7 @@ distinguish a normal apply from the PR AU drift-repair click.
 |---|---|---|
 | `app/main.py` | real | FastAPI app, CORS, `/health`, router registration (incl. `characters_router`) |
 | `app/config.py` | real | pydantic-settings; PR-A vars + PR-F `runway_host_voice_preset` / `runway_host_portrait_url` |
-| `app/models.py` | real | Pydantic schemas — Campaign with all PR A → AF fields (Pack, Spokesperson, Audio Pack, Avatar Picker, **`character_id` + `generated_character_prompt`**, **`commercial_script` + `commercial_script_updated_at`**, **storyboard fields + `StoryboardShot`**, **dialogue fields + `DialogueLine`**) plus `Character` / `CharacterCreate` / `CharacterList` models. **PR BB** — adds `VoiceRepairHistoryEntry` (timestamp, action ∈ clone/apply/repair/refresh/verify, before_voice_id, after_voice_id, resolved_voice_id, drift_status, status, error, mock_mode) + `voice_repair_history: list[VoiceRepairHistoryEntry] = []` on Character, capped at the most recent 20 entries by the store |
+| `app/models.py` | real | Pydantic schemas — Campaign with all PR A → AF fields (Pack, Spokesperson, Audio Pack, Avatar Picker, **`character_id` + `generated_character_prompt`**, **`commercial_script` + `commercial_script_updated_at`**, **storyboard fields + `StoryboardShot`**, **dialogue fields + `DialogueLine`**) plus `Character` / `CharacterCreate` / `CharacterList` models. **PR BB** — adds `VoiceRepairHistoryEntry` (timestamp, action ∈ clone/apply/repair/refresh/verify, before_voice_id, after_voice_id, resolved_voice_id, drift_status, status, error, mock_mode) + `voice_repair_history: list[VoiceRepairHistoryEntry] = []` on Character, capped at the most recent 20 entries by the store. **PR BC** — adds `TranscriptHistoryEntry` (fetched_at, conversation_id, status ∈ ok/failed/mock/empty/no_session, turn_count, turns, mock_mode, error) + `realtime_transcript_history: list[TranscriptHistoryEntry] = []` on Campaign, capped at the most recent 20 entries by the store |
 | `app/services/concept_service.py` | real + mock fallback | OpenAI `gpt-4o-mini` JSON-mode call; deterministic mock |
 | `app/services/runway_client.py` | real + mock | `image_to_video` / `text_to_video` routing; `GENERATION_POLICY` validation |
 | `app/services/image_client.py` | real + mock | `/v1/text_to_image` (`gen4_image_turbo`); seeded `referenceImages`; stdlib zlib PNG mock |
@@ -37,7 +39,7 @@ distinguish a normal apply from the PR AU drift-repair click.
 | `app/services/character_store.py` | real | **PR K** — JSON-file Character store at `backend/data/characters.json`; threading.Lock; atomic writes. **PR BB** — adds `append_voice_history(character_id, entry, *, max_entries=VOICE_HISTORY_MAX=20)` for the audit-trail field; newest-first insertion + cap inside the same lock the rest of the store uses |
 | `app/services/storyboard_service.py` | real + mock | **PR Z + PR AC** — script-aware `_split_script_beats` planner + per-shot `image_to_video` generation + ffmpeg lavfi mock; `_shot_prompt` weaves narrative cues from `campaign.commercial_script` |
 | `app/services/dialogue_service.py` | real + mock | **PR AF** — `plan_lines` builds Hook/Beat/Closer with primary + secondary speaker selection from ready characters; `generate_line` wraps `avatar_videos` (real) + ffmpeg lavfi (mock) targeted at the line's speaker avatar |
-| `app/services/storage.py` | real | JSON-file campaign store; threading.Lock; per-feature update helpers (cache / finish / host avatar / host video / brand voice / dub / selected avatar / **character attachment** / **commercial_script** / **storyboard plan + per-shot + stitch + voiced** / **dialogue plan + per-line + stitch** / **reels (PR AG, kind=spokesperson|dialogue_scene)** / **realtime document (PR AI)** / **runway_conversation_id + transcript turns (PR AJ)** / **brand_color (PR AK)**); also normalises the brand colour at create-time so an unparseable initial-save input falls back to `None` instead of 422-ing |
+| `app/services/storage.py` | real | JSON-file campaign store; threading.Lock; per-feature update helpers (cache / finish / host avatar / host video / brand voice / dub / selected avatar / **character attachment** / **commercial_script** / **storyboard plan + per-shot + stitch + voiced** / **dialogue plan + per-line + stitch** / **reels (PR AG, kind=spokesperson|dialogue_scene)** / **realtime document (PR AI)** / **runway_conversation_id + transcript turns (PR AJ)** / **brand_color (PR AK)**); also normalises the brand colour at create-time so an unparseable initial-save input falls back to `None` instead of 422-ing. **PR BC** — adds `TRANSCRIPT_HISTORY_MAX = 20` + `append_transcript_history(campaign_id, entry, *, max_entries=…)` returning the post-append Campaign so the route can include the freshly-added row in its response |
 | `app/routers/concepts.py` | real | `POST /api/concepts` |
 | `app/routers/runway.py` | real | All `/api/runway/*` routes including `provider-status`, `organization`, `avatars` (list), `image`, `generate`, `task`, `upload-image` |
 | `app/routers/campaigns.py` | real | All `/api/campaigns/*` routes (50+ now — see endpoint list below) |
@@ -67,7 +69,7 @@ distinguish a normal apply from the PR AU drift-repair click.
 | `src/components/ConceptCards.jsx` | real | 3 selectable cards, "recommended" badge |
 | `src/components/PromptPreview.jsx` | real | **"Creative direction" panel** with two visually distinct sections: Section A Commercial Script editor (textarea, char counter, Generate Script, breadcrumb pill), Section B Runway Video Prompt textarea + selectors. PR AD identity-drift helper on the Use Character branch. |
 | `src/components/RunwayPanel.jsx` | real | Status pill, progress bar, `<video>`, save button |
-| `src/components/CampaignGallery.jsx` | real | The big one. Per-card render of: header + creative-director breadcrumb (Script → Storyboard → Video → Final Ad) + tab row (Overview, Visuals, Character, Voice, **Dialogue**, Realtime, Exports). Overview body owns the **3-card "Pick your ad mode" picker** (Cinematic / Spokesperson / Dialogue). Visuals body renders silent source video + Voiced Commercial section + Storyboard subsection + Voiced Storyboard. Character body renders Brand Spokesperson + Avatar Host Clip → **Spokesperson Ad** (PR AB rename). Voice body renders **Ad Mode primer card** + **Commercial Script editor** + Audio Pack. Dialogue body owns plan/edit/generate/stitch state machine. Exports body renders the per-output ledger including all stitched + voiced outputs. |
+| `src/components/CampaignGallery.jsx` | real | The big one. Per-card render of: header + creative-director breadcrumb (Script → Storyboard → Video → Final Ad) + tab row (Overview, Visuals, Character, Voice, **Dialogue**, Realtime, Exports). Overview body owns the **3-card "Pick your ad mode" picker** (Cinematic / Spokesperson / Dialogue). Visuals body renders silent source video + Voiced Commercial section + Storyboard subsection + Voiced Storyboard. Character body renders Brand Spokesperson + Avatar Host Clip → **Spokesperson Ad** (PR AB rename). Voice body renders **Ad Mode primer card** + **Commercial Script editor** + Audio Pack. Dialogue body owns plan/edit/generate/stitch state machine. Exports body renders the per-output ledger including all stitched + voiced outputs. **PR BC** — Realtime body's Conversation transcript card gains a compact "Transcript history" disclosure under the existing fetched-at caption (newest first, default 5 visible, "Show all (N)" toggle expands to the 20-entry cap; status / turn-count / conversation-id / fetched-time row per entry). data-testid: `transcript-history`, `transcript-history-entry` |
 | `src/components/AvatarPicker.jsx` | real | PR I+ — fetches `/api/runway/avatars`; 4-up grid; click → `POST /select-avatar` |
 | `src/components/RealtimeSpokesperson.jsx` | real | PR I — lazy-loaded `<AvatarCall>` wrapper; **PR AE caption update** ("This avatar knows the campaign brief and saved script…") + chip tooltip + aria-label reframed as starter questions |
 | `src/components/CharacterStudio.jsx` | real | **PR K + V + AA + BA** — top-level studio panel with editable Portrait Prompt textarea + voice preset dropdown with **PR AA description chip** + create form + character library + **PR BA** library-level "Refresh all voice statuses" button + compact `idle / refreshing X/Y / refreshed N skipped M failed K` status caption that reuses the per-character PR AV refresh-avatar-voice + PR AX refresh-voice-preview routes |
@@ -227,6 +229,7 @@ the line's own `avatar_id`).
 | PR AZ | Voice Verification Auto-Tick Freshness Caption (frontend-only 60-s setInterval bumps a per-tile nowMs state so PR AW's caption advances buckets without polling; gated on caption visibility; cleanup on unmount + visibility change) | (post-v13) |
 | PR BA | Character Library Refresh All (frontend-only library-level "Refresh all voice statuses" button on the Character Studio header; iterates the library and reuses the per-character PR AV refresh-avatar-voice + PR AX refresh-voice-preview routes; compact status caption reports refreshed/skipped/failed; one failure does not abort the loop) | (post-v13) |
 | PR BB | Voice Repair History Audit Trail (`VoiceRepairHistoryEntry` model + `voice_repair_history: list[…]` on Character capped at 20 entries; appended from clone-voice / apply-voice / refresh-avatar-voice; apply-voice gains an optional `mode` body so the PR AU repair button is distinguishable from a plain apply; CharacterCard renders a compact "Voice history" disclosure with action / status / drift / time pills, default 5 newest, "Show all (N)" expand) | (post-v13) |
+| PR BC | Per-Campaign Transcript History (`TranscriptHistoryEntry` model + `realtime_transcript_history: list[…]` on Campaign capped at 20 entries; every branch of `POST /realtime-transcript` appends a row including no_session / failed / empty / mock / ok; latest-fetch state preserved in the existing `realtime_transcript_*` fields so preview + Copy Markdown / Download TXT exports continue operating against the latest fetch; CampaignGallery transcript card adds a compact "Transcript history" disclosure with status / turn-count / conversation-id / fetched-time per row) | (post-v13) |
 
 ## Known limitations (current main)
 

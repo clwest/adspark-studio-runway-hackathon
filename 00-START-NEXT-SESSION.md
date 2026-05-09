@@ -6,41 +6,42 @@ PR AM `3e12d27`; PR AN `f255c22`; PR AO `5bca7c4`; PR AP
 `3c6483e`; PR AQ `ec35c0e`; PR AR `5aa5579`; PR AS `2321fd7`;
 PR AT `632b696`; PR AU `485310a`; PR AV `b9b7fee`; PR AW
 `555ebf9`; PR AX `9d86f2e`; PR AY `0a93c79`; PR AZ `2c16d30`;
-PR BA `9d0a99d feat: library-level refresh-all for voice
-statuses`; PR BB Voice Repair History Audit Trail in flight on
-top — SESSION_012–SESSION_033 handoffs added).
+PR BA `9d0a99d`; PR BB `8702660 feat: voice repair history
+audit trail`; PR BC Per-Campaign Transcript History in flight
+on top — SESSION_012–SESSION_034 handoffs added).
 
 ## Where things stand
 
-- **Branch:** `main` at `9d0a99d` (`feat: library-level
-  refresh-all for voice statuses`) on `origin/main`. PR BB patch
-  in flight on top — no new commit / tag yet, both pending
-  explicit user approval.
+- **Branch:** `main` at `8702660` (`feat: voice repair history
+  audit trail`) on `origin/main`. PR BC patch in flight on top
+  — no new commit / tag yet, both pending explicit user
+  approval.
 - **Latest tag:** still **`hackathon-submission-v13`** at `ec446e4`
-  (PR AF). PR AG–BA shipped the full voice arc + recording
-  feedback + auto-tick + library-level refresh-all. PR BB adds
-  a compact `voice_repair_history` audit trail on Character
-  (capped at 20 entries) so the operator can scan recent clone
-  / apply / repair / refresh events directly from the
-  character tile.
+  (PR AF). PR AG–BB shipped the full voice arc + recording
+  feedback + auto-tick + library-level refresh-all + per-
+  character audit trail. PR BC adds a parallel
+  `realtime_transcript_history` audit trail on Campaign so
+  operators can review prior transcript fetches over time
+  rather than seeing only the most recent.
 - **Backend routes:** **68** application + FastAPI built-ins
-  (unchanged from PR BA; PR BB doesn't add new endpoints — it
-  appends history entries inside the existing clone-voice /
-  apply-voice / refresh-avatar-voice handlers).
-- **Frontend build:** 331.17 KB initial JS / 92.88 KB gzip +
-  561.97 KB lazy `@runwayml/avatars-react` chunk (+2.79 KB
-  initial / +0.67 KB gzip vs PR BA — PR BB adds the disclosure
-  + 4 helpers to CharacterCard.jsx).
-- **Playwright smoke:** `1 passed (~21.0 s)` against the mock
-  backend; existing PR BA assertions still pass. PR BB adds
-  resilient assertions on the disclosure + per-entry shape
-  (count bounded by voice section count, max 20 entries per
-  disclosure, action label matches the literal set).
-- **Targeted probes:** clone / apply / apply mode=repair /
-  refresh appends correctly labeled entries; cap-at-20 holds
-  across 25 rapid refreshes; apply-voice on a character with
-  no voice 409s without appending; clone failure path also
-  records a `failed` entry for visibility.
+  (unchanged from PR BB; PR BC doesn't add new endpoints — it
+  appends history entries inside the existing
+  POST /realtime-transcript handler).
+- **Frontend build:** 333.15 KB initial JS / 93.29 KB gzip +
+  561.97 KB lazy `@runwayml/avatars-react` chunk (+1.98 KB
+  initial / +0.41 KB gzip vs PR BB — PR BC adds the disclosure
+  + state hook to CampaignGallery.jsx).
+- **Playwright smoke:** `1 passed (~21.6 s)` against the mock
+  backend; existing PR BB assertions still pass. PR BC adds
+  resilient assertions on the post-fetch disclosure + per-entry
+  shape (status pill matches the literal set, count between 1
+  and 20 inclusive, latest preview + export buttons unaffected
+  by the new surface).
+- **Targeted probes:** baseline → fetch → 2 more fetches →
+  +25 rapid fetches all append correctly; cap holds at 20;
+  latest_status / latest_turns / latest_fetched_at /
+  latest_conversation_id all still update across the burst;
+  bogus campaign id 404s without breaking server.
 - **Repo:** https://github.com/clwest/adspark-studio-runway-hackathon
   (private). Pushes happen on explicit user approval.
 - **Stale local feature branches:** 22 left over from PR A through
@@ -238,8 +239,23 @@ top — SESSION_012–SESSION_033 handoffs added).
   preset; the operator clicks **Create Runway Avatar** again to
   pick up the cloned voice.
 
-### Conversation layer (PR AI — Avatar documentIds for Grounded Realtime · PR AJ — Transcript Retrieval + Replay UX · PR AL — Transcript Export / Share)
+### Conversation layer (PR AI — Avatar documentIds for Grounded Realtime · PR AJ — Transcript Retrieval + Replay UX · PR AL — Transcript Export / Share · PR BC — Per-Campaign Transcript History)
 
+- **Per-campaign transcript history** (PR BC) — every fetch of
+  `POST /api/campaigns/{id}/realtime-transcript` now appends a
+  compact `TranscriptHistoryEntry` to
+  `Campaign.realtime_transcript_history` (newest first, capped
+  at the most recent 20 entries by `CampaignStore.append_transcript_history`).
+  Latest-fetch state stays in the existing `realtime_transcript_*`
+  fields so the preview block + Copy Markdown / Download TXT
+  exports continue operating against the latest fetch
+  unchanged. CampaignGallery's transcript card surfaces the
+  trail as a "Transcript history" disclosure under the
+  fetched-at caption: status / turn-count / conversation-id /
+  fetched-time per row, default 5 visible with `Show all (N)`
+  expand. Audit append is best-effort — a store failure is
+  logged but never aborts the fetch flow. data-testid:
+  `transcript-history`, `transcript-history-entry`.
 - **Copy Markdown** + **Download TXT** buttons on the
   Conversation transcript card (PR AL). Visible up-front but
   disabled until turns exist; both unlock the moment a transcript

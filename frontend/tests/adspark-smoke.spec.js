@@ -745,6 +745,34 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
   await expect(
     newestCard.getByTestId('transcript-export-status'),
   ).toContainText(/Copied|Clipboard unavailable/i, { timeout: 2_000 })
+  // PR BC — Per-campaign transcript history. After the fetch above
+  // the audit trail must contain at least one entry. The disclosure
+  // wrapper testid is unique per campaign card; each row carries a
+  // status pill that matches one of the literal states. Capped at
+  // 20 entries by the backend store.
+  await expect(
+    newestCard.getByTestId('transcript-history'),
+  ).toBeVisible()
+  await expect(
+    newestCard.getByTestId('transcript-history'),
+  ).toContainText(/Transcript history/i)
+  const transcriptHistoryEntries = newestCard.getByTestId(
+    'transcript-history-entry',
+  )
+  const transcriptHistoryCount = await transcriptHistoryEntries.count()
+  expect(transcriptHistoryCount).toBeGreaterThan(0)
+  expect(transcriptHistoryCount).toBeLessThanOrEqual(20)
+  await expect(transcriptHistoryEntries.first()).toContainText(
+    /^(ok|mock|empty|no_session|failed)/i,
+  )
+  // Sanity: the latest preview block + export buttons are still
+  // unaffected by the new history surface.
+  await expect(
+    newestCard.getByTestId('transcript-turns'),
+  ).toBeVisible()
+  await expect(
+    newestCard.getByTestId('transcript-copy-markdown'),
+  ).toBeEnabled()
   const realtimeSection = newestCard.getByText(/^Talk to Brand Spokesperson$/)
   if (await realtimeSection.isVisible().catch(() => false)) {
     await expect(newestCard.getByText(/^Realtime Runway Avatar$/)).toBeVisible()

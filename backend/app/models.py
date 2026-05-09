@@ -144,6 +144,35 @@ class TranscriptTurn(BaseModel):
     timestamp: Optional[str] = None
 
 
+# ---- PR BC — Per-campaign transcript history audit trail ----------
+
+TranscriptHistoryStatus = Literal[
+    "ok", "failed", "mock", "empty", "no_session"
+]
+
+
+class TranscriptHistoryEntry(BaseModel):
+    """PR BC — one entry in a campaign's transcript audit trail. The
+    realtime transcript route (``POST /realtime-transcript``)
+    persists the most recent fetch in the campaign's
+    ``realtime_transcript_*`` fields and ALSO appends one of these
+    entries to ``realtime_transcript_history`` so operators can
+    review prior fetches over time.
+
+    The store caps each campaign's history at the most recent 20
+    entries (``TRANSCRIPT_HISTORY_MAX`` in ``storage.py``) so the
+    JSON record never bloats over a long demo session.
+    """
+
+    fetched_at: datetime
+    conversation_id: Optional[str] = None
+    status: Optional[TranscriptHistoryStatus] = None
+    turn_count: int = 0
+    turns: list[TranscriptTurn] = []
+    mock_mode: Optional[bool] = None
+    error: Optional[str] = None
+
+
 class StoryboardShot(BaseModel):
     id: str  # "shot-1" / "shot-2" / "shot-3"
     label: str  # human-readable beat label ("Hook" / "Action" / "Payoff")
@@ -277,6 +306,14 @@ class Campaign(CampaignCreate):
     realtime_transcript_fetched_at: Optional[datetime] = None
     realtime_transcript_turns: list["TranscriptTurn"] = []
     realtime_transcript_mock_mode: Optional[bool] = None
+    # PR BC — transcript audit trail. Each successful (or resolved
+    # failure) fetch appends a compact ``TranscriptHistoryEntry`` to
+    # this list (newest first). Capped at the most recent 20 entries
+    # by the store so the JSON record never grows unbounded across
+    # long demo sessions. Latest fetch state remains in the
+    # ``realtime_transcript_*`` fields above so existing UI / export
+    # surfaces continue operating against the latest fetch.
+    realtime_transcript_history: list["TranscriptHistoryEntry"] = []
 
 
 class CampaignList(BaseModel):

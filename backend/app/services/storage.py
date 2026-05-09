@@ -20,6 +20,13 @@ _LOCK = threading.Lock()
 MAX_VIDEO_BYTES = 100 * 1024 * 1024
 
 
+# PR BC — cap the per-campaign transcript audit trail so the JSON
+# record never grows unbounded across long demo sessions. Each
+# realtime-transcript route call appends one entry; we keep the
+# 20 most recent.
+TRANSCRIPT_HISTORY_MAX = 20
+
+
 class CampaignStore:
     """JSON-file backed campaign store. Single-process safe via threading.Lock."""
 
@@ -657,6 +664,35 @@ class CampaignStore:
                         row["realtime_transcript_turns"] = realtime_transcript_turns
                     if realtime_transcript_mock_mode is not None:
                         row["realtime_transcript_mock_mode"] = realtime_transcript_mock_mode
+                    self._write(rows)
+                    return Campaign.model_validate(row)
+        return None
+
+    def append_transcript_history(
+        self,
+        campaign_id: str,
+        entry: dict,
+        *,
+        max_entries: int = TRANSCRIPT_HISTORY_MAX,
+    ) -> Optional[Campaign]:
+        """PR BC — append a single transcript-fetch audit entry to the
+        campaign's ``realtime_transcript_history`` list (newest first)
+        and cap it at ``max_entries``. Returns the updated Campaign
+        on success and ``None`` when the id is unknown.
+
+        Best-effort: callers wrap this in try/except so an audit
+        failure never aborts the underlying transcript fetch flow.
+        Latest-fetch state stays in the existing
+        ``realtime_transcript_*`` fields so existing UI / export
+        surfaces are unaffected.
+        """
+        with _LOCK:
+            rows = self._read()
+            for row in rows:
+                if row.get("id") == campaign_id:
+                    history = list(row.get("realtime_transcript_history") or [])
+                    history.insert(0, entry)
+                    row["realtime_transcript_history"] = history[:max_entries]
                     self._write(rows)
                     return Campaign.model_validate(row)
         return None
