@@ -1107,15 +1107,35 @@ test('AdSpark Studio UX v2 SpokespersonStudio scaffold', async ({ page }) => {
   await expect(lane.getByTestId('spokesperson-lane-step-brief')).toBeVisible()
   await expect(lane.getByTestId('spokesperson-lane-step-script')).toBeVisible()
   await expect(lane.getByTestId('spokesperson-lane-step-render')).toBeVisible()
-  // Both render targets render as disabled placeholder buttons.
+  // Render targets render with mode-specific gating after PR BN.
+  // Horizontal stays a disabled placeholder; Reels is wired to
+  // the existing /spokesperson-ad/reels backend route and is
+  // enabled iff a focused linked campaign carries an existing
+  // host video source. The smoke's v2 case doesn't set an
+  // activeCharacterId so `linkedCampaigns` is empty and the
+  // button stays disabled with data-source-ready="false".
   const horizontalBtn = lane.getByTestId('spokesperson-lane-horizontal')
   const reelsBtn = lane.getByTestId('spokesperson-lane-reels')
   await expect(horizontalBtn).toBeVisible()
   await expect(reelsBtn).toBeVisible()
   await expect(horizontalBtn).toBeDisabled()
-  await expect(reelsBtn).toBeDisabled()
   await expect(horizontalBtn).toHaveAttribute('data-render-target', 'horizontal')
   await expect(reelsBtn).toHaveAttribute('data-render-target', 'reels')
+  // PR BN — disjunction: the button is enabled iff a campaign
+  // linked to the active spokesperson has a cached source MP4.
+  // Either branch is valid fixture state.
+  const sourceReady = await reelsBtn.getAttribute('data-source-ready')
+  expect(['true', 'false']).toContain(sourceReady)
+  if (sourceReady === 'true') {
+    await expect(reelsBtn).toBeEnabled()
+    await expect(reelsBtn).toHaveText(
+      /(Build|Rebuild) Captioned Reels/i,
+    )
+  } else {
+    await expect(reelsBtn).toBeDisabled()
+  }
+  // Initial busy attribute is "false" — no in-flight click yet.
+  await expect(reelsBtn).toHaveAttribute('data-busy', 'false')
   // localStorage carries the persisted choice so a future session
   // surfaces the same pill on first paint.
   const persisted = await page.evaluate(() =>

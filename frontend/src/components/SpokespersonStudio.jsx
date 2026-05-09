@@ -200,6 +200,24 @@ export default function SpokespersonStudio({
     }
   }
 
+  // PR BN — Spokesperson Reels submit handler. First v2 lane
+  // action that fires real production behaviour (ffmpeg-only;
+  // no Runway calls). Local campaigns slice is updated in place
+  // so the lane re-renders with the freshly-cached
+  // spokesperson_reels_url; parent's onCharactersChanged also
+  // fires so the v1 gallery refreshes alongside if open.
+  const handleBuildSpokespersonReels = async (campaignId) => {
+    if (!campaignId) {
+      throw new Error('campaign id required')
+    }
+    const updated = await api.buildSpokespersonReels(campaignId)
+    setCampaigns((cs) =>
+      cs.map((x) => (x.id === campaignId ? updated : x)),
+    )
+    onCharactersChanged?.()
+    return updated
+  }
+
   // PR BH — mode-first creation handlers.
   const handleOpenCreateModal = () => {
     setModeModalOpen(true)
@@ -357,6 +375,10 @@ export default function SpokespersonStudio({
               ? campaignsByCharacter[activeCharacterId] || []
               : []
           }
+          // PR BN — wire the Captioned Reels button. Lane manages
+          // its own busy / error state but bubbles the API call
+          // up so the studio can keep the campaigns slice fresh.
+          onBuildReels={handleBuildSpokespersonReels}
         />
       )}
       {/* PR BK — Cinematic Ad lane scaffold. Same shape as the

@@ -9,15 +9,15 @@ PR AT `632b696`; PR AU `485310a`; PR AV `b9b7fee`; PR AW
 PR BA `9d0a99d`; PR BB `8702660`; PR BC `9eae15f`; PR BD
 `0171078`; PR BE `e2ed1ee`; PR BF `d897437`; PR BG
 `af48e28`; SESSION REAL-API `4a68278`; PR BH `600eec9`; PR BI
-`42a8054`; PR BJ `c04aced`; PR BK `7185554`; PR BL `8967061 feat:
-dialogue scene lane scaffold (gated v2)`; PR BM Lane Selection
-Regression Pass in flight on top —
-SESSION_012–SESSION_044 handoffs added).
+`42a8054`; PR BJ `c04aced`; PR BK `7185554`; PR BL `8967061`;
+PR BM `669a584 test: lane selection regression pass (PR BM)`;
+PR BN Wire V2 Spokesperson Lane Reels Action in flight on top
+— SESSION_012–SESSION_045 handoffs added).
 
 ## Where things stand
 
-- **Branch:** `main` at `8967061` (`feat: dialogue scene lane
-  scaffold (gated v2)`) on `origin/main`. PR BM patch in
+- **Branch:** `main` at `669a584` (`test: lane selection
+  regression pass (PR BM)`) on `origin/main`. PR BN patch in
   flight on top — no new commit / tag yet, both pending
   explicit user approval.
 - **Latest tag:** still **`hackathon-submission-v13`** at `ec446e4`
@@ -35,21 +35,20 @@ SESSION_012–SESSION_044 handoffs added).
   switches modes. **Default load remains v1**; v2 reachable
   via footer toggle or `?ux=v2`.
 - **Backend routes:** **68** application + FastAPI built-ins
-  (unchanged from PR BL; PR BM is test-only — no production
-  code changes).
-- **Frontend build:** 378.16 KB initial JS / 102.00 KB gzip +
-  561.97 KB lazy `@runwayml/avatars-react` chunk (unchanged
-  from PR BL — no JS changed in PR BM).
-- **Playwright smoke:** `3 passed (~29.8 s)` against the mock
+  (unchanged from PR BM; PR BN is frontend-only and reuses
+  the existing `POST /api/campaigns/{id}/spokesperson-ad/reels`
+  route).
+- **Frontend build:** 380.02 KB initial JS / 102.65 KB gzip +
+  561.97 KB lazy `@runwayml/avatars-react` chunk (+1.86 KB
+  initial / +0.65 KB gzip vs PR BM — wired Reels button +
+  busy/error/link UI).
+- **Playwright smoke:** `3 passed (~23.2 s)` against the mock
   backend booted via `bash scripts/start-local-mock.sh`. v1
-  test ~27.3 s now also asserts every v2 testid is **absent**
-  on the default load (catches flag-leak regressions). v2
-  test ~1.1 s exercises the full mode-switch chain
-  spokesperson → cinematic → dialogue → dismiss + asserts
-  the legacy `+ Create Character` button is **absent** when
-  v2 mounts. New third test ~749 ms clicks the footer toggle
-  to flip v1 → v2 → v1 with reload + DOM assertions at each
-  stop.
+  test ~20.7 s unchanged. v2 test ~1.1 s now also asserts the
+  Reels button carries `data-source-ready` ∈ {true, false} +
+  `data-busy="false"` and is enabled iff source-ready is
+  true (resilient disjunction across fixture state). Toggle
+  round-trip ~706 ms unchanged.
   ```bash
   bash scripts/start-local-mock.sh
   (cd frontend && npm run test:e2e)
@@ -68,7 +67,7 @@ SESSION_012–SESSION_044 handoffs added).
 
 ## What's implemented (full feature stack on `main`)
 
-### UX redesign foundation (PR BD — UX v2 Flag + Shared Helpers · PR BE — SpokespersonStudio Scaffold · PR BF — Knowledge Tab Wiring · PR BG — Appearances Tab Wiring · PR BH — Mode-First Creation Modal · PR BI — Spokesperson Lane Scaffold · PR BK — Cinematic Lane Scaffold · PR BL — Dialogue Lane Scaffold · PR BM — Lane Selection Regression Pass)
+### UX redesign foundation (PR BD — UX v2 Flag + Shared Helpers · PR BE — SpokespersonStudio Scaffold · PR BF — Knowledge Tab Wiring · PR BG — Appearances Tab Wiring · PR BH — Mode-First Creation Modal · PR BI — Spokesperson Lane Scaffold · PR BK — Cinematic Lane Scaffold · PR BL — Dialogue Lane Scaffold · PR BM — Lane Regression Pass · PR BN — Spokesperson Reels Action Wired)
 
 - **UX v2 feature flag** at `frontend/src/uxFlag.js`. Resolves
   precedence URL `?ux=v2|v1` > localStorage `adspark.ux` >
@@ -175,6 +174,20 @@ SESSION_012–SESSION_044 handoffs added).
   `cinematic-lane-step-visual`, `cinematic-lane-step-render`,
   `cinematic-lane-video`, `cinematic-lane-voiced`,
   `cinematic-lane-storyboard`, `cinematic-lane-empty-hint`.
+- **Spokesperson Reels action wired** (PR BN) — first v2 lane
+  action that fires real production behaviour. The
+  SpokespersonLane "Captioned Reels" button now calls
+  `api.buildSpokespersonReels(focused.id)` against the
+  existing `POST /api/campaigns/{id}/spokesperson-ad/reels`
+  route. ffmpeg-only — no Runway calls. Gates click on
+  `focused.host_status === "ok"` + `focused.host_video_url`
+  set; renders busy + error + download-link states inline
+  with violet chrome to match the v1 vocabulary. Horizontal
+  button stays a disabled placeholder; Cinematic + Dialogue
+  lanes untouched. data-testid:
+  `spokesperson-lane-reels-status`,
+  `spokesperson-lane-reels-link`. Reels button new attrs:
+  `data-source-ready`, `data-busy`.
 - **Spokesperson Ad lane scaffold** (PR BI) — first lane in
   the v2 mode trio. New
   `frontend/src/components/lanes/SpokespersonLane.jsx`
