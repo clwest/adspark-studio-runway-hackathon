@@ -9,14 +9,15 @@ PR AT `632b696`; PR AU `485310a`; PR AV `b9b7fee`; PR AW
 PR BA `9d0a99d`; PR BB `8702660`; PR BC `9eae15f`; PR BD
 `0171078`; PR BE `e2ed1ee`; PR BF `d897437`; PR BG
 `af48e28`; SESSION REAL-API `4a68278`; PR BH `600eec9`; PR BI
-`42a8054`; PR BJ `c04aced`; PR BK `7185554 feat: cinematic ad lane
-scaffold (gated v2)`; PR BL Dialogue Lane Scaffold in flight
-on top — SESSION_012–SESSION_043 handoffs added).
+`42a8054`; PR BJ `c04aced`; PR BK `7185554`; PR BL `8967061 feat:
+dialogue scene lane scaffold (gated v2)`; PR BM Lane Selection
+Regression Pass in flight on top —
+SESSION_012–SESSION_044 handoffs added).
 
 ## Where things stand
 
-- **Branch:** `main` at `7185554` (`feat: cinematic ad lane
-  scaffold (gated v2)`) on `origin/main`. PR BL patch in
+- **Branch:** `main` at `8967061` (`feat: dialogue scene lane
+  scaffold (gated v2)`) on `origin/main`. PR BM patch in
   flight on top — no new commit / tag yet, both pending
   explicit user approval.
 - **Latest tag:** still **`hackathon-submission-v13`** at `ec446e4`
@@ -34,19 +35,21 @@ on top — SESSION_012–SESSION_043 handoffs added).
   switches modes. **Default load remains v1**; v2 reachable
   via footer toggle or `?ux=v2`.
 - **Backend routes:** **68** application + FastAPI built-ins
-  (unchanged from PR BK; PR BL is frontend-only).
+  (unchanged from PR BL; PR BM is test-only — no production
+  code changes).
 - **Frontend build:** 378.16 KB initial JS / 102.00 KB gzip +
-  561.97 KB lazy `@runwayml/avatars-react` chunk (+7.86 KB
-  initial / +0.94 KB gzip vs PR BK — DialogueLane scaffold
-  with cast list derivation).
-- **Playwright smoke:** `2 passed (~22.9 s)` against the mock
+  561.97 KB lazy `@runwayml/avatars-react` chunk (unchanged
+  from PR BL — no JS changed in PR BM).
+- **Playwright smoke:** `3 passed (~29.8 s)` against the mock
   backend booted via `bash scripts/start-local-mock.sh`. v1
-  test ~21.2 s unchanged. v2 test ~1.1 s now exercises the
-  full mode-switch chain — spokesperson → cinematic →
-  dialogue → dismiss — asserting only one lane is visible at
-  a time + each lane carries its three step testids and
-  three disabled render buttons with matching
-  `data-render-target` attributes.
+  test ~27.3 s now also asserts every v2 testid is **absent**
+  on the default load (catches flag-leak regressions). v2
+  test ~1.1 s exercises the full mode-switch chain
+  spokesperson → cinematic → dialogue → dismiss + asserts
+  the legacy `+ Create Character` button is **absent** when
+  v2 mounts. New third test ~749 ms clicks the footer toggle
+  to flip v1 → v2 → v1 with reload + DOM assertions at each
+  stop.
   ```bash
   bash scripts/start-local-mock.sh
   (cd frontend && npm run test:e2e)
@@ -65,7 +68,7 @@ on top — SESSION_012–SESSION_043 handoffs added).
 
 ## What's implemented (full feature stack on `main`)
 
-### UX redesign foundation (PR BD — UX v2 Flag + Shared Helpers · PR BE — SpokespersonStudio Scaffold · PR BF — Knowledge Tab Wiring · PR BG — Appearances Tab Wiring · PR BH — Mode-First Creation Modal · PR BI — Spokesperson Lane Scaffold · PR BK — Cinematic Lane Scaffold · PR BL — Dialogue Lane Scaffold)
+### UX redesign foundation (PR BD — UX v2 Flag + Shared Helpers · PR BE — SpokespersonStudio Scaffold · PR BF — Knowledge Tab Wiring · PR BG — Appearances Tab Wiring · PR BH — Mode-First Creation Modal · PR BI — Spokesperson Lane Scaffold · PR BK — Cinematic Lane Scaffold · PR BL — Dialogue Lane Scaffold · PR BM — Lane Selection Regression Pass)
 
 - **UX v2 feature flag** at `frontend/src/uxFlag.js`. Resolves
   precedence URL `?ux=v2|v1` > localStorage `adspark.ux` >

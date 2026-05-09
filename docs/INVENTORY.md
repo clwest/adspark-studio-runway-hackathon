@@ -1,20 +1,22 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after PR BL (Dialogue Lane Scaffold) on top
-of the PR AG–BK / SESSION 011 anchors. Backend route count is
-**68** application routes — PR BL ships the third and final v2
-mode lane, completing the trio (BI Spokesperson · BK Cinematic ·
-BL Dialogue). A new
-`frontend/src/components/lanes/DialogueLane.jsx` mirrors PR BI
-/ PR BK with dialogue-specific steps (Brief / Cast / Lines &
-Stitch) and three disabled placeholder render buttons
-(Generate Dialogue Lines / Stitch Dialogue Scene / Captioned
-Reels). Cast list derives from `dialogue_lines[*]` on the
-focused campaign. All three modes now mount their own lane
-when picked from the PR BH modal; switching unmounts the prior
-lane. PR BM is a regression-pass slice that hardens the smoke
-across all three lanes + the v1↔v2 toggle. Backend untouched. **Real-mode credit-burn session preserved on disk:**
+context-kit refresh after PR BM (Lane Selection Regression Pass)
+on top of the PR AG–BL / SESSION 011 anchors. Backend route
+count is **68** application routes — PR BM is a test-only
+hardening slice with **zero production-code changes**. The
+v1 smoke gains 7 negative assertions on v2-only testids (catches
+flag-leak regressions); the v2 smoke gains a positive negative
+assertion that the legacy `+ Create Character` button is gone
+when v2 mounts; and a third Playwright test
+(`AdSpark Studio footer UX toggle round-trip`) clicks the
+footer link to flip v1 → v2 → v1 with reload assertions at
+each stop. The v2 redesign is now structurally complete (PR BD
+flag · PR BE Spokesperson Studio · PR BF Knowledge · PR BG
+Appearances · PR BH Mode Modal · PR BI Spokesperson Lane ·
+PR BK Cinematic Lane · PR BL Dialogue Lane · PR BM regression
+pass). PR BJ flipped local boot to real-mode-by-default for
+manual testing. Backend untouched throughout the v2 track. **Real-mode credit-burn session preserved on disk:**
 Brewster / CEO Buzz spokesperson MP4 (1088×704, 18.4 s, 6.1 MB),
 captioned reels (720×1280), voiced cinematic mux (1280×720),
 real Runway grounding doc — all gitignored, served from cached
@@ -249,6 +251,7 @@ the line's own `avatar_id`).
 | PR BJ | Local Real-Mode Runtime Guard (runtime + docs slice tracked in SESSION_041; flips local-testing default from mock-mode to real-mode; new `scripts/start-local-real.sh` sources `.env` without overrides for manual / in-browser testing, `scripts/start-local-mock.sh` is the explicit mock-mode boot for Playwright smoke + CI, `scripts/stop-local.sh` kills both servers; CLAUDE.md hard-rules section rewritten — `RUNWAY_API_KEY= OPENAI_API_KEY= IMAGE_GEN_PROVIDER=mock` inline overrides are now an anti-pattern; no frontend/backend code changes; frontend bundle unchanged) | (post-v13) |
 | PR BK | Cinematic Lane Scaffold (gated v2 slice tracked in SESSION_042; second lane in the trio; new `frontend/src/components/lanes/CinematicLane.jsx` mirrors PR BI shape with 3-step Brief / Visual Source / Render layout + 3 disabled placeholder buttons mapping to Cinematic Video / Voiced Cinematic / Storyboard Commercial; mounts in SpokespersonStudio when `activeMode === "cinematic"`; fuchsia chrome to match the mode pill; pill copy now mode-specific — "Cinematic Ad lane open." for cinematic mode; smoke covers spokesperson → cinematic mode switch with assertion that previous lane unmounts; backend untouched) | (post-v13) |
 | PR BL | Dialogue Lane Scaffold (gated v2 slice tracked in SESSION_043; third lane in the trio — completes the v2 mode lineup; new `frontend/src/components/lanes/DialogueLane.jsx` mirrors PR BI / PR BK shape with 3-step Brief / Cast / Lines & Stitch layout + 3 disabled placeholder buttons mapping to Generate Dialogue Lines / Stitch Dialogue Scene / Captioned Reels; mounts when `activeMode === "dialogue"`; sky chrome to match the mode pill; cast list derives from `dialogue_lines[*]` on the focused campaign; pill copy flips to "Dialogue Scene lane open."; smoke covers cinematic → dialogue mode switch; backend untouched) | (post-v13) |
+| PR BM | Lane Selection Regression Pass (test-only slice tracked in SESSION_044; strengthens smoke against v1 default leaks of v2 testids, v2 surface absence of legacy "+ Create Character", and a third Playwright case `AdSpark Studio footer UX toggle round-trip` that clicks the footer link to flip v1 → v2 → v1 with reload assertions; no production code changes; no backend changes) | (post-v13) |
 
 ## Known limitations (current main)
 

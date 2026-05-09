@@ -145,6 +145,21 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
   await expect(
     page.getByRole('button', { name: /^\+ Create Character$/i }),
   ).toBeVisible()
+  // PR BM — v1 default must NOT leak any v2 gated surfaces. If
+  // any of these testids are in the DOM, the flag-aware mount
+  // in App.jsx has regressed and v2 is bleeding into the
+  // legacy path.
+  for (const tid of [
+    'spokesperson-studio',
+    'spokesperson-new-campaign',
+    'spokesperson-active-mode',
+    'campaign-mode-modal',
+    'spokesperson-lane',
+    'cinematic-lane',
+    'dialogue-lane',
+  ]) {
+    await expect(page.getByTestId(tid)).toHaveCount(0)
+  }
   // The empty-state copy is visible until a character is created
   // (existing characters.json may already have entries from prior
   // runs; in that case the panel shows the library grid instead).
@@ -912,6 +927,12 @@ test('AdSpark Studio UX v2 SpokespersonStudio scaffold', async ({ page }) => {
   const studio = page.getByTestId('spokesperson-studio')
   await expect(studio).toBeVisible()
   await expect(studio).toHaveAttribute('data-ux-mode', 'v2')
+  // PR BM — legacy CharacterStudio's "+ Create Character" button
+  // must NOT render in v2 mode. If both surfaces mount the
+  // flag-aware swap regressed.
+  await expect(
+    page.getByRole('button', { name: /^\+ Create Character$/i }),
+  ).toHaveCount(0)
   await expect(
     studio.getByTestId('spokesperson-studio-heading'),
   ).toContainText(/Spokesperson Studio/i)
@@ -1212,5 +1233,84 @@ test('AdSpark Studio UX v2 SpokespersonStudio scaffold', async ({ page }) => {
   expect(
     realConsoleErrors,
     `unexpected console.error messages (v2):\n  ${realConsoleErrors.join('\n  ')}`,
+  ).toEqual([])
+})
+
+// PR BM — Footer UX toggle round-trip. Confirms the v1 ↔ v2
+// flip via the `Try preview UX` / `Use classic UX` link in the
+// footer triggers a full reload + the new mode mounts on the
+// next paint. Catches a class of regression where the flag is
+// persisted but a v2-gated component fails to remount.
+test('AdSpark Studio footer UX toggle round-trip', async ({ page }) => {
+  const consoleErrors = []
+  const pageErrors = []
+  page.on('console', (msg) => {
+    if (msg.type() === 'error') consoleErrors.push(msg.text())
+  })
+  page.on('pageerror', (err) => {
+    pageErrors.push(`${err.name}: ${err.message}`)
+  })
+
+  // Start clean — no persisted UX choice from prior tests.
+  await page.goto('/')
+  await page.evaluate(() => {
+    try {
+      window.localStorage.removeItem('adspark.ux')
+      window.localStorage.removeItem('adspark.activeMode')
+    } catch {}
+  })
+  await page.reload()
+
+  // v1 default: legacy CharacterStudio mounted, no
+  // SpokespersonStudio testid.
+  await expect(
+    page.getByRole('button', { name: /^\+ Create Character$/i }),
+  ).toBeVisible()
+  await expect(page.getByTestId('spokesperson-studio')).toHaveCount(0)
+
+  // Footer toggle reads "Try preview UX" with data-ux-mode="v1".
+  const toggle = page.getByTestId('ux-mode-toggle')
+  await expect(toggle).toBeVisible()
+  await expect(toggle).toHaveAttribute('data-ux-mode', 'v1')
+  await expect(toggle).toHaveText(/Try preview UX/i)
+
+  // Click → page reloads → v2 surfaces.
+  await Promise.all([
+    page.waitForLoadState('load'),
+    toggle.click(),
+  ])
+  await expect(page.getByTestId('spokesperson-studio')).toBeVisible()
+  await expect(
+    page.getByRole('button', { name: /^\+ Create Character$/i }),
+  ).toHaveCount(0)
+  // Toggle now reads "Use classic UX" with data-ux-mode="v2".
+  const toggleV2 = page.getByTestId('ux-mode-toggle')
+  await expect(toggleV2).toHaveAttribute('data-ux-mode', 'v2')
+  await expect(toggleV2).toHaveText(/Use classic UX/i)
+
+  // Flip back to classic.
+  await Promise.all([
+    page.waitForLoadState('load'),
+    toggleV2.click(),
+  ])
+  await expect(
+    page.getByRole('button', { name: /^\+ Create Character$/i }),
+  ).toBeVisible()
+  await expect(page.getByTestId('spokesperson-studio')).toHaveCount(0)
+  const toggleBack = page.getByTestId('ux-mode-toggle')
+  await expect(toggleBack).toHaveAttribute('data-ux-mode', 'v1')
+  await expect(toggleBack).toHaveText(/Try preview UX/i)
+
+  // Console / page errors stay clean across the round-trip too.
+  const realConsoleErrors = consoleErrors.filter(
+    (t) => !IGNORED_CONSOLE_ERRORS.some((rx) => rx.test(t)),
+  )
+  expect(
+    pageErrors,
+    `unexpected page errors (toggle round-trip):\n  ${pageErrors.join('\n  ')}`,
+  ).toEqual([])
+  expect(
+    realConsoleErrors,
+    `unexpected console.error messages (toggle round-trip):\n  ${realConsoleErrors.join('\n  ')}`,
   ).toEqual([])
 })
