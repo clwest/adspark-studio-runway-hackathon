@@ -7,40 +7,41 @@ PR AM `3e12d27`; PR AN `f255c22`; PR AO `5bca7c4`; PR AP
 PR AT `632b696`; PR AU `485310a`; PR AV `b9b7fee`; PR AW
 `555ebf9`; PR AX `9d86f2e`; PR AY `0a93c79`; PR AZ `2c16d30`;
 PR BA `9d0a99d`; PR BB `8702660`; PR BC `9eae15f`; PR BD
-`0171078 feat: ux v2 flag + shared audit-row helpers`; PR BE
-SpokespersonStudio scaffold in flight on top —
-SESSION_012–SESSION_036 handoffs added).
+`0171078`; PR BE `e2ed1ee feat: spokesperson studio scaffold
+(gated v2 surface)`; PR BF Spokesperson Knowledge Tab Wiring
+in flight on top — SESSION_012–SESSION_037 handoffs added).
 
 ## Where things stand
 
-- **Branch:** `main` at `0171078` (`feat: ux v2 flag + shared
-  audit-row helpers`) on `origin/main`. PR BE patch in flight
-  on top — no new commit / tag yet, both pending explicit
-  user approval.
+- **Branch:** `main` at `e2ed1ee` (`feat: spokesperson studio
+  scaffold (gated v2 surface)`) on `origin/main`. PR BF patch
+  in flight on top — no new commit / tag yet, both pending
+  explicit user approval.
 - **Latest tag:** still **`hackathon-submission-v13`** at `ec446e4`
-  (PR AF). PR AG–BD shipped the full voice arc + audit
-  trails + UX v2 foundation. PR BE adds the first gated v2
-  surface — SpokespersonStudio + SpokespersonCard at Stage 1
-  when `isUxV2()` is true. Identity tab embeds today's
-  CharacterCard so v1 voice affordances survive intact; the
-  Knowledge + Appearances tabs render placeholders for now and
-  land in PR BF / PR BG. **Default load remains v1**; the v2
-  surface is reachable via the footer toggle or `?ux=v2`.
+  (PR AF). PR AG–BE shipped the full voice arc + audit trails
+  + UX v2 foundation + SpokespersonStudio scaffold. PR BF
+  wires the Knowledge tab on each SpokespersonCard with real
+  campaign data — the spokesperson-first redesign starts to
+  feel persistent. **Default load remains v1**; v2 reachable
+  via footer toggle or `?ux=v2`.
 - **Backend routes:** **68** application + FastAPI built-ins
-  (unchanged from PR BD; PR BE is frontend-only and adds no
-  endpoints).
-- **Frontend build:** 342.57 KB initial JS / 95.25 KB gzip +
-  561.97 KB lazy `@runwayml/avatars-react` chunk (+7.82 KB
-  initial / +1.41 KB gzip vs PR BD — two new components +
-  flag-aware mount).
-- **Playwright smoke:** `2 passed (~22.9 s)` against the mock
-  backend. The first test (~21.8 s) is the unchanged v1
-  end-to-end pass; the second test (~450 ms) loads `?ux=v2`,
-  asserts SpokespersonStudio + per-card tab strip + Identity-
-  default + placeholder copy on Knowledge/Appearances tabs.
-- **Targeted probes:** none new. PR BD's 8/8 `uxFlag.js`
-  precedence scenarios still pass; v2 mount logic is covered
-  end-to-end by the new smoke case.
+  (unchanged from PR BE; PR BF is frontend-only and reads
+  existing campaign data via the existing `GET /api/campaigns`
+  route).
+- **Frontend build:** 345.90 KB initial JS / 96.20 KB gzip +
+  561.97 KB lazy `@runwayml/avatars-react` chunk (+3.33 KB
+  initial / +0.95 KB gzip vs PR BE — Knowledge tab content
+  + four small helpers).
+- **Playwright smoke:** `2 passed (~27.4 s)` against the mock
+  backend. The v1 test (~26.3 s) is unchanged; the v2 test
+  (~492 ms) extended with resilient assertions on the
+  Knowledge tab disjunction (summary + ≥1 row OR empty state
+  copy).
+- **Targeted probes:** none new. The v2 smoke covers the
+  Knowledge tab end-to-end against the mock fixture state
+  (Piper Voltage links to FocusNet → summary branch; Sir
+  Landsloplot has no linked campaigns → empty state). PR BD's
+  8/8 `uxFlag.js` precedence scenarios still pass.
 - **Repo:** https://github.com/clwest/adspark-studio-runway-hackathon
   (private). Pushes happen on explicit user approval.
 - **Stale local feature branches:** 22 left over from PR A through
@@ -49,7 +50,7 @@ SESSION_012–SESSION_036 handoffs added).
 
 ## What's implemented (full feature stack on `main`)
 
-### UX redesign foundation (PR BD — UX v2 Flag + Shared Helpers · PR BE — SpokespersonStudio Scaffold)
+### UX redesign foundation (PR BD — UX v2 Flag + Shared Helpers · PR BE — SpokespersonStudio Scaffold · PR BF — Knowledge Tab Wiring)
 
 - **UX v2 feature flag** at `frontend/src/uxFlag.js`. Resolves
   precedence URL `?ux=v2|v1` > localStorage `adspark.ux` >
@@ -81,6 +82,21 @@ SESSION_012–SESSION_036 handoffs added).
   Library grid is `grid-cols-1 sm:grid-cols-2 md:grid-cols-3`
   (wider than the v1 4-col layout to accommodate the embedded
   CharacterCard + tab strip).
+- **Spokesperson Knowledge tab wiring** (PR BF) — replaces the
+  Knowledge placeholder with real campaign data. SpokespersonStudio
+  fetches campaigns alongside characters (`api.listCampaigns()`);
+  indexes by `character_id` once per render; forwards each card
+  its slice via `linkedCampaigns`. Each card's Knowledge tab
+  shows a one-line summary (`N campaigns · M grounded · K
+  transcripts · last fetch …`) plus one row per linked campaign
+  with `Business · Product` label, grounding pill (Prompt-grounded
+  / Document-grounded / Document-grounded · mock / Failed),
+  transcript count, last-fetched relative time. Empty state
+  copy when no campaigns link to this spokesperson. Local
+  helpers `formatKnowledgeTime`, `groundingLabel`,
+  `campaignLabel`, `summariseKnowledge`. data-testid:
+  `spokesperson-knowledge-summary`, `spokesperson-knowledge-empty`,
+  `spokesperson-knowledge-row`.
 - **Default behaviour unchanged.** v13 demos still load into
   the legacy 4-stage flow + 7-tab CampaignGallery + Character
   Studio panel. v2 path is gated; nothing visible changes

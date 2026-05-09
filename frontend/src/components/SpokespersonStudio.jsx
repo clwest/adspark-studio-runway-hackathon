@@ -29,14 +29,24 @@ export default function SpokespersonStudio({
   onSetActive,
 }) {
   const [characters, setCharacters] = useState([])
+  const [campaigns, setCampaigns] = useState([])
   const [loading, setLoading] = useState(true)
   const [errMsg, setErrMsg] = useState('')
   const [busyByChar, setBusyByChar] = useState({})
 
+  // PR BF — fetch campaigns alongside characters so the Knowledge
+  // tab on each SpokespersonCard can render grounding + transcript
+  // state for every campaign that links to that spokesperson via
+  // ``character_id``. No new backend route — same `GET /api/campaigns`
+  // the rest of the app already reads.
   const refresh = async () => {
     try {
-      const resp = await api.listCharacters()
-      setCharacters(resp.characters || [])
+      const [charsResp, campsResp] = await Promise.all([
+        api.listCharacters(),
+        api.listCampaigns(),
+      ])
+      setCharacters(charsResp.characters || [])
+      setCampaigns(campsResp.campaigns || [])
       setErrMsg('')
     } catch (e) {
       setErrMsg(friendlyError(e, 'Couldn’t load spokespeople'))
@@ -49,6 +59,17 @@ export default function SpokespersonStudio({
     refresh()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // PR BF — index campaigns by character_id once per render so each
+  // card receives only its own linked campaigns. Keeps the Knowledge
+  // tab's filter logic out of the per-card render path.
+  const campaignsByCharacter = (campaigns || []).reduce((acc, c) => {
+    const key = c.character_id
+    if (!key) return acc
+    if (!acc[key]) acc[key] = []
+    acc[key].push(c)
+    return acc
+  }, {})
 
   const setBusy = (id, action) =>
     setBusyByChar((m) => ({ ...m, [id]: action }))
@@ -253,6 +274,9 @@ export default function SpokespersonStudio({
               onApplyVoiceToAvatar={handleApplyVoiceToAvatar}
               onRefreshAvatarVoice={handleRefreshAvatarVoice}
               onRefreshVoicePreview={handleRefreshVoicePreview}
+              // PR BF — only the campaigns linked to this character
+              // via character_id; empty array when nothing matches.
+              linkedCampaigns={campaignsByCharacter[c.id] || []}
             />
           ))}
         </div>

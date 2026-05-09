@@ -1,19 +1,17 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after PR BE (SpokespersonStudio Scaffold)
-on top of the PR AG–BD / SESSION 011 anchors. Backend route
-count is **68** application routes — PR BE is the first gated
-v2 surface from the spokesperson-first redesign tracked in
-`docs/handoffs/SESSION_036_SPOKESPERSON_STUDIO_SCAFFOLD.md`.
-PR BE adds two new components — `SpokespersonStudio.jsx` and
-`SpokespersonCard.jsx` — that mount in place of CharacterStudio
-at Stage 1 only when `isUxV2()` returns true. The Identity tab
-embeds today's CharacterCard so every v1 voice affordance keeps
-working under v2; Knowledge + Appearances tabs render placeholder
-copy and land in PR BF / PR BG. Default load (v1) remains the
-legacy CharacterStudio surface unchanged so v13 demos still
-ship.
+context-kit refresh after PR BF (Spokesperson Knowledge Tab
+Wiring) on top of the PR AG–BE / SESSION 011 anchors. Backend
+route count is **68** application routes — PR BF is the third
+gated v2 slice from the spokesperson-first redesign (after BD's
+flag + helpers and BE's scaffold). The Knowledge tab on each
+SpokespersonCard now reads `GET /api/campaigns` client-side,
+filters by `character_id`, and surfaces a compact summary
+(linked count · grounded count · transcript count · last fetch)
+plus a per-campaign row for each match — grounding label,
+transcript count, last-fetched time. No backend changes; default
+v1 load is unchanged. PR BG wires Appearances next.
 
 ## Backend (`backend/`)
 
@@ -59,8 +57,8 @@ ship.
 | `src/api.js` | real | Thin fetch wrapper; helpers for every backend route incl. all PR Z/AC storyboard helpers, PR AA `saveCommercialScript`, PR AB `generateSpokespersonAd`, PR AF dialogue helpers (`planDialogue`, `saveDialogueLine`, `generateDialogueLine`, `stitchDialogue`) |
 | `src/uxFlag.js` | real | **PR BD** — UX v2 feature flag. `getUxMode()` resolves precedence (URL `?ux=v1\|v2` > localStorage `adspark.ux` > default `v1`). `isUxV2()` convenience predicate, `setUxMode(mode)` mutator, `UX_MODES` + `UX_STORAGE_KEY` constants. SSR-safe (guards window/localStorage). Foundation for the spokesperson-first redesign — every v2 surface (PR BE+) gates its render at mount via this module |
 | `src/uiHelpers.js` | real | **PR BD** — shared audit-row helpers extracted from CharacterCard.jsx so future spokesperson-first surfaces can reuse them: `formatHistoryTimestamp(iso, nowMs)` (compact relative-time bucket formatter, no `"Last checked "` prefix), `HISTORY_ACTION_PILLS` (frozen action→Tailwind class map), `historyStatusClass(status)`, `historyDriftClass(drift)`. Behaviour identical to the originals from PR BB; pure relocation slice |
-| `src/components/SpokespersonStudio.jsx` | real | **PR BE** — first gated v2 surface (replaces Stage 1 CharacterStudio when `isUxV2()` is true). Reads `GET /api/characters` via `api.listCharacters()`; renders heading "Spokesperson Studio" + tagline + library grid of `SpokespersonCard`s. Owns the same handler set as CharacterStudio (`handleGeneratePortrait` / `handleCreateAvatar` / `handleCloneVoice` / `handleApplyVoiceToAvatar` / `handleRefreshAvatarVoice` / `handleRefreshVoicePreview` / `handleDelete`). Empty-state copy points operators back to the classic UX for creation until PR BH+ ships the mode-first creation modal. data-testid: `spokesperson-studio`, `spokesperson-studio-heading`, `spokesperson-empty-state`, `spokesperson-library`, `data-ux-mode="v2"` on the wrapper |
-| `src/components/SpokespersonCard.jsx` | real | **PR BE** — single tile for the v2 Spokesperson Library. Three-tab shell (`Identity` / `Knowledge` / `Appearances`); Identity is selected by default and renders the existing `CharacterCard` inline so every v1 affordance (clone / record / mic level / preview / patch / verify / drift / repair / refresh / freshness / voice history disclosure / action row) survives unchanged. Knowledge + Appearances render placeholder copy until PR BF / PR BG. data-testid: `spokesperson-card`, `spokesperson-tab-identity`, `spokesperson-tab-knowledge`, `spokesperson-tab-appearances`, `spokesperson-identity-tab`, `spokesperson-knowledge-tab`, `spokesperson-appearances-tab` |
+| `src/components/SpokespersonStudio.jsx` | real | **PR BE** — first gated v2 surface (replaces Stage 1 CharacterStudio when `isUxV2()` is true). Reads `GET /api/characters` via `api.listCharacters()`; renders heading "Spokesperson Studio" + tagline + library grid of `SpokespersonCard`s. Owns the same handler set as CharacterStudio (`handleGeneratePortrait` / `handleCreateAvatar` / `handleCloneVoice` / `handleApplyVoiceToAvatar` / `handleRefreshAvatarVoice` / `handleRefreshVoicePreview` / `handleDelete`). Empty-state copy points operators back to the classic UX for creation until PR BH+ ships the mode-first creation modal. data-testid: `spokesperson-studio`, `spokesperson-studio-heading`, `spokesperson-empty-state`, `spokesperson-library`, `data-ux-mode="v2"` on the wrapper. **PR BF** — also fetches `GET /api/campaigns` via `api.listCampaigns()`, indexes by `character_id`, and forwards each card its slice via `linkedCampaigns` so the Knowledge tab can render grounding + transcript state |
+| `src/components/SpokespersonCard.jsx` | real | **PR BE** — single tile for the v2 Spokesperson Library. Three-tab shell (`Identity` / `Knowledge` / `Appearances`); Identity is selected by default and renders the existing `CharacterCard` inline so every v1 affordance (clone / record / mic level / preview / patch / verify / drift / repair / refresh / freshness / voice history disclosure / action row) survives unchanged. data-testid: `spokesperson-card`, `spokesperson-tab-identity`, `spokesperson-tab-knowledge`, `spokesperson-tab-appearances`, `spokesperson-identity-tab`, `spokesperson-knowledge-tab`, `spokesperson-appearances-tab`. **PR BF** — Knowledge tab now wires real campaign data: receives `linkedCampaigns` (campaigns where `character_id === spokesperson.id`), renders a compact summary line (`N campaigns · M grounded · K transcripts · last fetch …`) + one row per linked campaign with `campaignLabel` (business + product), `groundingLabel` pill (Prompt-grounded / Document-grounded / Document-grounded · mock / Failed), transcript history count, and last-fetched relative time. Empty state when no linked campaigns. Local helpers `formatKnowledgeTime`, `groundingLabel`, `campaignLabel`, `summariseKnowledge`. data-testid: `spokesperson-knowledge-summary`, `spokesperson-knowledge-empty`, `spokesperson-knowledge-row`. Appearances still placeholder until PR BG |
 | `src/settings.js` | real | localStorage persistence with safety clamps; `STORAGE_KEY = 'adspark.settings.v1'` |
 | `src/errors.js` | real | `friendlyError(e, hint)` + `ERROR_HINTS` per call site |
 | `src/scriptBuilder.js` | real | **PR AA + PR AC** — `buildCommercialScript({ campaign, character })` deterministic generator + 300-char cap |
@@ -235,6 +233,7 @@ the line's own `avatar_id`).
 | PR BC | Per-Campaign Transcript History (`TranscriptHistoryEntry` model + `realtime_transcript_history: list[…]` on Campaign capped at 20 entries; every branch of `POST /realtime-transcript` appends a row including no_session / failed / empty / mock / ok; latest-fetch state preserved in the existing `realtime_transcript_*` fields so preview + Copy Markdown / Download TXT exports continue operating against the latest fetch; CampaignGallery transcript card adds a compact "Transcript history" disclosure with status / turn-count / conversation-id / fetched-time per row) | (post-v13) |
 | PR BD | UX v2 Flag + Shared Helpers Extraction (foundation for the spokesperson-first redesign tracked in SESSION_035; new `frontend/src/uxFlag.js` resolves URL `?ux=…` → localStorage `adspark.ux` → default `v1`; new `frontend/src/uiHelpers.js` lifts `formatHistoryTimestamp` / `HISTORY_ACTION_PILLS` / `historyStatusClass` / `historyDriftClass` out of CharacterCard.jsx for reuse; tiny `<UxModeToggle />` footer link flips the flag and reloads; default UX unchanged) | (post-v13) |
 | PR BE | SpokespersonStudio Scaffold Identity-Only (gated v2 Stage 1 surface tracked in SESSION_036; new `SpokespersonStudio.jsx` reads same `GET /api/characters` data; new `SpokespersonCard.jsx` wraps existing CharacterCard in a three-tab shell — Identity active, Knowledge + Appearances placeholders; App.jsx swaps mounts conditionally on `isUxV2()`; backend untouched; second Playwright smoke `?ux=v2` covers the new surface alongside the unchanged v1 default smoke) | (post-v13) |
+| PR BF | Spokesperson Knowledge Tab Wiring (gated v2 slice tracked in SESSION_037; SpokespersonStudio now fetches `GET /api/campaigns` alongside characters and forwards per-character `linkedCampaigns` to each card; SpokespersonCard's Knowledge tab renders summary line + per-campaign rows with grounding labels (Prompt-grounded / Document-grounded / Document-grounded · mock / Failed), transcript counts, and last-fetched relative time; falls back to a friendly "No linked campaigns yet" state otherwise; backend untouched) | (post-v13) |
 
 ## Known limitations (current main)
 

@@ -936,15 +936,53 @@ test('AdSpark Studio UX v2 SpokespersonStudio scaffold', async ({ page }) => {
       firstCard.getByTestId('spokesperson-identity-tab'),
     ).toBeVisible()
 
-    // Switching to Knowledge surfaces the placeholder copy.
+    // PR BF — Knowledge tab now wires real campaign data. Each
+    // card shows either a summary line + per-campaign rows (when at
+    // least one campaign links via character_id) OR the empty
+    // state copy. The disjunction stays resilient across fixture
+    // variations: the smoke campaign created in the v1 test never
+    // attaches a character, so most spokespeople here will land in
+    // the empty-state branch unless the operator pre-linked
+    // characters.
     await firstCard.getByTestId('spokesperson-tab-knowledge').click()
-    await expect(
-      firstCard.getByTestId('spokesperson-knowledge-tab'),
-    ).toContainText(/Knowledge wiring lands next/i)
+    const knowledgeTab = firstCard.getByTestId(
+      'spokesperson-knowledge-tab',
+    )
+    await expect(knowledgeTab).toBeVisible()
     // Identity content unmounts when Knowledge is active.
     await expect(
       firstCard.getByTestId('spokesperson-identity-tab'),
     ).toHaveCount(0)
+    const summaryCount = await firstCard
+      .getByTestId('spokesperson-knowledge-summary')
+      .count()
+    const emptyCount = await firstCard
+      .getByTestId('spokesperson-knowledge-empty')
+      .count()
+    // Exactly one of the two branches must render.
+    expect(summaryCount + emptyCount).toBe(1)
+    if (summaryCount > 0) {
+      // Summary line carries `N campaigns · M grounded · K transcripts`;
+      // we don't pin numbers (resilient to fixture state) but the
+      // literal "campaigns" + "grounded" + "transcripts" must all
+      // appear.
+      await expect(
+        firstCard.getByTestId('spokesperson-knowledge-summary'),
+      ).toContainText(
+        /campaigns? · \d+ grounded · \d+ transcripts?/i,
+      )
+      // At least one per-campaign row must render alongside the
+      // summary so the operator can drill in.
+      const rowCount = await firstCard
+        .getByTestId('spokesperson-knowledge-row')
+        .count()
+      expect(rowCount).toBeGreaterThan(0)
+    } else {
+      // Empty state: friendly copy + a setup hint, no error.
+      await expect(
+        firstCard.getByTestId('spokesperson-knowledge-empty'),
+      ).toContainText(/No linked campaigns yet/i)
+    }
 
     // Same shape for Appearances.
     await firstCard.getByTestId('spokesperson-tab-appearances').click()
