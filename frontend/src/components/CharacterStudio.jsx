@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
 import { friendlyError } from '../errors'
+import {
+  PORTRAIT_PROMPT_HELPER,
+  buildCharacterPortraitPrompt,
+} from '../characterPromptBuilder'
 import CharacterCard from './CharacterCard.jsx'
 
 const TEMPLATES = [
@@ -25,6 +29,11 @@ const DEFAULT_FORM = {
   style: '',
   personality: '',
   voice_preset: 'vincent',
+  // PR V — editable portrait prompt. Auto-derives from the other
+  // fields until the user manually edits the textarea, then we lock
+  // and stop overwriting (tracked via portrait_prompt_dirty).
+  portrait_prompt: '',
+  portrait_prompt_dirty: false,
 }
 
 /**
@@ -75,6 +84,45 @@ export default function CharacterStudio({
       return rest
     })
 
+  // PR V — single field-update helper that also rebuilds the portrait
+  // prompt while it's still in default mode. Once the user types in
+  // the portrait textarea (which sets portrait_prompt_dirty=true), the
+  // auto-rebuild stops and the user's text is preserved.
+  const updateField = (field, value) =>
+    setForm((f) => {
+      const next = { ...f, [field]: value }
+      const drives = ['template', 'subject', 'style', 'personality', 'name']
+      if (drives.includes(field) && !f.portrait_prompt_dirty) {
+        next.portrait_prompt = buildCharacterPortraitPrompt({
+          template: next.template,
+          subject: next.subject,
+          style: next.style,
+          personality: next.personality,
+          name: next.name,
+        })
+      }
+      return next
+    })
+
+  // Seed the portrait prompt the first time the form opens. Lives in
+  // a useEffect so the form-shown ↔ form-hidden cycle re-seeds when
+  // we go from "no input fields" to "ready to type".
+  useEffect(() => {
+    if (showCreate && !form.portrait_prompt && !form.portrait_prompt_dirty) {
+      setForm((f) => ({
+        ...f,
+        portrait_prompt: buildCharacterPortraitPrompt({
+          template: f.template,
+          subject: f.subject,
+          style: f.style,
+          personality: f.personality,
+          name: f.name,
+        }),
+      }))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showCreate])
+
   const handleCreate = async (e) => {
     e?.preventDefault?.()
     if (!form.name.trim()) return
@@ -89,11 +137,21 @@ export default function CharacterStudio({
         personality: form.personality.trim() || null,
         voice_preset: form.voice_preset,
       })
+      // PR V — pass the (possibly user-edited) portrait prompt through
+      // to the generate-portrait route as `prompt_override`. Backend
+      // build_prompt() short-circuits to the override when present,
+      // so this string ends up posted to Runway gen4_image_turbo
+      // verbatim. Falls through to backend's default templated build
+      // when the textarea is empty.
+      const overridePrompt = (form.portrait_prompt || '').trim()
       // Auto-trigger the portrait so the user sees something immediately.
       setBusy(created.id, 'portrait')
       let next = created
       try {
-        next = await api.generateCharacterPortrait(created.id, {})
+        next = await api.generateCharacterPortrait(
+          created.id,
+          overridePrompt ? { prompt_override: overridePrompt } : {},
+        )
       } catch (e2) {
         setErrMsg(friendlyError(e2, 'Portrait generation failed'))
       } finally {
@@ -188,7 +246,7 @@ export default function CharacterStudio({
               <input
                 type="text"
                 value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                onChange={(e) => updateField('name', e.target.value)}
                 placeholder="Donk · The Founder · Brewster the Bear"
                 className="rounded-md bg-zinc-950 border border-zinc-800 px-2 py-1 text-sm focus:border-pink-400 outline-none"
                 required
@@ -200,7 +258,7 @@ export default function CharacterStudio({
               <span>Template</span>
               <select
                 value={form.template}
-                onChange={(e) => setForm({ ...form, template: e.target.value })}
+                onChange={(e) => updateField('template', e.target.value)}
                 className="rounded-md bg-zinc-950 border border-zinc-800 px-2 py-1 text-sm focus:border-pink-400 outline-none"
               >
                 {TEMPLATES.map((t) => (
@@ -216,7 +274,7 @@ export default function CharacterStudio({
               <input
                 type="text"
                 value={form.subject}
-                onChange={(e) => setForm({ ...form, subject: e.target.value })}
+                onChange={(e) => updateField('subject', e.target.value)}
                 placeholder="a friendly raccoon barista mascot"
                 className="rounded-md bg-zinc-950 border border-zinc-800 px-2 py-1 text-sm focus:border-pink-400 outline-none"
               />
@@ -227,7 +285,7 @@ export default function CharacterStudio({
               <input
                 type="text"
                 value={form.style}
-                onChange={(e) => setForm({ ...form, style: e.target.value })}
+                onChange={(e) => updateField('style', e.target.value)}
                 placeholder="photorealistic stylised plush texture"
                 className="rounded-md bg-zinc-950 border border-zinc-800 px-2 py-1 text-sm focus:border-pink-400 outline-none"
               />
@@ -237,7 +295,7 @@ export default function CharacterStudio({
               <span>Voice preset</span>
               <select
                 value={form.voice_preset}
-                onChange={(e) => setForm({ ...form, voice_preset: e.target.value })}
+                onChange={(e) => updateField('voice_preset', e.target.value)}
                 className="rounded-md bg-zinc-950 border border-zinc-800 px-2 py-1 text-sm focus:border-pink-400 outline-none"
               >
                 {VOICE_PRESETS.map((v) => (
@@ -251,13 +309,76 @@ export default function CharacterStudio({
               <input
                 type="text"
                 value={form.personality}
-                onChange={(e) => setForm({ ...form, personality: e.target.value })}
+                onChange={(e) => updateField('personality', e.target.value)}
                 placeholder="Warm, neighborly, playful — knows the regulars by name"
                 className="rounded-md bg-zinc-950 border border-zinc-800 px-2 py-1 text-sm focus:border-pink-400 outline-none"
                 maxLength={600}
               />
             </label>
           </div>
+
+          {/* PR V — Editable Portrait Prompt textarea. Auto-derives
+              from the fields above until the user types here, then
+              the user's text is preserved + sent verbatim to Runway
+              gen4_image_turbo as `prompt_override`. */}
+          <div className="space-y-1.5 pt-1">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <label
+                className="text-xs text-zinc-300 font-semibold"
+                htmlFor="portrait-prompt"
+              >
+                Portrait Prompt
+                <span className="ml-1.5 text-[10px] text-zinc-500 font-normal">
+                  (sent to Runway text_to_image)
+                </span>
+              </label>
+              {form.portrait_prompt_dirty && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setForm((f) => ({
+                      ...f,
+                      portrait_prompt: buildCharacterPortraitPrompt({
+                        template: f.template,
+                        subject: f.subject,
+                        style: f.style,
+                        personality: f.personality,
+                        name: f.name,
+                      }),
+                      portrait_prompt_dirty: false,
+                    }))
+                  }
+                  className="text-[10px] text-zinc-500 hover:text-pink-300"
+                  title="Discard your edits and regenerate the prompt from the fields above"
+                >
+                  reset to default
+                </button>
+              )}
+            </div>
+            <textarea
+              id="portrait-prompt"
+              rows={5}
+              value={form.portrait_prompt}
+              onChange={(e) =>
+                setForm((f) => ({
+                  ...f,
+                  portrait_prompt: e.target.value,
+                  portrait_prompt_dirty: true,
+                }))
+              }
+              maxLength={1000}
+              placeholder="A front-facing head-and-shoulders portrait of [subject]. [style]. Centered face, eyes visible, mouth visible, no sunglasses, no props blocking the face. high detail, mascot portrait, avatar-ready."
+              className="w-full rounded-md bg-zinc-950 ring-1 ring-zinc-800 px-2 py-1.5 text-xs leading-relaxed focus:ring-pink-400 outline-none font-mono"
+              aria-describedby="portrait-prompt-helper"
+            />
+            <p
+              id="portrait-prompt-helper"
+              className="text-[10px] text-zinc-500 leading-relaxed"
+            >
+              {PORTRAIT_PROMPT_HELPER}
+            </p>
+          </div>
+
           <div className="flex items-center gap-2 pt-1">
             <button
               type="submit"
@@ -267,8 +388,8 @@ export default function CharacterStudio({
               {creating ? 'Creating + Generating Portrait…' : 'Create + Generate Portrait'}
             </button>
             <span className="text-[10px] text-zinc-500">
-              Auto-runs portrait generation. Click "Create Runway Avatar"
-              afterwards to bind to Runway.
+              Auto-runs portrait generation with the prompt above. Click
+              "Create Runway Avatar" afterwards to bind to Runway.
             </span>
           </div>
         </form>

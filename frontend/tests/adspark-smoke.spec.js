@@ -148,6 +148,34 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
   // runs; in that case the panel shows the library grid instead).
   // Do not assert empty state explicitly to keep the test resilient.
 
+  // 7b.5b. PR V — Portrait Prompt textarea + helper text render once
+  //         the create form opens. Open the form, assert the textarea
+  //         + helper text, edit + revert to confirm editability, then
+  //         cancel the form so we don't actually create a character
+  //         (which would mutate characters.json).
+  await page.getByRole('button', { name: /^\+ Create Character$/i }).click()
+  const portraitPromptTextarea = page.getByLabel(/^Portrait Prompt/i)
+  await expect(portraitPromptTextarea).toBeVisible()
+  // Default content auto-derives from form fields — must open with
+  // the structured "front-facing head-and-shoulders portrait" prefix.
+  await expect(portraitPromptTextarea).toHaveValue(
+    /^A front-facing head-and-shoulders portrait/i,
+  )
+  // Helper text spelling out the avatar-ready rules of thumb.
+  await expect(
+    page.getByText(/Best avatar results: centered head-and-shoulders portrait/i),
+  ).toBeVisible()
+  // Editable + dirty-mark: append a marker, confirm it sticks. The
+  // dirty mark also surfaces the "reset to default" link.
+  const portraitOriginal = await portraitPromptTextarea.inputValue()
+  await portraitPromptTextarea.fill(`${portraitOriginal} TEST_PORTRAIT_EDIT`)
+  await expect(portraitPromptTextarea).toHaveValue(/TEST_PORTRAIT_EDIT$/)
+  await expect(page.getByText(/^reset to default$/i)).toBeVisible()
+  // Close the form so the rest of the smoke runs against a clean
+  // state. The "+ Create Character" button toggles to "Cancel" while
+  // the form is open.
+  await page.getByRole('button', { name: /^Cancel$/i }).click()
+
   // 7b.6. PR U — stage order: Spokesperson must appear before Campaign
   //        Brief in the DOM. We compare bounding boxes since the visual
   //        order is what matters; both are sticky enough that flex/wrap
