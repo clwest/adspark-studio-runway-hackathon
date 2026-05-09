@@ -48,6 +48,40 @@ by Runway's API.
 13. **Realtime Spokesperson** — live 5-min WebRTC conversation with
     the active avatar (same resolution chain) via Runway
     `realtime_sessions`.
+14. **Voiced Commercial (PR S + PR X)** — final ad MP4 produced by
+    looping the cached visual cut under the Avatar Host Clip audio
+    via local ffmpeg (`-stream_loop -1 -shortest`). PR X auto-creates
+    the host clip first when missing, so the user reaches a voiced
+    final ad with one click on a saved campaign that has any
+    spokesperson resolved (`character > selected > host`). Stored on
+    the campaign as `voiced_commercial_url`.
+
+## Audio model
+
+The spoken voice track in the final ad is **the Avatar Host Clip** —
+the spokesperson speaking the campaign hook + caption + CTA via
+Runway `avatar_videos`. The Brand Voice (`/v1/voices`) and
+multilingual dubs (`/v1/voice_dubbing`) ship as **sibling samples**,
+not the ad narration: they let users hear the brand voice itself in
+ten configured languages, but the V1 Voiced Commercial only mixes
+the Avatar Host Clip audio over the visual loop. Direct text-to-
+speech narration (`/v1/text_to_speech`) is gated by Runway and is
+not used. Custom voice cloning is intentionally deferred.
+
+## Video duration model
+
+V1 ads are **5–10-second visual cuts** from Runway:
+
+| Model | Mode | Allowed durations |
+|---|---|---|
+| `gen4_turbo` | image-to-video | 5 s |
+| `gen4.5` | image-to-video / text-to-video | 5 s, 10 s |
+
+The Voiced Commercial then loops that visual cut for as long as the
+host clip narration runs (typically 8–12 s). Net result is a single
+locked-aspect ad up to ~12 s. **Longer commercials** — multi-shot
+sequences, audio-first timelines, storyboard runs — are the next
+phase and are scoped in `docs/handoffs/SESSION_010_LONGER_VIDEO_PREP.md`.
 
 ## Stack
 

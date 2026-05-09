@@ -1,15 +1,18 @@
 # START NEXT SESSION — AdSpark Studio
 
-**Last touched:** 2026-05-08 (branch integration — merged PR R / PR T
-/ PR U into local main on top of PR S; not yet pushed).
+**Last touched:** 2026-05-08 (PR Y merged into `main` and pushed —
+"highlight newest saved campaign"; context-kit refresh for the longer
+video phase landed in this same docs commit).
 
 ## Where things stand
 
-- **Branch:** `main` at `63a19bd` (4 commits ahead of `origin/main`,
-  awaiting push). The local merge integrated PR R Visual Source +
-  PR T Structured Prompt + PR U Spokesperson-first on top of the
-  pushed PR S Commercial with Voice. Plus a small persistence-patch
-  follow-up (this commit).
+- **Branch:** `main` at `0e9391b` — synced with `origin/main`. Working
+  tree clean.
+- **Latest tag:** `hackathon-submission-v6` at `50c2f8d` (PR U head).
+  Main is **6 commits ahead** of v6: PR V → PR W → PR X → PR Y → docs
+  refresh. A **`hackathon-submission-v7`** tag is recommended after the
+  next manual hero recording so the submission package matches the
+  current Visuals-tab default + voiced-commercial flow.
 - **Submission tags on origin:**
   - `hackathon-submission` → `7ed949e` (pre-avatar baseline, PR E head).
   - `hackathon-submission-v2` → `e6ca02b` (Brand Spokesperson Avatar
@@ -18,23 +21,23 @@
     Dubs).
   - `hackathon-submission-v4` → `89918c3` (Realtime Spokesperson +
     Avatar Picker).
-  - **`hackathon-submission-v5`** → **`0cddb96`** — **canonical
-    submission with Character Studio V1.** Local main now goes
-    further — PR S Commercial with Voice, PR R Visual Source flow,
-    PR T structured prompts, PR U Spokesperson-first stage order.
-    Tag `hackathon-submission-v6` recommended after the integration
-    push.
-- **Branches on origin:** `main`, `feature/pr-f-character-host-v1`
-  (merged), `feature/pr-h-voiceover-and-dub` (merged),
-  `feature/pr-i-realtime-spokesperson` (merged),
-  `feature/pr-k-character-studio-spike` (research-only, merged
-  ahead of K),
-  `feature/pr-k-character-studio-v1` (merged, tagged v5),
-  `feature/pr-l-character-studio-docs` (this session — local + push).
+  - `hackathon-submission-v5` → `0cddb96` (Character Studio V1).
+  - **`hackathon-submission-v6`** → **`50c2f8d`** — Spokesperson-first
+    flow with persisted active spokesperson (PR R / PR S / PR T / PR
+    U integrated). Main has since merged PR V (Portrait Prompt
+    control), PR W (character visual-source bugfix), PR X (auto-voiced
+    commercial), and PR Y (newest-saved focus + card clarity).
+- **Active feature branches on origin (all merged into main):**
+  PR R Visual Source, PR S Commercial with Voice, PR T Structured
+  Prompt Builder, PR U Spokesperson-first, PR V Portrait Prompt,
+  PR W Character visual-source fix, PR X Auto-voiced commercial.
+  PR Y branch was deleted after merge (clean fast-forward).
 - **Repo:** https://github.com/clwest/adspark-studio-runway-hackathon
   (private). Pushes only on explicit user approval.
 
-## What's implemented (v5 feature stack on `main`)
+## What's implemented (full feature stack on `main`)
+
+### Inherited from v5 (Character Studio canonical)
 
 - ✅ Concept generation (mock + optional `gpt-4o-mini`)
 - ✅ Runway reference image generation (`gen4_image_turbo`)
@@ -48,53 +51,79 @@
 - ✅ Mode banner readiness chip + provider-status + optional
   `monthly_credit_cap` chip
 - ✅ Friendly error parsing per call site
-- ✅ **Brand Spokesperson Runway Avatar** — per-campaign Runway
-  Avatar with image-source fallback chain (override → campaign →
-  stock); honest failure UX with stock-portrait retry
-- ✅ **Avatar Host Clip** — Runway `avatar_videos` spokesperson
-  speaking the campaign pitch
-- ✅ **Audio Pack — Brand Voice** — Runway `voices` text-design
-  produces a custom voice; preview MP3 cached locally
-- ✅ **Audio Pack — Multilingual Dubs** — Runway `voice_dubbing`
-  re-voices the preview into one of 29 ISO 639-1 languages
-- ✅ **Avatar Picker** — pick any account-listed avatar via curated
-  `GET /v1/avatars` proxy; selection wins over per-campaign custom
-  avatar; mock mode shows 4 hard-coded preset entries
-- ✅ **Realtime Spokesperson** — live 5-min WebRTC conversation via
-  Runway `realtime_sessions`; broker mints short-lived `sessionKey`
-  JWT server-side; `<AvatarCall>` lazy-loaded for clean isolation
-- ✅ **Character Studio V1 (PR K — v5 headline)** — reusable brand
-  characters as first-class resources. Generate a portrait via
-  `gen4_image_turbo` from one of four locked templates (mascot /
-  founder / coach / local_guide); bind it to a Runway Avatar via
-  `/v1/avatars`; attach to any campaign. Avatar resolution chain:
-  `character > selected > host`. Local JSON store at
-  `backend/data/characters.json` + per-character portrait cache at
-  `backend/data/characters/<id>-portrait.png`. 7 character routes +
-  1 attach-character route.
-- ✅ Mock-safe Playwright smoke (single-shot, single-worker;
-  asserts Character Studio panel renders)
-- ✅ Local-only artifact cache; nothing under `backend/data/` enters
-  version control
+- ✅ Brand Spokesperson Avatar + Avatar Picker (4 mock presets)
+- ✅ Avatar Host Clip via `/v1/avatar_videos`
+- ✅ Audio Pack — Brand Voice (`/v1/voices`) + Multilingual Dubs
+  (`/v1/voice_dubbing`, 29 ISO 639-1 languages)
+- ✅ Realtime Spokesperson via `/v1/realtime_sessions` (5-min cap)
+- ✅ Character Studio V1 — reusable mascot / founder / coach /
+  local_guide; `gen4_image_turbo` portrait → `/v1/avatars` binding;
+  attach to any campaign; resolution chain
+  `character > selected > host`
+- ✅ Mock-safe Playwright smoke (single-shot, single-worker)
 
-**36 backend routes** registered (32 application + 4 FastAPI
-built-ins). Vite production bundle: ~203 KB initial JS / ~62 KB
-gzip + ~562 KB lazy-loaded `@runwayml/avatars-react` chunk only
-fetched when the user clicks Start Conversation.
+### Added since v5
+
+- ✅ **PR R — Visual Source flow** — explicit Generate / Upload /
+  Use Character / Text-only radios in the prompt panel. Adds
+  `/api/runway/upload-image` (multipart) so users can paste a brand
+  asset.
+- ✅ **PR S — Commercial with Voice** — local ffmpeg pipeline that
+  loops the cached visual cut under Avatar Host Clip audio so the
+  saved campaign produces a final voiced ad MP4. Stored on the
+  campaign as `voiced_commercial_url`.
+- ✅ **PR T — Structured Runway Prompt Builder** — concept → prompt
+  textarea now opens with the structured "A realistic …" form
+  (one character, one location, one action, one camera move). Hint
+  chip + Simplify Prompt button render in the panel.
+- ✅ **PR U — Spokesperson-first flow** — Stage 1 is now
+  Spokesperson, Stage 2 Brief, Stage 3 Visual, Stage 4 Saved. Active
+  spokesperson persists via localStorage and auto-attaches on
+  `handleSaveCampaign`.
+- ✅ **PR V — Editable character portrait prompt** — Character
+  Studio create form exposes the structured Portrait Prompt textarea
+  with reset-to-default + dirty mark. Helper text spells out the
+  avatar-ready rules of thumb.
+- ✅ **PR W — Character visual-source bugfix** — when Use Character
+  is selected, the runway generate call now actually receives the
+  character's portrait as `prompt_image` instead of silently dropping
+  it.
+- ✅ **PR X — Auto-voiced commercial** — the Build Voiced Commercial
+  button auto-generates the Avatar Host Clip when missing if a
+  spokesperson is ready, and the ffmpeg mux uses
+  `-stream_loop -1 -shortest` so the visual loops under the voice
+  track (no early audio cutoff).
+- ✅ **PR Y — Newest saved campaign focus + card clarity** —
+  `newestSavedId` in `App.jsx` drives a "just saved" pill, ring/glow,
+  scroll-into-view, and Visuals-tab default on the new card. Overview
+  body adds short campaign id, spokesperson name, and 80-char
+  `runway_prompt` preview so cards sharing a business name stay
+  distinguishable.
+
+**36 backend application routes + 4 FastAPI built-ins = 40 routes**
+(`GET /health`, full `/api/concepts`, `/api/runway/*` (incl.
+`upload-image`), `/api/campaigns/*` (incl. `commercial-with-voice`
+GET + POST + DELETE), `/api/characters/*`).
 
 ## Headline priorities for the next session
 
-1. **Manual hero recording for v5** following `DEMO_SCRIPT.md`
-   Path F (Character Studio Full Demo). Pre-create the character
-   off camera so the recording doesn't include the ~50 s
-   portrait + avatar wait.
-2. **Optionally** publish a hosted public deploy (Vercel + Render/Fly
-   with ffmpeg in the runtime image, Runway key as platform env
-   var) so judges can try it without cloning.
-3. **Optionally** ship K.5 polish: PATCH character (rename, voice
-   change, edit personality), `replace-avatar` route (DELETE old
-   Runway avatar + create new), "Create Character from this
-   Campaign" gallery affordance.
+> **Theme:** longer videos beyond the current 5–10 second visual cuts.
+> **Goal of next session:** "How do we create longer commercials?"
+
+1. **Read `docs/handoffs/SESSION_010_LONGER_VIDEO_PREP.md`** — that
+   handoff captures the current duration limits, the audio model
+   (host clip drives narration; ffmpeg loops visual under it), and
+   the seven longer-video options to research before committing to a
+   build.
+2. **Pick one of the seven options** as the next-PR target. The
+   recommended demo-safe V1 is **Storyboard Commercial Builder**:
+   3 shots × 5 s stitched into a 15-second commercial with the host
+   voice mixed over the full result.
+3. **Manual hero recording for v7** following the current
+   Visuals-tab-on-save flow + voiced commercial. Worth re-recording
+   so judges see PR Y's "just saved" highlight + auto-host commercial.
+4. **Optional** publish a hosted public deploy (Vercel + Render/Fly
+   with ffmpeg in the runtime image, Runway key as platform env var).
 
 ## Run it
 
@@ -110,144 +139,52 @@ cd frontend && npm install && npm run dev
 Open `http://localhost:5173`. Mode banner readiness chip should read
 `demo ready · concepts mocked` (emerald) with `Image Gen (Runway):
 real`, `Video Gen (Runway): real`, and `cap: 200,000` chips visible.
-The Character Studio panel sits above the saved-campaigns gallery.
+Stage 1 is Spokesperson, Stage 4 is the saved-campaign gallery.
 
 ### Force fully mocked mode (CI / safe dry-runs)
 
 ```bash
-RUNWAY_API_KEY= OPENAI_API_KEY= uvicorn app.main:app --port 8000
+RUNWAY_API_KEY= OPENAI_API_KEY= IMAGE_GEN_PROVIDER=mock \
+  uvicorn app.main:app --port 8000
 ```
 
 ## Run the smoke
 
 ```bash
+# Terminal 1 — fully mocked backend
 cd backend && source .venv/bin/activate
-RUNWAY_API_KEY= OPENAI_API_KEY= uvicorn app.main:app --port 8000
+RUNWAY_API_KEY= OPENAI_API_KEY= IMAGE_GEN_PROVIDER=mock \
+  uvicorn app.main:app --port 8000
 
+# Terminal 2 — frontend dev server
 cd frontend && npm run dev
+
+# Terminal 3 — Playwright smoke
 cd frontend && npm run test:e2e
 ```
 
-`1 passed (~22 s)` against the mock backend. Asserts the full PR A–K
-flow including Audio Pack + Avatar Picker + Realtime Spokesperson
-disabled state + **Character Studio panel + Create Character button**.
-
-## How to demo Character Studio (Path F highlights)
-
-Off camera (because of the ~50 s portrait + avatar wait):
-
-```bash
-# Create the character record (no Runway calls yet)
-curl -sX POST http://localhost:8000/api/characters \
-  -H 'content-type: application/json' \
-  -d '{
-    "name":"Brewster the Bear",
-    "template":"mascot",
-    "subject":"a friendly grizzly bear barista mascot, warm hospitable smile, coffee shop apron",
-    "style":"photorealistic stylised plush texture",
-    "voice_preset":"max"
-  }' | jq .
-
-# Auto-runs in the UI; explicit curl below for scripted runs.
-# CHARACTER_ID="..." from the previous response
-curl -sX POST "http://localhost:8000/api/characters/$CHARACTER_ID/generate-portrait" \
-  -H 'content-type: application/json' -d '{}' | jq .
-curl -sX POST "http://localhost:8000/api/characters/$CHARACTER_ID/create-avatar" \
-  -H 'content-type: application/json' -d '{}' | jq .
-```
-
-On camera:
-
-1. Open `http://localhost:5173`.
-2. Scroll to **Character Studio** above the gallery; show the
-   pre-created character with `avatar ready` pill.
-3. Run the regular ad pipeline (form → concepts → image → video →
-   save).
-4. In the saved campaign, click **Attach Character** → **Use
-   Brewster**.
-5. Click **Present Campaign** → host clip records via the character's
-   avatar.
-6. Click **Design Brand Voice** → **Spanish dub** → **Talk to Brand
-   Spokesperson** → live realtime conversation with Brewster.
-7. Closing narrate: *"One brief, one character, one Runway-powered
-   identity, driving the ad + host clip + brand voice + dub +
-   realtime conversation."*
-
-Full click-by-click is in `DEMO_SCRIPT.md` Path F.
-
-## How to test the avatar / character / audio / realtime flow
-
-**Mock mode** (no spend):
-
-```bash
-# Phase K — Character Studio (mock)
-curl -sX POST http://localhost:8000/api/characters \
-  -H 'content-type: application/json' \
-  -d '{"name":"Test Mascot","template":"mascot","voice_preset":"vincent"}' | jq .id
-# CHARACTER_ID=...
-curl -sX POST "http://localhost:8000/api/characters/$CHARACTER_ID/generate-portrait" \
-  -H 'content-type: application/json' -d '{}' | jq .portrait_source
-# → "mock"
-curl -sX POST "http://localhost:8000/api/characters/$CHARACTER_ID/create-avatar" \
-  -H 'content-type: application/json' -d '{}' | jq .runway_avatar_status
-# → "mock"
-
-# Attach to a saved campaign
-curl -sX POST "http://localhost:8000/api/campaigns/${CAMPAIGN_ID}/attach-character" \
-  -H 'content-type: application/json' \
-  -d "{\"character_id\":\"$CHARACTER_ID\"}" | jq .character_id
-
-# Phase 2 — Avatar Host Clip (uses character avatar, not host_avatar_id)
-curl -sX POST "http://localhost:8000/api/campaigns/${CAMPAIGN_ID}/host-video" \
-  -H 'content-type: application/json' -d '{}' | jq .host_status
-
-# Detach
-curl -sX POST "http://localhost:8000/api/campaigns/${CAMPAIGN_ID}/attach-character" \
-  -H 'content-type: application/json' -d '{"character_id":null}' | jq .character_id
-```
-
-**Real mode** in the browser: open `http://localhost:5173`, use the
-Character Studio panel to pre-create + bind a character (~50 s),
-then run the ad pipeline + Attach Character + downstream flows per
-`DEMO_SCRIPT.md` Path F.
+`1 passed (~21 s)` against the mock backend. Asserts the full PR A–Y
+flow including spokesperson-first stage order, structured prompt
+builder, Visual Source radios, Commercial with Voice gated state,
+and PR Y "just saved" pill on the newest card.
 
 ## What NOT to build next unless explicitly approved
 
-- K.5 polish without scope confirmation: PATCH character, edit
-  personality, `replace-avatar` (DELETE old + create new), Create
-  Character from this Campaign affordance.
-- Phase L (character-driven campaign generation — start campaigns
-  pre-attached to a character; use the character image as the
-  reference image for video generation) without a research spike.
-- Phase M (character pack export/import + marketplace) — explicit
-  out-of-scope for hackathon.
-- WebRTC features beyond the V1 mic-only spokesperson call — webcam
-  toggle, screen share, multi-participant rooms.
-- Act-Two `/v1/character_performance` (wrong primitive — needs a
-  driving performance video).
-- Multi-character dialogue.
-- Custom voice cloning (`/v1/voices` audio-clone path) — voice text
-  design covers the demo. Per-character voice cloning is K.5+
-  territory.
-- Direct text-to-speech narration (`/v1/text_to_speech`) — the
-  `voice.type` discriminator is gated. Use the Brand Voice + dub
-  pipeline instead.
-- Audio mixing into the ad clip. Host clip + voice MP3s stay sibling
-  artefacts in V1.
+- Direct longer-video implementation. Pick one of the seven options
+  in `docs/handoffs/SESSION_010_LONGER_VIDEO_PREP.md` and lock the
+  scope before writing product code.
+- Multi-character dialogue / avatar conversations.
+- Custom voice cloning (`/v1/voices` audio-clone path).
+- Direct text-to-speech narration (`/v1/text_to_speech`).
 - Server-side `/v1/uploads` — public URL + data URI cover current
   paths.
-- Stability.ai integration. `gen4_image_turbo` covers reference
-  image + portrait generation; the 10k Stability credits stay parked.
-- Auth / multi-user / public deploy — out of scope until the demo
-  is recorded.
-- Smart-framing for cross-aspect Pack crops.
+- Auth, multi-user, public deploy — out of scope until the demo is
+  re-recorded.
+- Avatar marketplace, knowledge documents, conversation transcripts.
+- Stability.ai integration. `gen4_image_turbo` covers all current
+  image needs.
+- WebRTC features beyond the V1 mic-only spokesperson call.
 - Background-task finishing.
-- Avatar marketplace, knowledge documents (`/v1/documents`),
-  conversation transcripts.
-
-The full V1.5 / V2 wishlist with effort estimates lives in
-`docs/research/RUNWAY_API_CAPABILITY_MAP.md` §6 + Appendix D and
-`docs/research/CHARACTER_STUDIO_SPIKE.md` §§7–8 (K.5 / L / M).
 
 ## Hard rules for any future session
 
@@ -256,8 +193,8 @@ The full V1.5 / V2 wishlist with effort estimates lives in
   keeps it out of commits.
 - `backend/data/` is gitignored — incl. `data/characters/` and
   `characters.json`. Generated PNGs / MP4s / finished MP4s / host
-  MP4s / audio MP3s / character portraits never enter version
-  control.
+  MP4s / audio MP3s / character portraits / voiced commercials never
+  enter version control.
 - No third-party API calls on page load — user click only (the
   optional `/v1/organization` read-only metadata fetch is the sole
   exception and is non-blocking).
@@ -273,23 +210,17 @@ The full V1.5 / V2 wishlist with effort estimates lives in
 
 - `README.md` — quickstart, demo flow, Mermaid pipeline through
   Campaign Pack + Character Studio + Spokesperson + Audio Pack +
-  Realtime, endpoint table (36 routes).
+  Realtime + Voiced Commercial.
 - `SUBMISSION.md` — judge-facing pitch, Runway-usage table covering
-  all endpoints incl. Character Studio, hero-run results (incl.
-  Brewster verification), five-tag baseline through v5.
-- `DEMO_SCRIPT.md` — six-path screen-recording script (A/B/C/D/E +
-  **F = Character Studio Full Demo, the v5 headline**).
-- `docs/WHAT_IT_IS.md`, `docs/INVENTORY.md` — refreshed in PR-L to
-  reflect the v5 state.
-- `docs/research/RUNWAY_API_CAPABILITY_MAP.md` — capability map +
-  Phase H/I findings (Appendices C & D).
-- `docs/research/RUNWAY_CHARACTER_HOST_SPIKE.md` — PR F avatar schema.
-- `docs/research/RUNWAY_REALTIME_SPOKESPERSON_SPIKE.md` — PR I
-  realtime schema.
-- `docs/research/CHARACTER_STUDIO_SPIKE.md` — PR K research / locked
-  V1 design (Phase K shipped 2026-05-08).
-- `docs/handoffs/SESSION_007_REALTIME_AND_PICKER.md` — PR H/I/J arc.
-- `docs/handoffs/SESSION_008_CHARACTER_STUDIO.md` — PR K
-  implementation handoff.
-- `docs/handoffs/SESSION_009_CHARACTER_STUDIO_FINAL.md` — PR L
-  docs-refresh handoff (this session).
+  all endpoints incl. Character Studio + Voiced Commercial, hero-run
+  results, six-tag baseline through v6.
+- `DEMO_SCRIPT.md` — six-path screen-recording script (A–F).
+- `docs/WHAT_IT_IS.md`, `docs/INVENTORY.md` — refreshed in this
+  session.
+- `docs/research/RUNWAY_API_CAPABILITY_MAP.md` — capability map.
+- `docs/research/CHARACTER_STUDIO_SPIKE.md` — PR K design.
+- `docs/handoffs/SESSION_007_REALTIME_AND_PICKER.md`,
+  `…SESSION_008_CHARACTER_STUDIO.md`,
+  `…SESSION_009_CHARACTER_STUDIO_FINAL.md` — earlier arcs.
+- **`docs/handoffs/SESSION_010_LONGER_VIDEO_PREP.md`** — current
+  session handoff + longer-video research checklist.
