@@ -89,13 +89,16 @@ def validate_generation_settings(
 # locally-served URL for a base64 data URI before posting to Runway. Mirrors
 # the FastAPI route registered at GET /api/runway/image/{image_id}.
 _LOCAL_IMAGE_PREFIX = "/api/runway/image/"
-# PR R — character portraits served at /api/characters/{id}/portrait. When
-# the user picks "Use Character" as the visual source, the frontend passes
-# this URL through as `prompt_image`; we resolve to the cached file +
-# embed as a data URI just like the standard image cache.
+# PR R + PR U — character portraits served at /api/characters/{id}/portrait.
+# Two surfaces use this: PR R's "Use Character" Visual Source radio (per-
+# campaign) + PR U's Stage-1 active spokesperson (next-new-campaign default).
+# Both pass the URL through as `prompt_image`; we resolve the cached file
+# and embed it as a data URI so Runway can ingest it without ever reaching
+# localhost.
 _CHARACTER_PORTRAIT_PREFIX = "/api/characters/"
 _CHARACTER_PORTRAIT_SUFFIX = "/portrait"
-# Mapping of file extensions to the appropriate data-URI media types.
+# Mapping of file extensions to the appropriate data-URI media types — used
+# by the multi-extension image cache lookup PR R adds for uploads.
 _DATA_URI_MEDIA = {
     "png": "image/png",
     "jpg": "image/jpeg",
@@ -201,7 +204,10 @@ def maybe_to_data_uri(prompt_image: str, settings: Settings) -> str:
         return prompt_image
     pi = prompt_image.strip()
 
-    # PR R — character portrait path: /api/characters/{id}/portrait
+    # PR R + PR U — character portrait path: /api/characters/{id}/portrait
+    # Loaded from data/characters/<id>-portrait.png and embedded as a PNG
+    # data URI. Used by both Visual Source "Use Character" + Stage-1
+    # active spokesperson defaults.
     if pi.startswith(_CHARACTER_PORTRAIT_PREFIX) and pi.endswith(_CHARACTER_PORTRAIT_SUFFIX):
         char_id = pi[len(_CHARACTER_PORTRAIT_PREFIX):-len(_CHARACTER_PORTRAIT_SUFFIX)]
         if not char_id or "/" in char_id or ".." in char_id:

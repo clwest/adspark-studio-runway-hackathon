@@ -129,11 +129,14 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
   await expect(settings.getByText('5s', { exact: true })).toBeVisible()
   await expect(settings.getByText('reference image')).toBeVisible()
 
-  // 7b.5. PR K — Character Studio panel renders above the gallery.
-  // PR O introduced a numbered-stage <h2>Character Studio</h2> wrapper
-  // around the panel, in addition to the panel's own <h3>Character
-  // Studio</h3> header. Use .first() to target the outer stage heading
-  // (same pattern as the Audio Pack assertion).
+  // 7b.5. PR K — Character Studio panel renders.
+  // PR O introduced a numbered-stage <h2> wrapper around the panel
+  // (originally "Character Studio"); PR U renames the outer stage
+  // heading to "Spokesperson" while the inner panel keeps its own
+  // "Character Studio" h3. Both checks live inside Stage 1 now.
+  await expect(
+    page.getByRole('heading', { name: /^Spokesperson$/i }),
+  ).toBeVisible()
   await expect(
     page.getByRole('heading', { name: /Character Studio/i }).first(),
   ).toBeVisible()
@@ -144,6 +147,23 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
   // (existing characters.json may already have entries from prior
   // runs; in that case the panel shows the library grid instead).
   // Do not assert empty state explicitly to keep the test resilient.
+
+  // 7b.6. PR U — stage order: Spokesperson must appear before Campaign
+  //        Brief in the DOM. We compare bounding boxes since the visual
+  //        order is what matters; both are sticky enough that flex/wrap
+  //        won't reorder them on a desktop viewport.
+  const spokespersonHeading = page.getByRole('heading', { name: /^Spokesperson$/i })
+  const briefHeading = page.getByRole('heading', { name: /^Campaign Brief$/i })
+  const spokeBox = await spokespersonHeading.boundingBox()
+  const briefBox = await briefHeading.boundingBox()
+  expect(spokeBox).not.toBeNull()
+  expect(briefBox).not.toBeNull()
+  expect(spokeBox.y).toBeLessThan(briefBox.y)
+  // Stage progress trail: "Spokesperson" chip must appear in the hero
+  // before "Brief" — verifies the trail array reflects the new order.
+  const trailNav = page.getByRole('navigation', { name: /demo path/i })
+  await expect(trailNav.getByText(/^Spokesperson$/)).toBeVisible()
+  await expect(trailNav.getByText(/^Brief$/)).toBeVisible()
 
   // 7c. PR D — settings persistence. Switch to Reels (720:1280) and reload;
   //     the dropdown must come back with the new value, not the default.

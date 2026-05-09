@@ -18,6 +18,11 @@ export default function CharacterCard({
   busyAction,
   attachedHere = false,
   compact = false,
+  // PR U — Spokesperson-first flow. Tile lights up when this character
+  // is the active spokesperson; "Use as Spokesperson" / "Active" button
+  // calls onSetActive(true|false).
+  isActive = false,
+  onSetActive,
 }) {
   const c = character
   const portraitUrl = c.portrait_url
@@ -30,7 +35,9 @@ export default function CharacterCard({
   return (
     <div
       className={`rounded-lg p-2 space-y-1.5 transition-all duration-150 ${
-        attachedHere
+        isActive
+          ? 'ring-2 ring-spark bg-spark/10 shadow-[0_0_0_1px_rgba(249,115,22,0.20)]'
+          : attachedHere
           ? 'ring-2 ring-pink-400 bg-pink-500/10 shadow-[0_0_0_1px_rgba(236,72,153,0.15)]'
           : 'ring-1 ring-zinc-800 bg-zinc-950/50 hover:ring-pink-400/40 hover:bg-pink-500/5'
       } ${compact ? 'text-[10px]' : 'text-xs'}`}
@@ -108,6 +115,12 @@ export default function CharacterCard({
             attached
           </span>
         )}
+        {/* PR U — active spokesperson pill */}
+        {isActive && (
+          <span className="text-[9px] rounded-full bg-spark/25 text-spark px-1.5 py-0.5 font-mono">
+            active
+          </span>
+        )}
       </div>
 
       {/* Action row — context-aware */}
@@ -151,6 +164,31 @@ export default function CharacterCard({
           >
             Detach
           </button>
+        )}
+        {/* PR U — Use as Spokesperson / Active toggle. Only available
+            on full (non-compact) tiles in the Studio library; the
+            per-campaign attach picker uses compact mode and keeps the
+            "Use Character" affordance instead. */}
+        {!compact && onSetActive && hasPortrait && (
+          isActive ? (
+            <button
+              type="button"
+              onClick={() => onSetActive(false)}
+              className="rounded border border-spark/60 text-spark hover:bg-spark/10 text-[10px] px-2 py-1"
+              title="Stop using this character as the active spokesperson"
+            >
+              Active — clear
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onSetActive(true)}
+              className="rounded bg-spark/80 hover:bg-spark text-ink text-[10px] font-semibold px-2 py-1"
+              title="Use this character as the active spokesperson — drives the visual prompt + auto-attaches when you save the campaign"
+            >
+              Use as Spokesperson
+            </button>
+          )
         )}
         {onDelete && !compact && (
           <button

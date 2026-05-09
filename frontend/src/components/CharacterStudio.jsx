@@ -35,7 +35,13 @@ const DEFAULT_FORM = {
  *
  * Design locked in docs/research/CHARACTER_STUDIO_SPIKE.md §6.
  */
-export default function CharacterStudio({ onCharactersChanged }) {
+export default function CharacterStudio({
+  onCharactersChanged,
+  // PR U — Spokesperson-first flow: parent owns the active-character
+  // state. Tile gets an "active" pill + a "Use as Spokesperson" button.
+  activeCharacterId = null,
+  onSetActive,
+}) {
   const [characters, setCharacters] = useState([])
   const [loading, setLoading] = useState(true)
   const [errMsg, setErrMsg] = useState('')
@@ -315,6 +321,15 @@ export default function CharacterStudio({ onCharactersChanged }) {
               onGeneratePortrait={handleGeneratePortrait}
               onCreateAvatar={handleCreateAvatar}
               onDelete={handleDelete}
+              // PR U — Spokesperson-first flow: pass active state +
+              // toggle handler so the tile lights up + the action row
+              // shows "Use as Spokesperson" / "Active" affordances.
+              isActive={c.id === activeCharacterId}
+              onSetActive={
+                onSetActive
+                  ? (next) => onSetActive(next ? c.id : null)
+                  : undefined
+              }
             />
           ))}
         </div>

@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 // PR T — quality hint copy.  Lives here in addition to promptBuilder.js
 // so the smoke can match either source; the strings are identical.
 import { PROMPT_QUALITY_HINT } from '../promptBuilder'
@@ -64,6 +64,10 @@ export default function PromptPreview({
   // simplifyFromConcept({selectedConcept, form, ratio}).
   onSimplifyPrompt,
   canSimplifyPrompt = false,
+  // PR U — Spokesperson-first flow. When set with a portrait, the
+  // imageUrl auto-fills with /api/characters/<id>/portrait and the
+  // Generate Video button label adapts.
+  activeCharacter,
 }) {
   const trimmedImage = (imageUrl || '').trim()
   const textOnlyAllowed = model === 'gen4.5'
@@ -91,8 +95,50 @@ export default function PromptPreview({
     busy || disabled || !prompt.trim() || blockedByImage
 
   const isLocalGenerated = trimmedImage.startsWith('/api/runway/image/')
+  // PR R — any character portrait URL (used by the Visual Source
+  // selector to render the "character portrait selected" hint).
   const isCharacterPortrait =
     trimmedImage.startsWith('/api/characters/') && trimmedImage.endsWith('/portrait')
+  // PR U — narrower: is the imageUrl specifically the *active* spokesperson?
+  // Used by the adaptive Generate Video button label below.
+  const characterPortraitUrl = activeCharacter?.portrait_url || ''
+  const isActiveCharacterPortrait =
+    Boolean(characterPortraitUrl) && trimmedImage === characterPortraitUrl
+
+  // PR U — auto-fill the imageUrl from the active spokesperson's
+  // portrait whenever (a) an active spokesperson with a portrait
+  // exists AND (b) the user hasn't already typed/uploaded their own
+  // image. Tracked in a ref so we only auto-fill once per character
+  // change. Coordinates with PR R's Visual Source selector by also
+  // flipping the active source to "character" when auto-fill fires.
+  const autoFilledRef = useRef(null)
+  useEffect(() => {
+    if (!characterPortraitUrl) return
+    if (autoFilledRef.current === characterPortraitUrl) return
+    const userOwned =
+      trimmedImage &&
+      !trimmedImage.startsWith('/api/characters/') &&
+      !trimmedImage.startsWith('/api/runway/image/')
+    if (userOwned) return
+    onImageUrlChange?.(characterPortraitUrl)
+    autoFilledRef.current = characterPortraitUrl
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [characterPortraitUrl])
+
+  // Adaptive Generate Video button label based on the active source.
+  // Used to live inside the generateButton JSX; pulled out so PR R's
+  // structured panel can also reference it cleanly.
+  const generateButtonLabel = busy
+    ? 'Submitting…'
+    : isActiveCharacterPortrait && activeCharacter?.name
+    ? `Generate Video with ${activeCharacter.name}`
+    : effectiveTextOnly
+    ? 'Generate Text-Only Video'
+    : (visualSource === 'upload' && trimmedImage)
+    ? 'Generate Video from Image'
+    : visualSource === 'character'
+    ? 'Generate Video from Character'
+    : 'Generate Video'
 
   const allowedDurations = GENERATION_POLICY[model]?.durations || [5]
   const durationLocked = allowedDurations.length === 1
@@ -169,15 +215,8 @@ export default function PromptPreview({
     }
   }, [visualSource, localCharacterId, charactersWithPortrait, onImageUrlChange])
 
-  const generateButtonLabel = busy
-    ? 'Submitting…'
-    : visualSource === 'character'
-    ? 'Generate Video from Character'
-    : visualSource === 'upload'
-    ? 'Generate Video from Image'
-    : visualSource === 'text-only'
-    ? 'Generate Text-Only Video'
-    : 'Generate Video'
+  // generateButtonLabel is computed earlier (line ~131) — handles
+  // PR R's source-based labels AND PR U's spokesperson-aware label.
 
   return (
     <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5 space-y-3">
@@ -317,6 +356,34 @@ export default function PromptPreview({
             Where does the video's input image come from?
           </span>
         </div>
+        {/* PR U — when the active spokesperson auto-filled the image,
+            surface a clear "Using <name>" banner above the radio
+            tiles. Lets users immediately see the spokesperson choice
+            from Stage 1 carried into Stage 3 without hunting through
+            the picker grid. */}
+        {isActiveCharacterPortrait && activeCharacter && (
+          <div
+            className="flex items-center gap-2 rounded-md ring-1 ring-spark/40 bg-spark/5 px-2 py-1.5"
+            aria-label="active spokesperson driving video"
+          >
+            {activeCharacter.portrait_url && (
+              <img
+                src={activeCharacter.portrait_url}
+                alt={activeCharacter.name}
+                className="w-7 h-7 rounded object-cover ring-1 ring-spark/40 bg-zinc-950"
+              />
+            )}
+            <div className="text-[11px] flex-1 min-w-0">
+              <span className="text-spark font-semibold">
+                Using {activeCharacter.name}
+              </span>
+              <span className="text-zinc-500">
+                {' '}as the visual source from Stage 1. Switch sources
+                below to override.
+              </span>
+            </div>
+          </div>
+        )}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
           {VISUAL_SOURCES.map((s) => {
             const active = visualSource === s.key

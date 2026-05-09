@@ -41,7 +41,12 @@ export default function App() {
   const [generatedImage, setGeneratedImage] = useState(null) // { image_url, image_id, mock_mode, model }
   const [task, setTask] = useState(null)
   const [campaigns, setCampaigns] = useState([])
+  // PR R — Character list feeds the Visual Source "Use Character" picker.
+  // PR U — same list also drives the Stage-1 active spokesperson + the
+  //        Stage-2 brief chip + the Stage-3 visual-source default + the
+  //        save-flow attach. Single fetch, dual-purpose.
   const [characters, setCharacters] = useState([])
+  const [activeCharacterId, setActiveCharacterId] = useState(null)
   const [savedId, setSavedId] = useState(null)
   const [busy, setBusy] = useState({ concepts: false, runway: false, image: false, upload: false })
   const [error, setError] = useState('')
@@ -54,11 +59,25 @@ export default function App() {
     // it surface as an error or block the rest of the page.
     api.organization().then(setOrganization).catch(() => setOrganization(null))
     api.listCampaigns().then((d) => setCampaigns(d.campaigns || [])).catch(() => {})
-    // PR R — Character list is needed by the Visual Source selector
-    // ("Use Character" option). Cached at module-init; the studio
-    // refresh path keeps it fresh after creates/deletes.
+    // Character list is needed by both PR R's Visual Source picker and
+    // PR U's Stage-1 active-spokesperson surface. Cached at module-init;
+    // refreshCharacters() keeps it fresh after Studio events.
     api.listCharacters().then((d) => setCharacters(d.characters || [])).catch(() => {})
   }, [])
+
+  // PR U — derived active spokesperson record. Drives the Stage 2 chip
+  // + Stage 3 video-source default + save-flow attach.
+  const activeCharacter = activeCharacterId
+    ? (characters || []).find((c) => c.id === activeCharacterId) || null
+    : null
+  // If the active character is deleted (or vanishes from the library
+  // refresh), drop the active id silently.
+  useEffect(() => {
+    if (activeCharacterId && !activeCharacter) {
+      setActiveCharacterId(null)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeCharacterId, characters])
 
   // Persist settings whenever the user changes any one of them. The clamp
   // inside saveSettings() guarantees we never write an invalid combination.
@@ -227,6 +246,20 @@ export default function App() {
           hashtags: [`#${form.business.replace(/\s+/g, '')}`, '#AdSparkStudio'],
         },
       })
+      // PR U — if the user picked an active spokesperson at Stage 1,
+      // attach it to the new campaign immediately so the gallery card
+      // opens with the Character tab already populated. The campaigns
+      // POST doesn't accept character_id today, so we use the existing
+      // attach-character route — same path the gallery card uses.
+      if (activeCharacterId) {
+        try {
+          await api.attachCharacter(saved.id, activeCharacterId)
+        } catch (attachErr) {
+          // Non-fatal: campaign is saved; user can attach later from the
+          // gallery card if this attach fails.
+          console.warn('attach active spokesperson failed:', attachErr)
+        }
+      }
       setSavedId(saved.id)
       refreshCampaigns()
     } catch (e) {
@@ -243,19 +276,22 @@ export default function App() {
 
   // Stage-progress derivation. Powers the visible "you are here"
   // indicator in the hero. Layout-only — does not gate any flow.
+  // PR U — Spokesperson is now Stage 1, so the progress trail
+  // matches the on-page stage order: Spokesperson → Brief → Visual → Saved.
   const briefDone = Boolean(form && conceptResp)
   const visualDone = Boolean(task && task.status === 'SUCCEEDED')
   const savedAny = (campaigns || []).length > 0
-  // Character stage is "done" once at least one character avatar is
-  // ready. We don't track characters in App state today, so we infer
-  // from any campaign having a character_id attached. Conservative:
-  // treats Character Studio as in-progress until a campaign uses it.
-  const characterDone = (campaigns || []).some((c) => Boolean(c.character_id))
+  // Spokesperson stage is "done" when an active spokesperson is set
+  // OR the user has at least one character with a ready avatar (a
+  // skip-but-have-characters state still reads as "started"). Skip
+  // is also a valid path — the chip stays grey but doesn't gate anything.
+  const characterReady = Boolean(activeCharacter) ||
+    (characters || []).some((c) => ['ready', 'mock'].includes(c.runway_avatar_status || ''))
   const stages = [
-    { key: 'brief', label: 'Brief', done: briefDone, current: !briefDone },
+    { key: 'spokesperson', label: 'Spokesperson', done: characterReady, current: !characterReady },
+    { key: 'brief', label: 'Brief', done: briefDone, current: characterReady && !briefDone },
     { key: 'visual', label: 'Visual Ad', done: visualDone, current: briefDone && !visualDone },
-    { key: 'character', label: 'Character', done: characterDone, current: visualDone && !characterDone },
-    { key: 'saved', label: 'Saved', done: savedAny, current: characterDone && !savedAny },
+    { key: 'saved', label: 'Saved', done: savedAny, current: visualDone && !savedAny },
   ]
 
   return (
@@ -350,15 +386,74 @@ export default function App() {
           organization={organization}
         />
 
-        {/* ---- Stage 1 — Campaign Brief ------------------------------ */}
-        <Stage number={1} title="Campaign Brief" meta="Who is the ad for?">
+        {/* ---- Stage 1 — Spokesperson (PR U) ------------------------- */}
+        {/* PR R — anchor for "Open Character Studio →" smooth-scroll
+            CTA inside the Visual Source picker's character branch. */}
+        <div id="character-studio-anchor" />
+        <Stage
+          number={1}
+          title="Spokesperson"
+          meta="Choose the face of this campaign — or skip and add one later."
+          accent="pink"
+        >
+          <CharacterStudio
+            onCharactersChanged={() => {
+              // PR U — keep both campaigns + characters fresh after Studio
+              // events (create / portrait / avatar / delete / attach).
+              refreshCharacters()
+              refreshCampaigns()
+            }}
+            activeCharacterId={activeCharacterId}
+            onSetActive={setActiveCharacterId}
+          />
+        </Stage>
+
+        {/* ---- Stage 2 — Campaign Brief (PR U: was Stage 1) ---------- */}
+        <Stage number={2} title="Campaign Brief" meta="Who is the ad for?">
+          {/* PR U — active spokesperson chip when set. */}
+          {activeCharacter && (
+            <div
+              className="flex items-center gap-2 rounded-lg ring-1 ring-pink-400/40 bg-pink-500/5 p-2"
+              aria-label="active spokesperson"
+            >
+              {activeCharacter.portrait_url && (
+                <img
+                  src={activeCharacter.portrait_url}
+                  alt={activeCharacter.name}
+                  className="w-10 h-10 rounded-md object-cover ring-1 ring-pink-400/40 bg-zinc-950"
+                />
+              )}
+              <div className="min-w-0 flex-1 text-[11px]">
+                <div className="text-pink-300 font-semibold truncate">
+                  {activeCharacter.name}
+                </div>
+                <div className="text-zinc-500 font-mono text-[10px]">
+                  {activeCharacter.template} · {activeCharacter.voice_preset} ·
+                  avatar {activeCharacter.runway_avatar_status || 'pending'}
+                </div>
+                <div className="text-zinc-400">
+                  This spokesperson will guide the visual prompt + auto-attach
+                  to the saved campaign.
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveCharacterId(null)}
+                className="text-[10px] text-zinc-500 hover:text-pink-300 px-1.5"
+                aria-label="clear active spokesperson"
+                title="Clear the active spokesperson — falls back to per-campaign attach in the gallery"
+              >
+                clear
+              </button>
+            </div>
+          )}
           <CampaignForm onSubmit={handleConcepts} busy={busy.concepts} />
         </Stage>
 
-        {/* ---- Stage 2 — Generate Visual Ad -------------------------- */}
+        {/* ---- Stage 3 — Generate Visual Ad (PR U: was Stage 2) ------ */}
         {(concepts || task) && (
           <Stage
-            number={2}
+            number={3}
             title="Generate Visual Ad"
             meta="Concept → prompt → silent visual cut → save"
           >
@@ -440,6 +535,9 @@ export default function App() {
                 onRatioChange={setRatio}
                 duration={duration}
                 onDurationChange={setDuration}
+                // PR U — when an active spokesperson exists with a portrait,
+                // pre-fill the imageUrl + adapt the Generate Video button.
+                activeCharacter={activeCharacter}
               />
             )}
 
@@ -447,23 +545,11 @@ export default function App() {
           </Stage>
         )}
 
-        {/* ---- Stage 3 — Character Studio ---------------------------- */}
-        <div id="character-studio-anchor" />
-        <Stage
-          number={3}
-          title="Character Studio"
-          meta="Reusable brand mascot / founder / coach / local guide — bound to a Runway Avatar"
-          accent="pink"
-        >
-          <CharacterStudio
-            onCharactersChanged={() => {
-              // PR R — keep the visual-source selector's character list
-              // fresh after creates / deletes / portrait wins.
-              refreshCharacters()
-              refreshCampaigns()
-            }}
-          />
-        </Stage>
+        {/* PR R + PR U — Character Studio is now Stage 1 above. The
+            old Stage 3 wrapper here is removed; the anchor div for
+            "Open Character Studio →" smooth-scroll CTAs lives next to
+            the new Stage 1 placement. */}
+
 
         {/* ---- Stage 4 — Saved Campaigns ----------------------------- */}
         <Stage
