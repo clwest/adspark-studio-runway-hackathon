@@ -223,6 +223,27 @@ export default function CharacterCard({
   }
   const refreshButtonShouldRender =
     customVoiceReady && avatarReady && Boolean(onRefreshAvatarVoice)
+  // PR AZ — Freshness caption auto-tick. The PR AW caption renders
+  // off `formatVerifyFreshness(verified_at, nowMs)` — keeping a local
+  // `nowMs` state and bumping it every 60 s lets the caption tick
+  // from "4m ago" to "5m ago" without an operator action and without
+  // a backend round-trip. Gated on the same caption-visibility
+  // condition so tiles that don't show the line don't carry a timer.
+  const freshnessVisible = customVoiceReady && avatarReady
+  const [nowMs, setNowMs] = useState(() => Date.now())
+  useEffect(() => {
+    if (!freshnessVisible) return undefined
+    // Reset baseline on mount so a freshly-loaded card never reads
+    // stale `nowMs` from the initial render. The interval then bumps
+    // it once per minute so the caption advances buckets cleanly.
+    setNowMs(Date.now())
+    const id = setInterval(() => setNowMs(Date.now()), 60_000)
+    return () => clearInterval(id)
+    // We intentionally avoid retriggering on every nowMs change — the
+    // dependency on freshnessVisible is what gates the timer's
+    // existence. ESLint's exhaustive-deps doesn't apply here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [freshnessVisible, c.avatar_voice_verified_at])
   // PR AX — preview-refresh state. Renders any time a custom voice
   // exists (no avatar required — the route only needs custom_voice_id).
   // ``previewRefreshNote`` carries a one-line success/no-op caption
@@ -779,13 +800,15 @@ export default function CharacterCard({
               verify has run yet the line falls through to "Not
               checked yet" rather than disappearing — operators can
               tell at a glance how stale the verification is. */}
-          {customVoiceReady && avatarReady && (
+          {freshnessVisible && (
             <p
               data-testid="custom-voice-verify-freshness"
               className="text-[9px] text-zinc-500 font-mono"
               title={c.avatar_voice_verified_at || 'no verification timestamp'}
             >
-              {formatVerifyFreshness(c.avatar_voice_verified_at)}
+              {/* PR AZ — auto-ticked nowMs so the caption advances
+                  buckets without an operator action. */}
+              {formatVerifyFreshness(c.avatar_voice_verified_at, nowMs)}
             </p>
           )}
           <div className="flex items-center gap-1 flex-wrap">

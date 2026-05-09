@@ -1,13 +1,12 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after PR AY (Live Mic Level Meter for Voice
-Recording) on top of the PR AG–AX / SESSION 011 anchors.
-Backend route count is **68** application routes — PR AY is a
-frontend-only slice that hooks an `AnalyserNode` into the
-existing PR AO `MediaStream` and renders a tiny live meter while
-recording, so operators can confirm the mic is hot before
-spending a clone attempt.
+context-kit refresh after PR AZ (Voice Verification Auto-Tick
+Freshness Caption) on top of the PR AG–AY / SESSION 011 anchors.
+Backend route count is **68** application routes — PR AZ is a
+frontend-only slice that adds a 60-second timer to the PR AW
+freshness caption so it advances buckets ("4m ago" → "5m ago")
+without an operator action and without any backend round-trip.
 
 ## Backend (`backend/`)
 
@@ -219,6 +218,7 @@ the line's own `avatar_id`).
 | PR AW | Voice Verification Freshness Label (frontend-only relative-time formatter + inline "Last checked … ago / Not checked yet" caption beside the verify pill) | (post-v13) |
 | PR AX | Refresh Missing Cloned Voice Preview (POST /refresh-voice-preview wires existing fetch_voice_preview helper to a Refresh preview button; preserves existing URL when fetch returns nothing) | (post-v13) |
 | PR AY | Live Mic Level Meter for Voice Recording (frontend-only AnalyserNode hooked into the PR AO MediaStream; RAF-driven horizontal bar with direct DOM mutation; full lifecycle teardown on stop / discard / clone / unmount / error; graceful "Mic level unavailable" fallback) | (post-v13) |
+| PR AZ | Voice Verification Auto-Tick Freshness Caption (frontend-only 60-s setInterval bumps a per-tile nowMs state so PR AW's caption advances buckets without polling; gated on caption visibility; cleanup on unmount + visibility change) | (post-v13) |
 
 ## Known limitations (current main)
 

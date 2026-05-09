@@ -346,6 +346,17 @@ timestamp for diagnostics.
 
 `data-testid` hook: `custom-voice-verify-freshness`.
 
+**PR AZ — auto-tick.** A per-tile `setInterval(60_000)` bumps
+a local `nowMs` state every minute so the caption advances
+buckets ("4m ago" → "5m ago") without an operator action and
+without any backend request. The timer is gated on the same
+caption-visibility condition (`customVoiceReady && avatarReady`)
+so tiles without the line don't carry one. Cleanup runs on
+unmount and whenever the visibility gate flips, so a card that
+loses its cloned voice / avatar mid-session also tears the
+timer down. No state ticks happen for tiles outside the
+visibility gate.
+
 #### Refreshing the cloned voice preview (PR AX)
 
 A small **`Refresh preview`** button (zinc, neutral colour)

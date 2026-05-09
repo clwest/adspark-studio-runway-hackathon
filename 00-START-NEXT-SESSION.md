@@ -5,31 +5,35 @@
 PR AM `3e12d27`; PR AN `f255c22`; PR AO `5bca7c4`; PR AP
 `3c6483e`; PR AQ `ec35c0e`; PR AR `5aa5579`; PR AS `2321fd7`;
 PR AT `632b696`; PR AU `485310a`; PR AV `b9b7fee`; PR AW
-`555ebf9`; PR AX `9d86f2e feat: refresh missing cloned voice
-preview`; PR AY Live Mic Level Meter in flight on top —
-SESSION_012–SESSION_030 handoffs added).
+`555ebf9`; PR AX `9d86f2e`; PR AY `0a93c79 feat: live mic
+level meter for voice recording`; PR AZ Voice Verification
+Auto-Tick in flight on top — SESSION_012–SESSION_031
+handoffs added).
 
 ## Where things stand
 
-- **Branch:** `main` at `9d86f2e` (`feat: refresh missing cloned
-  voice preview`) on `origin/main`. PR AY patch in flight on
-  top — no new commit / tag yet, both pending explicit user
-  approval.
+- **Branch:** `main` at `0a93c79` (`feat: live mic level meter
+  for voice recording`) on `origin/main`. PR AZ patch in
+  flight on top — no new commit / tag yet, both pending
+  explicit user approval.
 - **Latest tag:** still **`hackathon-submission-v13`** at `ec446e4`
-  (PR AF). PR AG–AX shipped the full voice arc; PR AY adds
-  the small live-feedback affordance operators ask about
-  most: a tiny mic level meter so they can tell the browser
-  is actually receiving audio before spending a clone.
+  (PR AF). PR AG–AY shipped the full voice arc + recording
+  feedback. PR AZ adds the smallest possible polish: the
+  PR AW freshness caption now ticks itself every 60 s without
+  an operator action.
 - **Backend routes:** **68** application + FastAPI built-ins
-  (unchanged from PR AX; PR AY is frontend-only).
-- **Frontend build:** 326.27 KB initial JS / 91.61 KB gzip +
-  561.97 KB lazy `@runwayml/avatars-react` chunk (≈ +2.1 KB
-  initial / +0.8 KB gzip vs PR AX — PR AY added AnalyserNode
-  setup + RAF loop + bar element).
-- **Playwright smoke:** `1 passed (~21.4 s)` against the mock
-  backend; PR AY adds two negative assertions confirming the
-  meter wrapper + inner bar testids are absent in idle state
-  (the conditional render guard never regresses).
+  (unchanged from PR AY; PR AZ is frontend-only and adds no
+  endpoints).
+- **Frontend build:** 326.48 KB initial JS / 91.65 KB gzip +
+  561.97 KB lazy `@runwayml/avatars-react` chunk (≈ +0.21 KB
+  initial / +0.04 KB gzip vs PR AY — PR AZ only adds a state
+  ref + setInterval).
+- **Playwright smoke:** `1 passed (~21.5 s)` against the mock
+  backend; existing PR AY assertions still pass. PR AZ
+  doesn't add new assertions because the auto-tick is
+  invisible to a single-shot smoke run; bucket-transition
+  coverage is via a 9-case Node probe (helper deterministic
+  with explicit `nowMs`).
 - **Repo:** https://github.com/clwest/adspark-studio-runway-hackathon
   (private). Pushes happen on explicit user approval.
 - **Stale local feature branches:** 22 left over from PR A through
@@ -165,6 +169,15 @@ SESSION_012–SESSION_030 handoffs added).
   `AudioContext` setup fails — recording itself keeps working.
   data-testid: `custom-voice-mic-level`,
   `custom-voice-mic-level-bar`.
+- **Freshness auto-tick** (PR AZ) — a per-tile `setInterval(60_000)`
+  bumps a local `nowMs` state every minute so PR AW's caption
+  advances buckets ("4m ago" → "5m ago") without an operator
+  action and without any backend round-trip. Gated on the same
+  caption-visibility condition (`customVoiceReady && avatarReady`)
+  so tiles without the line don't carry a timer. Cleanup runs
+  on unmount and whenever the visibility gate flips. Helper-
+  level coverage: 9/9 bucket transitions verified by a Node
+  probe.
 - New backend route: `POST /api/characters/{id}/clone-voice`
   (multipart form with `audio` + optional `name`). The route
   validates mime + size (cap 15 MB locally; Runway docs say
