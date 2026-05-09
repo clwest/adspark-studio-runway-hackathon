@@ -66,3 +66,46 @@ export function saveSettings(s) {
     // best-effort and never blocks the UI.
   }
 }
+
+// ---- PR U follow-up: persist activeCharacterId across reloads ----
+// Lives under a separate key so the spokesperson choice survives a
+// browser refresh or accidental tab close during demo recording.
+// Cleared automatically when the character no longer exists in the
+// library (the App.jsx reconciler handles that gracefully).
+
+export const SPOKESPERSON_STORAGE_KEY = 'adspark.spokesperson.v1'
+
+function isSafeCharacterId(id) {
+  // Match the backend's character-id shape (12-char hex from
+  // CharacterStore._slugify) plus the broader uuid hex shape just in
+  // case. Refuse anything path-like.
+  return (
+    typeof id === 'string' &&
+    /^[a-z0-9_-]{4,64}$/i.test(id)
+  )
+}
+
+export function loadActiveSpokespersonId() {
+  try {
+    if (typeof localStorage === 'undefined') return null
+    const raw = localStorage.getItem(SPOKESPERSON_STORAGE_KEY)
+    if (!raw) return null
+    return isSafeCharacterId(raw) ? raw : null
+  } catch {
+    return null
+  }
+}
+
+export function saveActiveSpokespersonId(id) {
+  try {
+    if (typeof localStorage === 'undefined') return
+    if (id === null || id === undefined || id === '') {
+      localStorage.removeItem(SPOKESPERSON_STORAGE_KEY)
+      return
+    }
+    if (!isSafeCharacterId(id)) return
+    localStorage.setItem(SPOKESPERSON_STORAGE_KEY, id)
+  } catch {
+    // Best-effort.
+  }
+}

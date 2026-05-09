@@ -4,7 +4,9 @@ import { friendlyError, ERROR_HINTS } from './errors'
 import {
   ALLOWED_DURATIONS,
   DEFAULT_SETTINGS,
+  loadActiveSpokespersonId,
   loadSettings,
+  saveActiveSpokespersonId,
   saveSettings,
 } from './settings'
 // PR T — structured Runway video prompt builder.
@@ -46,7 +48,17 @@ export default function App() {
   //        Stage-2 brief chip + the Stage-3 visual-source default + the
   //        save-flow attach. Single fetch, dual-purpose.
   const [characters, setCharacters] = useState([])
-  const [activeCharacterId, setActiveCharacterId] = useState(null)
+  // PR U follow-up: load the persisted spokesperson at module-init so
+  // the very first render reflects the saved choice — same pattern
+  // the prompt-panel settings use to avoid a default→restored flicker.
+  const [activeCharacterId, setActiveCharacterIdState] = useState(
+    loadActiveSpokespersonId(),
+  )
+  // Wrap the setter so any change writes through to localStorage.
+  const setActiveCharacterId = (id) => {
+    saveActiveSpokespersonId(id)
+    setActiveCharacterIdState(id)
+  }
   const [savedId, setSavedId] = useState(null)
   const [busy, setBusy] = useState({ concepts: false, runway: false, image: false, upload: false })
   const [error, setError] = useState('')

@@ -1,12 +1,15 @@
 # START NEXT SESSION — AdSpark Studio
 
-**Last touched:** 2026-05-08 (PR L — docs refresh for v5 submission +
-Character Studio)
+**Last touched:** 2026-05-08 (branch integration — merged PR R / PR T
+/ PR U into local main on top of PR S; not yet pushed).
 
 ## Where things stand
 
-- **Branch:** `main` at `0cddb96`. PR L docs refresh in flight on
-  `feature/pr-l-character-studio-docs` (this session).
+- **Branch:** `main` at `63a19bd` (4 commits ahead of `origin/main`,
+  awaiting push). The local merge integrated PR R Visual Source +
+  PR T Structured Prompt + PR U Spokesperson-first on top of the
+  pushed PR S Commercial with Voice. Plus a small persistence-patch
+  follow-up (this commit).
 - **Submission tags on origin:**
   - `hackathon-submission` → `7ed949e` (pre-avatar baseline, PR E head).
   - `hackathon-submission-v2` → `e6ca02b` (Brand Spokesperson Avatar
@@ -15,11 +18,12 @@ Character Studio)
     Dubs).
   - `hackathon-submission-v4` → `89918c3` (Realtime Spokesperson +
     Avatar Picker).
-  - **`hackathon-submission-v5`** → **`0cddb96`** — **canonical full
-    submission.** Adds Character Studio V1 — reusable brand
-    characters with generated portraits, Runway Avatar binding, and
-    per-campaign attachment. `git checkout hackathon-submission-v5`
-    reproduces the entire feature stack including Character Studio.
+  - **`hackathon-submission-v5`** → **`0cddb96`** — **canonical
+    submission with Character Studio V1.** Local main now goes
+    further — PR S Commercial with Voice, PR R Visual Source flow,
+    PR T structured prompts, PR U Spokesperson-first stage order.
+    Tag `hackathon-submission-v6` recommended after the integration
+    push.
 - **Branches on origin:** `main`, `feature/pr-f-character-host-v1`
   (merged), `feature/pr-h-voiceover-and-dub` (merged),
   `feature/pr-i-realtime-spokesperson` (merged),
