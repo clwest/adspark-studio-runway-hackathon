@@ -10,6 +10,7 @@ import {
 } from '../uxFlag.js'
 import CampaignModeModal from './CampaignModeModal.jsx'
 import SpokespersonCard from './SpokespersonCard.jsx'
+import CinematicLane from './lanes/CinematicLane.jsx'
 import SpokespersonLane from './lanes/SpokespersonLane.jsx'
 
 // PR BH — operator-friendly labels per campaign mode. Backend has
@@ -306,15 +307,22 @@ export default function SpokespersonStudio({
               {MODE_LABELS[activeMode] || activeMode}
             </span>
             <span className="text-[11px] text-zinc-300">
-              {activeMode === CAMPAIGN_MODES.SPOKESPERSON ? (
+              {activeMode === CAMPAIGN_MODES.SPOKESPERSON && (
                 <>
                   <span className="font-semibold">Spokesperson Ad lane open.</span>{' '}
-                  Cinematic / Dialogue lanes land next (PR BJ–BK).
+                  Lip-synced talking-avatar render + reels export below.
                 </>
-              ) : (
+              )}
+              {activeMode === CAMPAIGN_MODES.CINEMATIC && (
+                <>
+                  <span className="font-semibold">Cinematic Ad lane open.</span>{' '}
+                  Silent visual cut + voiced cinematic + storyboard targets below.
+                </>
+              )}
+              {activeMode === CAMPAIGN_MODES.DIALOGUE && (
                 <>
                   <span className="font-semibold">Mode selected.</span>{' '}
-                  Lane-specific builder lands next (PR BJ–BL).
+                  Dialogue lane lands next (PR BL).
                 </>
               )}
             </span>
@@ -338,6 +346,23 @@ export default function SpokespersonStudio({
           campaigns indexed in this component. */}
       {activeMode === CAMPAIGN_MODES.SPOKESPERSON && (
         <SpokespersonLane
+          activeSpokesperson={
+            activeCharacterId
+              ? characters.find((c) => c.id === activeCharacterId) || null
+              : null
+          }
+          linkedCampaigns={
+            activeCharacterId
+              ? campaignsByCharacter[activeCharacterId] || []
+              : []
+          }
+        />
+      )}
+      {/* PR BK — Cinematic Ad lane scaffold. Same shape as the
+          Spokesperson lane; mounts only when the operator has
+          chosen the cinematic mode. */}
+      {activeMode === CAMPAIGN_MODES.CINEMATIC && (
+        <CinematicLane
           activeSpokesperson={
             activeCharacterId
               ? characters.find((c) => c.id === activeCharacterId) || null

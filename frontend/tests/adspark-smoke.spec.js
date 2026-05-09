@@ -1101,15 +1101,59 @@ test('AdSpark Studio UX v2 SpokespersonStudio scaffold', async ({ page }) => {
     window.localStorage.getItem('adspark.activeMode'),
   )
   expect(persisted).toBe('spokesperson')
-  // Dismiss link clears the pill + the localStorage entry. PR BI —
-  // the Spokesperson lane unmounts at the same time because it's
-  // gated on `activeMode === "spokesperson"`.
+
+  // PR BK — re-open the modal and pick Cinematic Ad. The
+  // SpokespersonLane should unmount and the CinematicLane should
+  // mount in its place (at most one lane visible at a time).
+  await newCampaignButton.click()
+  const modalCinematic = page.getByTestId('campaign-mode-modal')
+  await expect(modalCinematic).toBeVisible()
+  await modalCinematic.getByTestId('campaign-mode-card-cinematic').click()
+  await expect(modalCinematic).toHaveCount(0)
+  await expect(activeModePill).toHaveAttribute('data-mode', 'cinematic')
+  await expect(activeModePill).toContainText(/Cinematic Ad/i)
+  await expect(activeModePill).toContainText(/Cinematic Ad lane open/i)
+  // Spokesperson lane must be gone now.
+  await expect(
+    page.getByTestId('spokesperson-lane'),
+  ).toHaveCount(0)
+  const cinematicLane = page.getByTestId('cinematic-lane')
+  await expect(cinematicLane).toBeVisible()
+  await expect(cinematicLane).toHaveAttribute('data-mode', 'cinematic')
+  await expect(cinematicLane).toContainText(/Cinematic Ad lane/i)
+  await expect(
+    cinematicLane.getByTestId('cinematic-lane-step-brief'),
+  ).toBeVisible()
+  await expect(
+    cinematicLane.getByTestId('cinematic-lane-step-visual'),
+  ).toBeVisible()
+  await expect(
+    cinematicLane.getByTestId('cinematic-lane-step-render'),
+  ).toBeVisible()
+  for (const [tid, target] of [
+    ['cinematic-lane-video', 'cinematic-video'],
+    ['cinematic-lane-voiced', 'voiced-cinematic'],
+    ['cinematic-lane-storyboard', 'storyboard'],
+  ]) {
+    const btn = cinematicLane.getByTestId(tid)
+    await expect(btn).toBeVisible()
+    await expect(btn).toBeDisabled()
+    await expect(btn).toHaveAttribute('data-render-target', target)
+  }
+
+  // Dismiss link clears the pill + the localStorage entry. PR BK —
+  // the active lane (whichever it is) unmounts at the same time.
+  // The smoke ends with cinematic active, so the cinematic lane
+  // should be gone after dismiss.
   await page.getByTestId('spokesperson-active-mode-dismiss').click()
   await expect(
     page.getByTestId('spokesperson-active-mode'),
   ).toHaveCount(0)
   await expect(
     page.getByTestId('spokesperson-lane'),
+  ).toHaveCount(0)
+  await expect(
+    page.getByTestId('cinematic-lane'),
   ).toHaveCount(0)
   const cleared = await page.evaluate(() =>
     window.localStorage.getItem('adspark.activeMode'),
