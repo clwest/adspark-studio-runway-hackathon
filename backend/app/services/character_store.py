@@ -34,6 +34,11 @@ logger = logging.getLogger(__name__)
 _LOCK = threading.Lock()
 
 
+# PR BB — cap the per-character voice repair audit trail so the
+# JSON record never grows unbounded across long demo sessions.
+VOICE_HISTORY_MAX = 20
+
+
 def _slugify(name: str) -> str:
     """Lowercase + alphanumeric/hyphens only. Used for deterministic
     short labels and (potential future) URL paths.
@@ -117,6 +122,37 @@ class CharacterStore:
                     self._write(rows)
                     return Character.model_validate(row)
         return None
+
+    def append_voice_history(
+        self,
+        character_id: str,
+        entry: dict,
+        *,
+        max_entries: int = VOICE_HISTORY_MAX,
+    ) -> bool:
+        """PR BB — append a single voice-action audit entry to the
+        character's ``voice_repair_history`` list (newest first) and
+        cap it at ``max_entries``. Returns True when an entry landed
+        on a known character; False when the id is unknown.
+
+        Best-effort: callers wrap this in try/except so an audit
+        failure never aborts the underlying clone / apply / refresh
+        flow. The append always bumps ``updated_at``.
+        """
+        with _LOCK:
+            rows = self._read()
+            for row in rows:
+                if row.get("id") == character_id:
+                    history = list(row.get("voice_repair_history") or [])
+                    # ``timestamp`` is normalised to an ISO-formatted string
+                    # before insertion so the stored JSON survives
+                    # round-trips through ``json.loads``.
+                    history.insert(0, entry)
+                    row["voice_repair_history"] = history[:max_entries]
+                    row["updated_at"] = datetime.now(timezone.utc).isoformat()
+                    self._write(rows)
+                    return True
+        return False
 
     def delete(self, character_id: str) -> bool:
         """Local delete — does NOT call Runway DELETE. Returns True if

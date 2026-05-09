@@ -228,10 +228,14 @@ export default function CharacterStudio({
 
   // PR AQ — manual retry of the avatar voice swap when the auto-patch
   // after a clone failed. Same in-place update pattern as the clone.
-  const handleApplyVoiceToAvatar = async (c) => {
+  // PR BB — accepts an optional ``mode`` argument so the PR AU
+  // "Repair voice drift" button can label its audit-trail entry as
+  // ``"repair"`` instead of ``"apply"``. Both code paths share the
+  // same backend handler.
+  const handleApplyVoiceToAvatar = async (c, mode) => {
     setBusy(c.id, 'voice-apply')
     try {
-      const updated = await api.applyCharacterVoiceToAvatar(c.id)
+      const updated = await api.applyCharacterVoiceToAvatar(c.id, mode)
       setCharacters((cs) => cs.map((x) => (x.id === c.id ? updated : x)))
       onCharactersChanged?.()
     } catch (e) {

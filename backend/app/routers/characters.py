@@ -11,9 +11,9 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
@@ -103,6 +103,59 @@ class GeneratePortraitBody(BaseModel):
 class CreateAvatarBody(BaseModel):
     voice_preset: Optional[str] = Field(default=None)
     personality_override: Optional[str] = Field(default=None, max_length=600)
+
+
+class ApplyVoiceBody(BaseModel):
+    """PR BB — optional body for ``POST /apply-voice``.
+
+    The frontend's PR AU "Repair voice drift" button passes
+    ``mode: "repair"`` so the appended audit-trail entry is labeled
+    ``action="repair"`` instead of the default ``"apply"``. Both
+    code paths share the same backend handler — ``mode`` is purely
+    for the audit trail label.
+    """
+
+    mode: Optional[Literal["apply", "repair"]] = None
+
+
+# ---- PR BB — history helper -------------------------------------
+#
+# Centralised so every route appends entries with a consistent shape.
+# Best-effort: callers wrap this in ``try/except`` so an audit
+# failure never aborts the underlying clone / apply / refresh flow.
+
+
+def _append_voice_history_safe(
+    store: CharacterStore,
+    character_id: str,
+    *,
+    action: str,
+    before_voice_id: Optional[str] = None,
+    after_voice_id: Optional[str] = None,
+    resolved_voice_id: Optional[str] = None,
+    drift_status: Optional[str] = None,
+    status: Optional[str] = None,
+    error: Optional[str] = None,
+    mock_mode: Optional[bool] = None,
+) -> None:
+    entry = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "action": action,
+        "before_voice_id": before_voice_id,
+        "after_voice_id": after_voice_id,
+        "resolved_voice_id": resolved_voice_id,
+        "drift_status": drift_status,
+        "status": status,
+        "error": error,
+        "mock_mode": mock_mode,
+    }
+    try:
+        store.append_voice_history(character_id, entry)
+    except Exception as exc:  # pragma: no cover - audit is best-effort
+        logger.warning(
+            "voice history append failed for character %s action=%s: %s",
+            character_id, action, exc,
+        )
 
 
 # ---- routes -------------------------------------------------------
@@ -335,6 +388,19 @@ async def post_clone_voice(
             custom_voice_error=result.error,
             custom_voice_mock_mode=result.mock_mode,
         )
+        # PR BB — record the failed clone in the audit trail so the
+        # operator can see it tried and what went wrong even after a
+        # 502 surfaces in the UI.
+        _append_voice_history_safe(
+            store,
+            character_id,
+            action="clone",
+            before_voice_id=record.custom_voice_id,
+            after_voice_id=None,
+            status="failed",
+            error=result.error,
+            mock_mode=result.mock_mode,
+        )
         raise HTTPException(
             status_code=502,
             detail=f"voice clone failed: {result.error or 'unknown error'}",
@@ -399,6 +465,22 @@ async def post_clone_voice(
         character_id, result.voice_id, result.status,
         result.mock_mode, apply_result.status, drift_status,
     )
+    # PR BB — log the successful clone in the audit trail. We surface
+    # the apply + verify outcomes via the same entry's drift / status
+    # fields so the operator gets a single row that captures the
+    # whole clone-then-bind-then-verify cycle.
+    _append_voice_history_safe(
+        store,
+        character_id,
+        action="clone",
+        before_voice_id=record.custom_voice_id,
+        after_voice_id=result.voice_id,
+        resolved_voice_id=verify_state.resolved_id,
+        drift_status=drift_status,
+        status=result.status,
+        error=None,
+        mock_mode=result.mock_mode,
+    )
     return updated or record
 
 
@@ -413,11 +495,17 @@ async def post_clone_voice(
 @router.post("/{character_id}/apply-voice", response_model=Character)
 def post_apply_voice_to_avatar(
     character_id: str,
+    body: Optional[ApplyVoiceBody] = Body(default=None),
     settings: Settings = Depends(get_settings),
     store: CharacterStore = Depends(_store),
 ) -> Character:
     """PR AQ — apply the character's already-cloned ``custom_voice_id``
     to the bound Runway avatar via ``PATCH /v1/avatars/{id}``.
+
+    PR BB — accepts an optional ``mode`` body field (``"apply"`` |
+    ``"repair"``). The frontend's PR AU "Repair voice drift" button
+    passes ``mode: "repair"`` so the audit-trail entry is labeled
+    accordingly; both code paths share the same backend behaviour.
 
     Failure modes:
     - 404 — character not found.
@@ -465,6 +553,24 @@ def post_apply_voice_to_avatar(
         ),
         avatar_voice_verify_error=verify_state.error,
         avatar_voice_drift_status=drift_status,
+    )
+    # PR BB — record the apply/repair attempt in the audit trail so
+    # the operator can see who patched the avatar, when, and what
+    # the resolved voice + drift state ended up as. Distinguish
+    # repair from apply via the optional body ``mode`` flag (frontend
+    # PR AU repair button passes "repair"; default flow is "apply").
+    audit_action = "repair" if (body and body.mode == "repair") else "apply"
+    _append_voice_history_safe(
+        store,
+        character_id,
+        action=audit_action,
+        before_voice_id=record.avatar_voice_resolved_id,
+        after_voice_id=record.custom_voice_id,
+        resolved_voice_id=verify_state.resolved_id,
+        drift_status=drift_status,
+        status=apply_result.status,
+        error=apply_result.error,
+        mock_mode=(apply_result.status == "mock_patched"),
     )
     if apply_result.status == "failed":
         raise HTTPException(
@@ -555,6 +661,22 @@ def post_refresh_avatar_voice(
     logger.info(
         "character %s refresh-avatar-voice -> verify=%s drift=%s",
         character_id, state.status, drift_status,
+    )
+    # PR BB — record the refresh in the audit trail. ``before`` is
+    # the prior resolved id (so the operator can see drift before
+    # vs after); ``after_voice_id`` stays None because refresh never
+    # mutates the bind itself.
+    _append_voice_history_safe(
+        store,
+        character_id,
+        action="refresh",
+        before_voice_id=record.avatar_voice_resolved_id,
+        after_voice_id=None,
+        resolved_voice_id=state.resolved_id,
+        drift_status=drift_status,
+        status=state.status,
+        error=state.error,
+        mock_mode=(state.status == "mock_verified"),
     )
     return updated or record
 

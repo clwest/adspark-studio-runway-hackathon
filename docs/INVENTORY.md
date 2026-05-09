@@ -1,15 +1,18 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after PR BA (Character Library Refresh All) on
-top of the PR AG–AZ / SESSION 011 anchors. Backend route count is
-**68** application routes — PR BA is a frontend-only slice that
-adds a library-level "Refresh all voice statuses" button on the
-Character Studio header. The button reuses the existing
-`POST /api/characters/{id}/refresh-avatar-voice` (PR AV) and
-`POST /api/characters/{id}/refresh-voice-preview` (PR AX) routes
-per-character; no new backend route is added and no polling /
-background jobs are introduced.
+context-kit refresh after PR BB (Voice Repair History Audit Trail)
+on top of the PR AG–BA / SESSION 011 anchors. Backend route count
+is **68** application routes — PR BB is a small slice that adds a
+compact `voice_repair_history: list[VoiceRepairHistoryEntry]`
+field on Character (capped at the most recent 20 entries) plus
+audit-trail appends inside the existing clone-voice / apply-voice
+/ refresh-avatar-voice handlers, plus an inline disclosure list
+in CharacterCard's voice section. No new backend route, no full
+audit dashboard, no analytics — just a per-character trail of
+what happened when. The PR AQ apply-voice route gains an optional
+`mode: "apply" | "repair"` body so the audit trail can
+distinguish a normal apply from the PR AU drift-repair click.
 
 ## Backend (`backend/`)
 
@@ -17,7 +20,7 @@ background jobs are introduced.
 |---|---|---|
 | `app/main.py` | real | FastAPI app, CORS, `/health`, router registration (incl. `characters_router`) |
 | `app/config.py` | real | pydantic-settings; PR-A vars + PR-F `runway_host_voice_preset` / `runway_host_portrait_url` |
-| `app/models.py` | real | Pydantic schemas — Campaign with all PR A → AF fields (Pack, Spokesperson, Audio Pack, Avatar Picker, **`character_id` + `generated_character_prompt`**, **`commercial_script` + `commercial_script_updated_at`**, **storyboard fields + `StoryboardShot`**, **dialogue fields + `DialogueLine`**) plus `Character` / `CharacterCreate` / `CharacterList` models |
+| `app/models.py` | real | Pydantic schemas — Campaign with all PR A → AF fields (Pack, Spokesperson, Audio Pack, Avatar Picker, **`character_id` + `generated_character_prompt`**, **`commercial_script` + `commercial_script_updated_at`**, **storyboard fields + `StoryboardShot`**, **dialogue fields + `DialogueLine`**) plus `Character` / `CharacterCreate` / `CharacterList` models. **PR BB** — adds `VoiceRepairHistoryEntry` (timestamp, action ∈ clone/apply/repair/refresh/verify, before_voice_id, after_voice_id, resolved_voice_id, drift_status, status, error, mock_mode) + `voice_repair_history: list[VoiceRepairHistoryEntry] = []` on Character, capped at the most recent 20 entries by the store |
 | `app/services/concept_service.py` | real + mock fallback | OpenAI `gpt-4o-mini` JSON-mode call; deterministic mock |
 | `app/services/runway_client.py` | real + mock | `image_to_video` / `text_to_video` routing; `GENERATION_POLICY` validation |
 | `app/services/image_client.py` | real + mock | `/v1/text_to_image` (`gen4_image_turbo`); seeded `referenceImages`; stdlib zlib PNG mock |
@@ -31,14 +34,14 @@ background jobs are introduced.
 | `app/services/audio_client.py` | real + mock | `/v1/voices` text design + `/v1/voice_dubbing`; 29-language `SUPPORTED_DUB_LANGS`; ffmpeg lavfi mock MP3s |
 | `app/services/voice_clone_client.py` | real + mock | **PR AN** — wraps `POST /v1/voices` with `from.type=audio` for custom voice cloning. `clone_voice_from_audio(name, audio_bytes, mime, settings)` returns a `VoiceCloneResult`; mock mode emits a deterministic `mock_voice_<sha256(name + bytes)[:16]>` so re-uploads of the same sample are idempotent and a fresh sample yields a new id. Caps audio at 15 MB (Runway docs say 10 MB) so an oversized sample fails with a friendly 413 before hitting the wire. Allowlist of `audio/mpeg`, `audio/wav`, `audio/m4a`, `audio/mp4`, `audio/aac`, `audio/webm`, `audio/ogg`. **PR AQ** — adds `apply_voice_to_avatar(avatar_id, voice_id, settings)` which `PATCH /v1/avatars/{id}` with `{voice: {type: "custom", voiceId: ...}}` so a freshly cloned voice swaps into an existing avatar without re-creating it. Mock-aware (mock id or runway_mock → returns `mock_patched`); never raises. **PR AR** — captures Runway's `previewUrl` from the READY poll response (with a tolerant `_extract_preview_url` helper that accepts `previewUrl` / `preview_url` / `preview`); surfaces it on `VoiceCloneResult.preview_url`. Adds `fetch_voice_preview(voice_id, settings)` for future refresh routes. **PR AS** — adds `fetch_avatar_voice(avatar_id, settings, *, expected_voice_id, avatar_is_mock)` running `GET /v1/avatars/{id}` to confirm the bind landed; returns an `AvatarVoiceState` (`verified` / `mock_verified` / `unverified` / `failed`) with resolved type / id / label fields. Tolerant `_extract_voice_block` (accepts `voice` / `voiceBlock` / `voice_block`) + `_resolve_voice_fields` (accepts `type` / `voiceType`, `voiceId` / `voice_id` / `id`, `name` / `label` / `presetId`) survive future Runway shape renames. **PR AT** — adds `compute_voice_drift_status(custom_voice_id, resolved_id, verify_status)` pure helper returning `match` / `drift` / `unknown`. Case-insensitive id comparison after whitespace strip; whitespace-only ids treated as missing. Used by both clone-voice + apply-voice routes via the shared `_verify_avatar_voice_after_patch` helper |
 | `app/services/character_studio_client.py` | real + mock | **PR K** — `PORTRAIT_TEMPLATES` (4 locked: mascot, founder, coach, local_guide); `build_prompt()`; `generate_portrait()` calls `/v1/text_to_image`; `create_avatar()` reads cached portrait → data URI → `POST /v1/avatars` → poll READY. **PR AN** — when `character.custom_voice_id` is set, the avatar create body uses `voice: {type: "custom", voiceId: ...}` instead of the runway-live-preset binding |
-| `app/services/character_store.py` | real | **PR K** — JSON-file Character store at `backend/data/characters.json`; threading.Lock; atomic writes |
+| `app/services/character_store.py` | real | **PR K** — JSON-file Character store at `backend/data/characters.json`; threading.Lock; atomic writes. **PR BB** — adds `append_voice_history(character_id, entry, *, max_entries=VOICE_HISTORY_MAX=20)` for the audit-trail field; newest-first insertion + cap inside the same lock the rest of the store uses |
 | `app/services/storyboard_service.py` | real + mock | **PR Z + PR AC** — script-aware `_split_script_beats` planner + per-shot `image_to_video` generation + ffmpeg lavfi mock; `_shot_prompt` weaves narrative cues from `campaign.commercial_script` |
 | `app/services/dialogue_service.py` | real + mock | **PR AF** — `plan_lines` builds Hook/Beat/Closer with primary + secondary speaker selection from ready characters; `generate_line` wraps `avatar_videos` (real) + ffmpeg lavfi (mock) targeted at the line's speaker avatar |
 | `app/services/storage.py` | real | JSON-file campaign store; threading.Lock; per-feature update helpers (cache / finish / host avatar / host video / brand voice / dub / selected avatar / **character attachment** / **commercial_script** / **storyboard plan + per-shot + stitch + voiced** / **dialogue plan + per-line + stitch** / **reels (PR AG, kind=spokesperson|dialogue_scene)** / **realtime document (PR AI)** / **runway_conversation_id + transcript turns (PR AJ)** / **brand_color (PR AK)**); also normalises the brand colour at create-time so an unparseable initial-save input falls back to `None` instead of 422-ing |
 | `app/routers/concepts.py` | real | `POST /api/concepts` |
 | `app/routers/runway.py` | real | All `/api/runway/*` routes including `provider-status`, `organization`, `avatars` (list), `image`, `generate`, `task`, `upload-image` |
 | `app/routers/campaigns.py` | real | All `/api/campaigns/*` routes (50+ now — see endpoint list below) |
-| `app/routers/characters.py` | real | **PR K** — 7 character routes |
+| `app/routers/characters.py` | real | **PR K** — 7 character routes. **PR BB** — clone-voice + apply-voice + refresh-avatar-voice each call `_append_voice_history_safe(...)` after their primary update so the audit trail mirrors operator actions; apply-voice gains an optional `ApplyVoiceBody { mode: "apply" \| "repair" }` so the PR AU repair button labels its entry correctly. History append is best-effort: an exception inside the wrapper is logged but never aborts the underlying flow |
 | `requirements.txt` | real | fastapi, uvicorn, pydantic, pydantic-settings, httpx, openai, python-dotenv |
 | `.env.example` | real | All PR-A → PR-I knobs documented |
 | `data/campaigns.json` | real | Created lazily on first save |
@@ -68,7 +71,7 @@ background jobs are introduced.
 | `src/components/AvatarPicker.jsx` | real | PR I+ — fetches `/api/runway/avatars`; 4-up grid; click → `POST /select-avatar` |
 | `src/components/RealtimeSpokesperson.jsx` | real | PR I — lazy-loaded `<AvatarCall>` wrapper; **PR AE caption update** ("This avatar knows the campaign brief and saved script…") + chip tooltip + aria-label reframed as starter questions |
 | `src/components/CharacterStudio.jsx` | real | **PR K + V + AA + BA** — top-level studio panel with editable Portrait Prompt textarea + voice preset dropdown with **PR AA description chip** + create form + character library + **PR BA** library-level "Refresh all voice statuses" button + compact `idle / refreshing X/Y / refreshed N skipped M failed K` status caption that reuses the per-character PR AV refresh-avatar-voice + PR AX refresh-voice-preview routes |
-| `src/components/CharacterCard.jsx` | real | Single tile component reused in studio library and per-campaign attach picker |
+| `src/components/CharacterCard.jsx` | real | Single tile component reused in studio library and per-campaign attach picker. **PR BB** — adds `formatHistoryTimestamp(iso, nowMs)` helper (same buckets as `formatVerifyFreshness` minus the prefix) + `HISTORY_ACTION_PILLS` colour map (clone→emerald / apply→indigo / repair→amber / refresh→zinc / verify→zinc) + `historyStatusClass()` + `historyDriftClass()` + a "Voice history" disclosure rendered at the bottom of the voice section. Default 5 newest visible; "Show all (N)" link expands up to the 20-entry cap. data-testid: `custom-voice-history`, `custom-voice-history-entry` |
 | `src/components/ModeBanner.jsx` | real | Readiness chip, per-provider pills, optional credits/cap chip |
 | `tests/adspark-smoke.spec.js` | real | Playwright single-shot mock-mode end-to-end; covers PR A through PR AW (Stage-3 Commercial Script + breadcrumb, Storyboard subsection, Ad Mode picker w/ 3 cards, Spokesperson Ad rename, Dialogue tab + Plan button, all Exports rows + the captioned reels labels, Realtime grounding card + Conversation transcript card with **export button assertions: copy-markdown, download-txt, post-fetch enable + status banner**, brand colour control, Character custom-voice section + **MediaRecorder Start recording button** + **negative assertions for the PR AP preview audio + helper text in idle state** + **PR AS/AT/AU/AV/AW resilient assertions for resolved/drift/unverified pills, repair button, refresh button, and freshness label**) |
 | `src/transcriptExport.js` | real | **PR AL** — pure helpers `buildTranscriptMarkdown`, `buildTranscriptText`, `transcriptFilename`, `copyToClipboard`, `downloadTextFile`. No backend round-trip — operates on the turns persisted by PR AJ on the Campaign payload. Markdown output uses bold-speaker syntax + the campaign / conversation-id / fetched-at preamble; text output is plain ASCII with `Speaker:` prefixes |
@@ -223,6 +226,7 @@ the line's own `avatar_id`).
 | PR AY | Live Mic Level Meter for Voice Recording (frontend-only AnalyserNode hooked into the PR AO MediaStream; RAF-driven horizontal bar with direct DOM mutation; full lifecycle teardown on stop / discard / clone / unmount / error; graceful "Mic level unavailable" fallback) | (post-v13) |
 | PR AZ | Voice Verification Auto-Tick Freshness Caption (frontend-only 60-s setInterval bumps a per-tile nowMs state so PR AW's caption advances buckets without polling; gated on caption visibility; cleanup on unmount + visibility change) | (post-v13) |
 | PR BA | Character Library Refresh All (frontend-only library-level "Refresh all voice statuses" button on the Character Studio header; iterates the library and reuses the per-character PR AV refresh-avatar-voice + PR AX refresh-voice-preview routes; compact status caption reports refreshed/skipped/failed; one failure does not abort the loop) | (post-v13) |
+| PR BB | Voice Repair History Audit Trail (`VoiceRepairHistoryEntry` model + `voice_repair_history: list[…]` on Character capped at 20 entries; appended from clone-voice / apply-voice / refresh-avatar-voice; apply-voice gains an optional `mode` body so the PR AU repair button is distinguishable from a plain apply; CharacterCard renders a compact "Voice history" disclosure with action / status / drift / time pills, default 5 newest, "Show all (N)" expand) | (post-v13) |
 
 ## Known limitations (current main)
 

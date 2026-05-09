@@ -250,11 +250,18 @@ export const api = {
   },
   // PR AQ — manual retry for the avatar voice swap. The clone route
   // already auto-PATCHes the avatar after a successful clone; this
-  // endpoint lets the operator retry without re-uploading.
-  applyCharacterVoiceToAvatar: (characterId) =>
+  // endpoint lets the operator retry without re-uploading. PR BB
+  // accepts an optional ``mode`` argument ("apply" | "repair") so
+  // the audit-trail entry can distinguish the PR AU "Repair voice
+  // drift" click from a normal apply retry; the backend treats both
+  // identically and only labels the history entry differently.
+  applyCharacterVoiceToAvatar: (characterId, mode) =>
     jsonFetch(
       `/api/characters/${encodeURIComponent(characterId)}/apply-voice`,
-      { method: 'POST' },
+      {
+        method: 'POST',
+        body: JSON.stringify(mode ? { mode } : {}),
+      },
     ),
   // PR AV — read-only refresh: re-runs the avatar introspection +
   // drift recompute against the existing Runway avatar without

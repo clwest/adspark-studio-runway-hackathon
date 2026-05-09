@@ -5,41 +5,42 @@
 PR AM `3e12d27`; PR AN `f255c22`; PR AO `5bca7c4`; PR AP
 `3c6483e`; PR AQ `ec35c0e`; PR AR `5aa5579`; PR AS `2321fd7`;
 PR AT `632b696`; PR AU `485310a`; PR AV `b9b7fee`; PR AW
-`555ebf9`; PR AX `9d86f2e`; PR AY `0a93c79`; PR AZ
-`2c16d30 feat: auto-tick verify freshness caption`; PR BA
-Character Library Refresh All in flight on top —
-SESSION_012–SESSION_032 handoffs added).
+`555ebf9`; PR AX `9d86f2e`; PR AY `0a93c79`; PR AZ `2c16d30`;
+PR BA `9d0a99d feat: library-level refresh-all for voice
+statuses`; PR BB Voice Repair History Audit Trail in flight on
+top — SESSION_012–SESSION_033 handoffs added).
 
 ## Where things stand
 
-- **Branch:** `main` at `2c16d30` (`feat: auto-tick verify
-  freshness caption`) on `origin/main`. PR BA patch in flight
-  on top — no new commit / tag yet, both pending explicit user
-  approval.
+- **Branch:** `main` at `9d0a99d` (`feat: library-level
+  refresh-all for voice statuses`) on `origin/main`. PR BB patch
+  in flight on top — no new commit / tag yet, both pending
+  explicit user approval.
 - **Latest tag:** still **`hackathon-submission-v13`** at `ec446e4`
-  (PR AF). PR AG–AZ shipped the full voice arc + recording
-  feedback + auto-tick. PR BA adds a library-level
-  "Refresh all voice statuses" button on the Character Studio
-  header that fans out the per-character PR AV + PR AX routes
-  in one click.
+  (PR AF). PR AG–BA shipped the full voice arc + recording
+  feedback + auto-tick + library-level refresh-all. PR BB adds
+  a compact `voice_repair_history` audit trail on Character
+  (capped at 20 entries) so the operator can scan recent clone
+  / apply / repair / refresh events directly from the
+  character tile.
 - **Backend routes:** **68** application + FastAPI built-ins
-  (unchanged from PR AZ; PR BA is frontend-only and adds no
-  endpoints — it reuses the per-character refresh routes).
-- **Frontend build:** 328.38 KB initial JS / 92.21 KB gzip +
-  561.97 KB lazy `@runwayml/avatars-react` chunk (+1.90 KB
-  initial / +0.56 KB gzip vs PR AZ — PR BA adds the bulk
-  handler + button + caption to CharacterStudio.jsx).
-- **Playwright smoke:** `1 passed (~21.2 s)` against the mock
-  backend; existing PR AZ assertions still pass. PR BA adds
-  three new assertions for the bulk-refresh button presence,
-  default copy, and absence of the post-run status caption in
-  the idle state.
-- **Targeted probes:** 5/5 handler-logic counter scenarios pass
-  (no eligible / mixed / preview failure / avatar failure /
-  empty library); backend probe confirms 200 / 409 / 404
-  responses on the per-character routes match the bulk
-  handler's eligibility branching; 3 back-to-back bulk
-  refreshes leave PR AQ patch fields byte-identical.
+  (unchanged from PR BA; PR BB doesn't add new endpoints — it
+  appends history entries inside the existing clone-voice /
+  apply-voice / refresh-avatar-voice handlers).
+- **Frontend build:** 331.17 KB initial JS / 92.88 KB gzip +
+  561.97 KB lazy `@runwayml/avatars-react` chunk (+2.79 KB
+  initial / +0.67 KB gzip vs PR BA — PR BB adds the disclosure
+  + 4 helpers to CharacterCard.jsx).
+- **Playwright smoke:** `1 passed (~21.0 s)` against the mock
+  backend; existing PR BA assertions still pass. PR BB adds
+  resilient assertions on the disclosure + per-entry shape
+  (count bounded by voice section count, max 20 entries per
+  disclosure, action label matches the literal set).
+- **Targeted probes:** clone / apply / apply mode=repair /
+  refresh appends correctly labeled entries; cap-at-20 holds
+  across 25 rapid refreshes; apply-voice on a character with
+  no voice 409s without appending; clone failure path also
+  records a `failed` entry for visibility.
 - **Repo:** https://github.com/clwest/adspark-studio-runway-hackathon
   (private). Pushes happen on explicit user approval.
 - **Stale local feature branches:** 22 left over from PR A through
@@ -198,6 +199,21 @@ SESSION_012–SESSION_032 handoffs added).
   background jobs, no polling. data-testid:
   `custom-voice-refresh-all`,
   `custom-voice-refresh-all-status`.
+- **Voice repair history audit trail** (PR BB) — every clone /
+  apply / repair / refresh event now appends a compact
+  `VoiceRepairHistoryEntry` to `Character.voice_repair_history`
+  (newest first, capped at the most recent 20 entries by
+  `CharacterStore.append_voice_history`). Apply-voice gains
+  an optional `mode: "apply" | "repair"` body so the PR AU
+  drift-repair button labels its entry as `repair` while a
+  normal manual retry stays `apply`. CharacterCard renders a
+  compact "Voice history" disclosure at the bottom of the
+  voice section with action / status / drift colour pills + a
+  relative timestamp; default 5 newest with a `Show all (N)`
+  link expanding up to the full 20. Audit append is
+  best-effort: a store failure is logged but never aborts the
+  underlying flow. data-testid: `custom-voice-history`,
+  `custom-voice-history-entry`.
 - New backend route: `POST /api/characters/{id}/clone-voice`
   (multipart form with `audio` + optional `name`). The route
   validates mime + size (cap 15 MB locally; Runway docs say

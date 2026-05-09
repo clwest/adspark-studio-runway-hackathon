@@ -467,6 +467,78 @@ Targeted probe coverage (PR BA verification):
 `custom-voice-refresh-all-status` (the inline caption — only
 present once the bulk action has run at least once).
 
+#### Voice repair audit trail (PR BB)
+
+Each character now carries a compact `voice_repair_history`
+list — newest first, capped at the most recent 20 entries by
+the store — that records every clone / apply / repair /
+refresh event the operator (or the auto-flow under the hood)
+fires. The list lives at the bottom of the voice section
+inside CharacterCard's tile and renders 5 entries by default
+with a small "Show all (N)" link to expand the rest.
+
+Backend persistence:
+
+```
+Character.voice_repair_history: list[VoiceRepairHistoryEntry]
+                                                cap = 20
+
+VoiceRepairHistoryEntry {
+  timestamp:           datetime  (UTC, ISO format)
+  action:              "clone" | "apply" | "repair" | "refresh" | "verify"
+  before_voice_id:     str | None    (the id present before this action)
+  after_voice_id:      str | None    (the id we tried to apply)
+  resolved_voice_id:   str | None    (what GET /v1/avatars saw afterwards)
+  drift_status:        "match" | "drift" | "unknown" | None
+  status:              "ready" | "mock" | "applied" | "mock_patched" |
+                       "verified" | "mock_verified" | "failed" | …
+  error:               str | None
+  mock_mode:           bool | None
+}
+```
+
+Where entries are appended:
+
+| Route | Action label | Notes |
+|---|---|---|
+| `POST /api/characters/{id}/clone-voice` (success) | `"clone"` | also surfaces resolved + drift from the auto-PATCH+verify pass |
+| `POST /api/characters/{id}/clone-voice` (failure 502) | `"clone"` | error message + `status="failed"` |
+| `POST /api/characters/{id}/apply-voice` (no body or `mode="apply"`) | `"apply"` | normal manual retry of the avatar PATCH |
+| `POST /api/characters/{id}/apply-voice` body `{"mode":"repair"}` | `"repair"` | the PR AU "Repair voice drift" button passes this so its trail entry is distinguishable |
+| `POST /api/characters/{id}/refresh-avatar-voice` | `"refresh"` | read-only verify pass; `after_voice_id` stays `None` since refresh never mutates the bind |
+
+Each route appends via `_append_voice_history_safe(...)` —
+a thin wrapper that wraps the store write in `try/except` so
+an audit failure logs a warning but never aborts the
+underlying flow. The audit trail is a *best-effort* record,
+never a hard dependency.
+
+**Mock-mode behavior:** every helper short-circuits to
+deterministic strings (`mock_voice_<sha>` / `mock_patched`
+/ `mock_verified`) so the mock smoke + the targeted probe
+both produce predictable history rows. `mock_mode: true`
+flags the entry so the UI can hint at the mock origin
+without changing layout.
+
+UI render — each row shows three colour-coded pills (action /
+status / drift) and a relative timestamp at the right end:
+
+```
+[clone]   [mock]            [match]              just now
+[apply]   [mock_patched]    [match]              5m ago
+[repair]  [mock_patched]    [match]              7m ago
+[refresh] [mock_verified]   [match]              12m ago
+```
+
+Action colours: `clone`→emerald, `apply`→indigo,
+`repair`→amber, `refresh`/`verify`→zinc. Status colours:
+ready/applied/verified→emerald, mock→soft-emerald,
+failed/unverified/pending→rose. Drift colours:
+match→emerald, drift→rose, unknown→zinc.
+
+`data-testid` hooks: `custom-voice-history` (the disclosure
+wrapper), `custom-voice-history-entry` (one per row).
+
 #### Recording in-browser (PR AO)
 
 Below the file picker on each library tile sits a small

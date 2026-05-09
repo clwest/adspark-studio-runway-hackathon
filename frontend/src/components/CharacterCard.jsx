@@ -78,6 +78,63 @@ export function formatVerifyFreshness(isoString, nowMs = Date.now()) {
   return `Last checked ${days}d ago`
 }
 
+// PR BB — compact relative-time formatter for history entries.
+// Same bucket boundaries as formatVerifyFreshness but with no
+// "Last checked " prefix; designed to fit at the right end of each
+// row in the audit-trail list.
+export function formatHistoryTimestamp(isoString, nowMs = Date.now()) {
+  if (!isoString) return ''
+  const ts = Date.parse(isoString)
+  if (!Number.isFinite(ts)) return ''
+  const deltaMs = nowMs - ts
+  if (deltaMs < 45_000) return 'just now'
+  const minutes = Math.floor(deltaMs / 60_000)
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  return `${days}d ago`
+}
+
+// PR BB — colour swatches per audit-trail action so the operator
+// can scan the column at a glance without reading every label.
+const HISTORY_ACTION_PILLS = {
+  clone:
+    'bg-emerald-500/20 text-emerald-200 ring-1 ring-emerald-400/40',
+  apply:
+    'bg-indigo-500/20 text-indigo-200 ring-1 ring-indigo-400/40',
+  repair:
+    'bg-amber-500/20 text-amber-200 ring-1 ring-amber-400/40',
+  refresh:
+    'bg-zinc-700 text-zinc-200 ring-1 ring-zinc-500',
+  verify:
+    'bg-zinc-700 text-zinc-200 ring-1 ring-zinc-500',
+}
+
+function historyStatusClass(status) {
+  if (!status) return 'bg-zinc-800 text-zinc-400 ring-1 ring-zinc-700'
+  const s = String(status).toLowerCase()
+  if (
+    s === 'ready' ||
+    s === 'applied' ||
+    s === 'verified'
+  )
+    return 'bg-emerald-500/20 text-emerald-200 ring-1 ring-emerald-400/40'
+  if (s === 'mock' || s === 'mock_patched' || s === 'mock_verified')
+    return 'bg-emerald-500/15 text-emerald-200/90 ring-1 ring-emerald-400/30'
+  if (s === 'failed' || s === 'unverified' || s === 'pending_avatar')
+    return 'bg-rose-500/20 text-rose-200 ring-1 ring-rose-400/40'
+  return 'bg-zinc-800 text-zinc-300 ring-1 ring-zinc-700'
+}
+
+function historyDriftClass(drift) {
+  if (drift === 'match')
+    return 'bg-emerald-500/20 text-emerald-200 ring-1 ring-emerald-400/40'
+  if (drift === 'drift')
+    return 'bg-rose-500/20 text-rose-200 ring-1 ring-rose-400/40'
+  return 'bg-zinc-800 text-zinc-400 ring-1 ring-zinc-700'
+}
+
 /**
  * Single character tile used by CharacterStudio (library grid) and the
  * Character picker that surfaces inside CampaignGallery's Brand
@@ -196,7 +253,9 @@ export default function CharacterCard({
     setRepairBusy(true)
     setRepairError('')
     try {
-      await onApplyVoiceToAvatar(c)
+      // PR BB — pass ``"repair"`` so the audit-trail entry is
+      // labeled as a drift-repair instead of a regular apply retry.
+      await onApplyVoiceToAvatar(c, 'repair')
     } catch (e) {
       setRepairError(`${e?.message || e}`)
     } finally {
@@ -223,6 +282,15 @@ export default function CharacterCard({
   }
   const refreshButtonShouldRender =
     customVoiceReady && avatarReady && Boolean(onRefreshAvatarVoice)
+  // PR BB — voice repair audit trail. Defaults to the 5-newest view;
+  // the disclosure toggles to "show all" up to the 20-entry cap.
+  const [historyExpanded, setHistoryExpanded] = useState(false)
+  const historyEntries = Array.isArray(c.voice_repair_history)
+    ? c.voice_repair_history
+    : []
+  const historyVisible = historyExpanded
+    ? historyEntries
+    : historyEntries.slice(0, 5)
   // PR AZ — Freshness caption auto-tick. The PR AW caption renders
   // off `formatVerifyFreshness(verified_at, nowMs)` — keeping a local
   // `nowMs` state and bumping it every 60 s lets the caption tick
@@ -1217,6 +1285,84 @@ export default function CharacterCard({
             >
               Recording unavailable — upload an audio file instead.
             </p>
+          )}
+
+          {/* PR BB — Voice repair audit trail. Compact list of the
+              most recent clone/apply/repair/refresh events on this
+              character. Newest first; default 5 visible with a
+              "Show all" link when there are more (capped at 20 by
+              the backend store). The list itself is small enough
+              that no virtualisation / pagination is needed. */}
+          {historyEntries.length > 0 && (
+            <div
+              data-testid="custom-voice-history"
+              className="space-y-0.5 pt-1 border-t border-zinc-800/40"
+            >
+              <div className="flex items-center justify-between gap-1">
+                <p className="text-[9px] uppercase tracking-wide text-zinc-500 font-mono">
+                  Voice history
+                </p>
+                {historyEntries.length > 5 && (
+                  <button
+                    type="button"
+                    onClick={() => setHistoryExpanded((v) => !v)}
+                    className="text-[9px] text-zinc-500 hover:text-pink-300"
+                    title={
+                      historyExpanded
+                        ? 'Collapse to the 5 most recent entries.'
+                        : `Show all ${historyEntries.length} entries (capped at 20).`
+                    }
+                  >
+                    {historyExpanded
+                      ? 'Show 5 newest'
+                      : `Show all (${historyEntries.length})`}
+                  </button>
+                )}
+              </div>
+              <ul className="space-y-0.5">
+                {historyVisible.map((entry, idx) => (
+                  <li
+                    key={`${entry.timestamp}-${idx}`}
+                    data-testid="custom-voice-history-entry"
+                    className="flex items-center gap-1 text-[9px] leading-snug flex-wrap"
+                    title={`${entry.timestamp || ''}${
+                      entry.error ? ' — ' + entry.error : ''
+                    }`}
+                  >
+                    <span
+                      className={`rounded px-1 py-0.5 font-mono ${
+                        HISTORY_ACTION_PILLS[entry.action] ||
+                        HISTORY_ACTION_PILLS.refresh
+                      }`}
+                    >
+                      {entry.action}
+                    </span>
+                    {entry.status && (
+                      <span
+                        className={`rounded px-1 py-0.5 font-mono ${historyStatusClass(
+                          entry.status,
+                        )}`}
+                      >
+                        {entry.status}
+                      </span>
+                    )}
+                    {entry.drift_status && (
+                      <span
+                        className={`rounded px-1 py-0.5 font-mono ${historyDriftClass(
+                          entry.drift_status,
+                        )}`}
+                        title={`drift_status=${entry.drift_status}`}
+                      >
+                        {entry.drift_status}
+                      </span>
+                    )}
+                    <span className="ml-auto text-zinc-500 font-mono">
+                      {formatHistoryTimestamp(entry.timestamp, nowMs)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
         </div>
       )}

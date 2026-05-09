@@ -345,6 +345,31 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
     await expect(
       page.getByTestId('custom-voice-refresh-all-status'),
     ).toHaveCount(0)
+    // PR BB — Voice repair history audit trail. The disclosure +
+    // entry rows are conditional on at least one history entry
+    // existing on a character. Mock-mode smoke runs against
+    // fixture characters that may or may not have prior clone /
+    // apply / refresh events recorded, so the count is bounded by
+    // the voice section count rather than asserted exactly. Each
+    // visible disclosure must contain at least one entry row;
+    // each entry row must include an action label.
+    const historyDisclosures = await page
+      .getByTestId('custom-voice-history')
+      .count()
+    expect(historyDisclosures).toBeLessThanOrEqual(voiceSectionCount)
+    if (historyDisclosures > 0) {
+      const firstHistory = page.getByTestId('custom-voice-history').first()
+      await expect(firstHistory).toContainText(/Voice history/i)
+      const firstEntries = firstHistory.getByTestId(
+        'custom-voice-history-entry',
+      )
+      const firstEntryCount = await firstEntries.count()
+      expect(firstEntryCount).toBeGreaterThan(0)
+      expect(firstEntryCount).toBeLessThanOrEqual(20)
+      await expect(firstEntries.first()).toContainText(
+        /^(clone|apply|repair|refresh|verify)/i,
+      )
+    }
   }
 
   // 7b.6. PR U — stage order: Spokesperson leads, Campaign Brief

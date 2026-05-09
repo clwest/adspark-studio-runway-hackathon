@@ -290,6 +290,35 @@ CharacterAvatarStatus = Literal["pending", "ready", "failed", "mock"]
 PortraitSource = Literal["generated", "uploaded", "stock", "mock"]
 
 
+# ---- PR BB — Voice repair / apply audit trail ---------------------
+
+VoiceHistoryAction = Literal["clone", "apply", "repair", "refresh", "verify"]
+
+
+class VoiceRepairHistoryEntry(BaseModel):
+    """PR BB — single audit-trail entry for a voice clone/apply/repair/
+    refresh event. Compact by design — one row per operator action.
+
+    The store caps each character's history at the most recent 20
+    entries (``VOICE_HISTORY_MAX`` in ``character_store.py``) so the
+    JSON record never bloats over a long demo session.
+    """
+
+    timestamp: datetime
+    action: VoiceHistoryAction
+    before_voice_id: Optional[str] = None
+    after_voice_id: Optional[str] = None
+    resolved_voice_id: Optional[str] = None
+    drift_status: Optional[Literal["match", "drift", "unknown"]] = None
+    # ``status`` mirrors the action's primary outcome string —
+    # PR AN clone status (ready/mock/failed), PR AQ apply_result
+    # status (applied/mock_patched/pending_avatar/failed), or PR AS
+    # verify state (verified/mock_verified/unverified/failed).
+    status: Optional[str] = None
+    error: Optional[str] = None
+    mock_mode: Optional[bool] = None
+
+
 class Character(BaseModel):
     id: str
     slug: str
@@ -351,6 +380,11 @@ class Character(BaseModel):
     avatar_voice_drift_status: Optional[Literal[
         "match", "drift", "unknown"
     ]] = None
+    # PR BB — Voice repair/apply audit trail. Each clone / apply /
+    # repair / refresh appends a compact entry to this list (newest
+    # first). Capped at the most recent 20 entries by the store so
+    # the JSON record never grows unbounded over a long demo session.
+    voice_repair_history: list[VoiceRepairHistoryEntry] = []
 
     # Portrait — local cache lives at backend/data/characters/<id>-portrait.png
     portrait_url: Optional[str] = None  # /api/characters/{id}/portrait
