@@ -104,6 +104,25 @@ HostStatus = Literal["ok", "failed", "unavailable"]
 StoryboardShotStatus = Literal["idle", "pending", "running", "ok", "failed"]
 
 
+# ---- PR AF — Multi-Character Dialogue Scene Builder ---------------
+
+DialogueLineStatus = Literal["idle", "pending", "running", "ok", "failed"]
+
+
+class DialogueLine(BaseModel):
+    id: str  # "line-1" / "line-2" / "line-3"
+    character_id: Optional[str] = None
+    character_name: Optional[str] = None
+    avatar_id: Optional[str] = None
+    text: str = ""
+    status: DialogueLineStatus = "idle"
+    task_id: Optional[str] = None
+    video_url: Optional[str] = None  # /api/campaigns/{id}/dialogue/line/{line_id}
+    cache_filename: Optional[str] = None
+    error: Optional[str] = None
+    mock_mode: Optional[bool] = None
+
+
 class StoryboardShot(BaseModel):
     id: str  # "shot-1" / "shot-2" / "shot-3"
     label: str  # human-readable beat label ("Hook" / "Action" / "Payoff")
@@ -188,6 +207,16 @@ class Campaign(CampaignCreate):
     # `character_host_client.build_script` otherwise.
     commercial_script: Optional[str] = None
     commercial_script_updated_at: Optional[datetime] = None
+    # PR AF — Multi-Character Dialogue Scene Builder. Sequential
+    # talking-avatar lines stitched into one MP4 — like an Office-style
+    # branded skit. Each line targets a specific character's
+    # runway_avatar_id; ffmpeg concat preserves audio across lines.
+    dialogue_lines: list["DialogueLine"] = []
+    dialogue_scene_status: Optional[Literal[
+        "idle", "planning", "ready", "stitching", "ok", "failed"
+    ]] = None
+    dialogue_scene_video_url: Optional[str] = None
+    dialogue_scene_error: Optional[str] = None
 
 
 class CampaignList(BaseModel):

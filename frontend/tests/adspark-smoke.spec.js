@@ -287,7 +287,8 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
   //       saved card now opens on Visuals (not Overview) so the user
   //       lands on the cached video + Voiced Commercial CTAs they just
   //       earned with the save click.
-  for (const name of ['Overview', 'Visuals', 'Character', 'Voice', 'Realtime', 'Exports']) {
+  // PR AF — new "Dialogue" tab between Voice and Realtime.
+  for (const name of ['Overview', 'Visuals', 'Character', 'Voice', 'Dialogue', 'Realtime', 'Exports']) {
     await expect(newestCard.getByRole('tab', { name })).toBeVisible()
   }
   await expect(
@@ -414,6 +415,14 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
   await expect(
     newestCard.getByRole('button', { name: /^Build Cinematic Ad/i }),
   ).toBeVisible()
+  // PR AF — Dialogue Scene card joins the picker as a third mode.
+  await expect(newestCard.getByText(/^Dialogue Scene$/i)).toBeVisible()
+  await expect(
+    newestCard.getByText(/Multi-character skit assembled from talking avatar clips/i),
+  ).toBeVisible()
+  await expect(
+    newestCard.getByRole('button', { name: /^Build Dialogue Scene/i }),
+  ).toBeVisible()
 
   // 13b. Character tab — Brand Spokesperson section + Avatar Picker.
   await newestCard.getByRole('tab', { name: 'Character' }).click()
@@ -493,6 +502,18 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
     ).toBeVisible()
   }
 
+  // 13d.5 — PR AF — Dialogue tab. The smoke campaign has no
+  //          Characters, so the gated "Create at least one Character"
+  //          copy renders + the Plan Dialogue Scene button is reachable.
+  await newestCard.getByRole('tab', { name: 'Dialogue' }).click()
+  await expect(newestCard.getByText(/^Dialogue Scene Builder$/i)).toBeVisible()
+  await expect(
+    newestCard.getByText(/Create Office-style branded skits/i),
+  ).toBeVisible()
+  await expect(
+    newestCard.getByRole('button', { name: /^Plan Dialogue Scene$/i }),
+  ).toBeVisible()
+
   // 13e. Exports tab — file-ledger renders, with at least the visual
   //      ad row present (every saved campaign has a video URL or a
   //      "not generated yet" placeholder for it). PR S + PR X — also
@@ -506,6 +527,8 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
   // PR Z — storyboard ledger rows.
   await expect(newestCard.getByText(/^Storyboard Commercial$/)).toBeVisible()
   await expect(newestCard.getByText(/^Voiced Storyboard$/)).toBeVisible()
+  // PR AF — Dialogue Scene Ad ledger row.
+  await expect(newestCard.getByText(/^Dialogue Scene Ad$/)).toBeVisible()
   // PR AB — host-clip ledger row renamed to "Spokesperson Ad". Same
   // file (backend/data/host/<id>.mp4); user-facing vocabulary aligned
   // with the rest of the UI.

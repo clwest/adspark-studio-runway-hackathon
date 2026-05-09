@@ -35,6 +35,10 @@ const TABS = [
   { key: 'visuals', label: 'Visuals' },
   { key: 'character', label: 'Character' },
   { key: 'voice', label: 'Voice' },
+  // PR AF — Dialogue Scene Builder. Sits between Voice and Realtime
+  // because it's an asynchronous render path (more like Voice) and
+  // benefits from being adjacent to where the script lives.
+  { key: 'dialogue', label: 'Dialogue' },
   { key: 'realtime', label: 'Realtime' },
   { key: 'exports', label: 'Exports' },
 ]
@@ -129,6 +133,14 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
   const [activeTab, setActiveTab] = useState(() =>
     isNewestSaved ? 'visuals' : 'overview',
   )
+  // PR AF — when the Dialogue tab opens, lazy-load the ready-character
+  // library so the speaker dropdowns have options. Idempotent.
+  useEffect(() => {
+    if (activeTab !== 'dialogue') return
+    if (characterLibraryLoadedForDialogue) return
+    ensureDialogueCharacterLibrary()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab])
   const cardRef = useRef(null)
   // PR Z2 — make the silent-vs-voiced distinction unmistakable. The
   // voiced section gets a ref so the silent player's CTA can scroll
@@ -173,6 +185,22 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
     return out
   })
   const [shotPromptSavingId, setShotPromptSavingId] = useState(null)
+  // PR AF — Dialogue Scene Builder state. Per-line drafts keyed by
+  // line id; busy flags scoped per operation so the user can plan,
+  // edit, generate, and stitch without races.
+  const [dialoguePlanBusy, setDialoguePlanBusy] = useState(false)
+  const [dialogueLineSavingId, setDialogueLineSavingId] = useState(null)
+  const [dialogueLineGenId, setDialogueLineGenId] = useState(null)
+  const [dialogueStitchBusy, setDialogueStitchBusy] = useState(false)
+  const [dialogueDrafts, setDialogueDrafts] = useState(() => {
+    const out = {}
+    for (const l of c.dialogue_lines || []) {
+      if (l && l.id) out[l.id] = { text: l.text || '', character_id: l.character_id || '' }
+    }
+    return out
+  })
+  const [characterLibraryForDialogue, setCharacterLibraryForDialogue] = useState([])
+  const [characterLibraryLoadedForDialogue, setCharacterLibraryLoadedForDialogue] = useState(false)
   // PR AA — Commercial Script editor state. Local draft tracks
   // unsaved edits; scriptSaved pulses a 1.5 s "saved" indicator after
   // a successful save.
@@ -271,6 +299,15 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
     c.storyboard_status === 'ok' && Boolean(c.storyboard_video_url)
   const storyboardVoicedReady =
     c.storyboard_voiced_status === 'ok' && Boolean(c.storyboard_voiced_url)
+  // PR AF — Dialogue Scene derivations.
+  const dialogueLines = Array.isArray(c.dialogue_lines) ? c.dialogue_lines : []
+  const dialoguePlanned = dialogueLines.length > 0
+  const dialogueAllLinesReady =
+    dialoguePlanned && dialogueLines.every((l) => l.status === 'ok')
+  const dialogueSceneReady =
+    c.dialogue_scene_status === 'ok' && Boolean(c.dialogue_scene_video_url)
+  const dialogueSomeMock =
+    dialoguePlanned && dialogueLines.some((l) => l.mock_mode === true)
   // Avatar resolution chain: character > selected > host_avatar_id.
   // PR X uses this to decide whether the Build Voiced Commercial
   // button is enabled (true if EITHER a host clip exists OR an avatar
@@ -567,6 +604,142 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
     await handlePresent()
   }
 
+  // PR AF — keep dialogue drafts in sync with persisted lines. Same
+  // draft-vs-seed pattern used for storyboard shot prompts.
+  useEffect(() => {
+    setDialogueDrafts((prev) => {
+      const next = { ...prev }
+      let changed = false
+      const seeds = prev.__seeds__ || {}
+      const newSeeds = {}
+      for (const l of c.dialogue_lines || []) {
+        if (!l || !l.id) continue
+        const persistedText = l.text || ''
+        const persistedChar = l.character_id || ''
+        newSeeds[l.id] = { text: persistedText, character_id: persistedChar }
+        if (next[l.id] === undefined) {
+          next[l.id] = { text: persistedText, character_id: persistedChar }
+          changed = true
+          continue
+        }
+        const seed = seeds[l.id] || { text: '', character_id: '' }
+        // Only auto-pull through when the user hasn't edited locally.
+        if (
+          persistedText !== seed.text
+          && next[l.id].text === seed.text
+        ) {
+          next[l.id] = { ...next[l.id], text: persistedText }
+          changed = true
+        }
+        if (
+          persistedChar !== seed.character_id
+          && next[l.id].character_id === seed.character_id
+        ) {
+          next[l.id] = { ...next[l.id], character_id: persistedChar }
+          changed = true
+        }
+      }
+      next.__seeds__ = newSeeds
+      return changed || !prev.__seeds__ ? next : prev
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [c.dialogue_lines])
+
+  const ensureDialogueCharacterLibrary = async () => {
+    if (characterLibraryLoadedForDialogue) return characterLibraryForDialogue
+    try {
+      const resp = await api.listCharacters()
+      const all = resp.characters || []
+      // Only show characters with a usable Runway avatar.
+      const ready = all.filter(
+        (ch) => ch.runway_avatar_id && ['ready', 'mock'].includes(ch.runway_avatar_status || ''),
+      )
+      setCharacterLibraryForDialogue(ready)
+      setCharacterLibraryLoadedForDialogue(true)
+      return ready
+    } catch (e) {
+      setLocalError(`load characters: ${e}`)
+      return []
+    }
+  }
+
+  const handlePlanDialogue = async () => {
+    setLocalError('')
+    setDialoguePlanBusy(true)
+    try {
+      await ensureDialogueCharacterLibrary()
+      const updated = await api.planDialogue(c.id)
+      onUpdated?.(updated)
+    } catch (e) {
+      setLocalError(`dialogue plan: ${e}`)
+    } finally {
+      setDialoguePlanBusy(false)
+    }
+  }
+
+  const handleDialogueLineDraftChange = (lineId, key, value) => {
+    setDialogueDrafts((prev) => ({
+      ...prev,
+      [lineId]: { ...(prev[lineId] || { text: '', character_id: '' }), [key]: value },
+    }))
+  }
+
+  const handleSaveDialogueLine = async (lineId) => {
+    const draft = dialogueDrafts[lineId] || { text: '', character_id: '' }
+    setLocalError('')
+    setDialogueLineSavingId(lineId)
+    try {
+      const updated = await api.saveDialogueLine(c.id, lineId, {
+        text: draft.text || '',
+        character_id: draft.character_id || null,
+      })
+      onUpdated?.(updated)
+    } catch (e) {
+      setLocalError(`dialogue ${lineId} save: ${e}`)
+    } finally {
+      setDialogueLineSavingId(null)
+    }
+  }
+
+  const handleGenerateDialogueLine = async (lineId) => {
+    setLocalError('')
+    setDialogueLineGenId(lineId)
+    try {
+      // Save dirty drafts first so generation uses the on-screen text.
+      const draft = dialogueDrafts[lineId] || { text: '', character_id: '' }
+      const persisted = (c.dialogue_lines || []).find((l) => l.id === lineId) || {}
+      const dirty =
+        draft.text !== (persisted.text || '')
+        || draft.character_id !== (persisted.character_id || '')
+      if (dirty) {
+        const saved = await api.saveDialogueLine(c.id, lineId, {
+          text: draft.text || '',
+          character_id: draft.character_id || null,
+        })
+        onUpdated?.(saved)
+      }
+      const updated = await api.generateDialogueLine(c.id, lineId)
+      onUpdated?.(updated)
+    } catch (e) {
+      setLocalError(`dialogue ${lineId} gen: ${e}`)
+    } finally {
+      setDialogueLineGenId(null)
+    }
+  }
+
+  const handleStitchDialogue = async () => {
+    setLocalError('')
+    setDialogueStitchBusy(true)
+    try {
+      const updated = await api.stitchDialogue(c.id)
+      onUpdated?.(updated)
+    } catch (e) {
+      setLocalError(`dialogue stitch: ${e}`)
+    } finally {
+      setDialogueStitchBusy(false)
+    }
+  }
+
   const handleBuildVoicedStoryboard = async () => {
     setLocalError('')
     setStoryboardVoicedBusy(true)
@@ -710,7 +883,7 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
             two final outputs · same campaign brief
           </span>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
           {/* Cinematic Commercial */}
           <div className="rounded-lg ring-1 ring-spark/30 bg-spark/5 p-2.5 space-y-1.5">
             <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -845,6 +1018,62 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
                 </button>
               </div>
             )}
+          </div>
+
+          {/* PR AF — Dialogue Scene Ad. Multi-character branded skit
+              built from sequential talking-avatar lines. */}
+          <div className="rounded-lg ring-1 ring-fuchsia-400/40 bg-fuchsia-500/5 p-2.5 space-y-1.5">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <span className="text-[12px] font-semibold text-fuchsia-200">
+                Dialogue Scene
+              </span>
+              <span
+                className={`text-[10px] rounded-full px-2 py-0.5 font-mono ${
+                  dialogueSceneReady
+                    ? 'bg-emerald-500/20 text-emerald-300'
+                    : dialoguePlanned
+                    ? 'bg-amber-500/20 text-amber-300'
+                    : 'bg-zinc-800 text-zinc-500'
+                }`}
+                title={
+                  dialogueSceneReady
+                    ? 'stitched dialogue scene ready'
+                    : dialoguePlanned
+                    ? 'planned · generate + stitch lines next'
+                    : 'not planned'
+                }
+              >
+                {dialogueSceneReady ? 'ready' : dialoguePlanned ? 'planned' : 'idle'}
+              </span>
+            </div>
+            <p className="text-[10px] text-zinc-400 leading-relaxed">
+              Multi-character skit assembled from talking avatar clips.
+              Best for{' '}
+              <span className="text-zinc-300">Office-style cold opens</span>,
+              founder vs. mascot reactions, fake podcasts, and recurring
+              social bits.
+            </p>
+            {dialogueSceneReady ? (
+              <video
+                key={c.dialogue_scene_video_url}
+                src={c.dialogue_scene_video_url}
+                controls
+                preload="metadata"
+                className="w-full rounded-md ring-1 ring-fuchsia-400/40"
+              />
+            ) : (
+              <p className="text-[10px] text-zinc-500 italic">
+                Plan + render lines in the Dialogue tab.
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={() => setActiveTab('dialogue')}
+              className="rounded-md bg-fuchsia-500/80 hover:bg-fuchsia-500 text-zinc-100 text-[11px] font-semibold px-2 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-400"
+              title="Open the Dialogue tab — plan, edit, generate, and stitch lines"
+            >
+              {dialogueSceneReady ? 'Open Dialogue Scene ↗' : 'Build Dialogue Scene ↗'}
+            </button>
           </div>
         </div>
       </section>
@@ -2261,6 +2490,281 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
     </div>
   )
 
+  // PR AF — Dialogue Scene Builder body. Sequential talking-avatar
+  // lines stitched into one MP4 — like an Office-style branded skit.
+  const dialogueBody = (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-sm font-semibold text-zinc-100">
+            Dialogue Scene Builder
+          </span>
+          <span
+            className="text-[10px] text-zinc-500 font-mono"
+            title="Sequential talking-avatar clips stitched into one MP4. Each line targets a specific character's Runway avatar."
+          >
+            multi-character skit · ≤ 300 chars/line
+          </span>
+        </div>
+        {dialogueSceneReady && (
+          <span className="text-[10px] rounded-full bg-emerald-500/20 text-emerald-300 px-2 py-0.5 font-mono">
+            ready
+          </span>
+        )}
+        {dialogueSomeMock && !dialogueSceneReady && (
+          <span className="text-[10px] rounded-full bg-amber-500/20 text-amber-300 px-2 py-0.5 font-mono">
+            mock placeholders
+          </span>
+        )}
+      </div>
+      <p className="text-[10px] text-zinc-500 leading-relaxed">
+        Create Office-style branded skits from multiple AI characters.
+        Each line uses one character's lip-synced avatar; ffmpeg stitches
+        the lines into a single dialogue scene.
+      </p>
+
+      {!dialoguePlanned && (
+        <div className="space-y-1.5">
+          <p className="text-[10px] text-amber-300">
+            {hasUsableAvatar
+              ? 'Plan a 3-line scene from the saved campaign + your ready characters.'
+              : 'Create at least one Character with a ready Runway Avatar (Stage 1) before planning a scene.'}
+          </p>
+          <button
+            type="button"
+            onClick={handlePlanDialogue}
+            disabled={dialoguePlanBusy}
+            className="rounded-md bg-fuchsia-500/80 hover:bg-fuchsia-500 text-zinc-100 text-xs font-semibold px-3 py-1.5 disabled:opacity-50"
+          >
+            {dialoguePlanBusy ? 'Planning…' : 'Plan Dialogue Scene'}
+          </button>
+        </div>
+      )}
+
+      {dialoguePlanned && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <span className="text-[10px] text-zinc-400 font-mono">
+              {dialogueLines.filter((l) => l.status === 'ok').length}/{dialogueLines.length} lines ready
+            </span>
+            <button
+              type="button"
+              onClick={handlePlanDialogue}
+              disabled={dialoguePlanBusy}
+              className="text-[10px] text-zinc-500 hover:text-fuchsia-300 disabled:opacity-50"
+              title="Regenerate the default 3-line scene from the saved campaign + script. Resets local edits."
+            >
+              {dialoguePlanBusy ? 'replanning…' : 're-plan from script'}
+            </button>
+          </div>
+          <p className="text-[10px] text-zinc-500 italic">
+            Tip: keep each line tight, in voice, and under ~280 characters.
+            Pick a different character for the middle beat for a real
+            back-and-forth.
+          </p>
+
+          <ul className="space-y-1.5">
+            {dialogueLines.map((line, idx) => {
+              const draft = dialogueDrafts[line.id] || {
+                text: line.text || '',
+                character_id: line.character_id || '',
+              }
+              const persistedText = line.text || ''
+              const persistedChar = line.character_id || ''
+              const dirty =
+                draft.text !== persistedText
+                || draft.character_id !== persistedChar
+              const saving = dialogueLineSavingId === line.id
+              const generating = dialogueLineGenId === line.id
+              const ok = line.status === 'ok'
+              const failed = line.status === 'failed'
+              const running = line.status === 'running'
+              return (
+                <li
+                  key={line.id}
+                  className="rounded-md ring-1 ring-zinc-800/80 bg-zinc-950/50 p-2 space-y-1"
+                >
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <span className="text-[11px] font-semibold text-zinc-100">
+                      Line {idx + 1}
+                    </span>
+                    <span
+                      className={`text-[10px] rounded-full px-2 py-0.5 font-mono ${
+                        ok
+                          ? line.mock_mode
+                            ? 'bg-amber-500/20 text-amber-300'
+                            : 'bg-emerald-500/20 text-emerald-300'
+                          : failed
+                          ? 'bg-rose-500/20 text-rose-300'
+                          : running || generating
+                          ? 'bg-amber-500/20 text-amber-300'
+                          : 'bg-zinc-800 text-zinc-400'
+                      }`}
+                      title={line.error || ''}
+                    >
+                      {ok ? (line.mock_mode ? 'mock ok' : 'ok')
+                        : failed ? 'failed'
+                        : running || generating ? 'running'
+                        : 'idle'}
+                    </span>
+                  </div>
+
+                  <label className="text-[10px] text-zinc-500 flex items-center gap-1 font-mono">
+                    speaker
+                    <select
+                      aria-label={`dialogue ${line.id} character`}
+                      value={draft.character_id || ''}
+                      onChange={(e) =>
+                        handleDialogueLineDraftChange(line.id, 'character_id', e.target.value)
+                      }
+                      className="rounded-md bg-zinc-950 border border-zinc-800 px-1.5 py-0.5 text-[11px] text-zinc-200 focus:border-fuchsia-400 outline-none"
+                    >
+                      {characterLibraryForDialogue.length === 0 && line.character_id && (
+                        <option value={line.character_id}>
+                          {line.character_name || line.character_id.slice(0, 8)}
+                        </option>
+                      )}
+                      {characterLibraryForDialogue.map((ch) => (
+                        <option key={ch.id} value={ch.id}>
+                          {ch.name}
+                          {ch.runway_avatar_status === 'mock' ? ' (mock)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <textarea
+                    aria-label={`dialogue ${line.id} text`}
+                    value={draft.text}
+                    onChange={(e) =>
+                      handleDialogueLineDraftChange(
+                        line.id, 'text', e.target.value.slice(0, 300),
+                      )
+                    }
+                    rows={2}
+                    placeholder="What does this character say?"
+                    className="w-full rounded-md bg-zinc-950 border border-zinc-800 px-2 py-1 text-[11px] text-zinc-100 focus:border-fuchsia-400 outline-none font-mono leading-snug"
+                  />
+
+                  <div className="flex items-center justify-between gap-2 flex-wrap text-[10px]">
+                    <span className="text-zinc-500 font-mono">
+                      {draft.text.length}/300
+                      {dirty && <span className="text-amber-300"> · unsaved</span>}
+                    </span>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {ok && line.video_url && (
+                        <a
+                          href={line.video_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-spark hover:underline"
+                        >
+                          preview ↗
+                        </a>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleSaveDialogueLine(line.id)}
+                        disabled={!dirty || saving || !draft.text.trim()}
+                        className="rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-100 px-2 py-0.5 disabled:opacity-50"
+                        title="Persist text + speaker. Resets the line's render state to idle."
+                      >
+                        {saving ? 'Saving…' : 'Save Line'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleGenerateDialogueLine(line.id)}
+                        disabled={
+                          generating
+                          || Boolean(dialogueLineGenId)
+                          || dialogueStitchBusy
+                          || !draft.text.trim()
+                          || !draft.character_id
+                        }
+                        className="rounded-md bg-fuchsia-500/80 hover:bg-fuchsia-500 text-zinc-100 px-2 py-0.5 font-semibold disabled:opacity-50"
+                      >
+                        {generating
+                          ? 'Generating…'
+                          : ok ? 'Re-generate' : 'Generate Line Clip'}
+                      </button>
+                    </div>
+                  </div>
+                  {failed && line.error && (
+                    <p className="text-[10px] text-rose-300" title={line.error}>
+                      {line.error}
+                    </p>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+
+          <div className="space-y-1.5 pt-1">
+            {dialogueSceneReady ? (
+              <div className="space-y-1.5">
+                <div className="text-[11px] font-semibold text-emerald-300">
+                  Dialogue Scene Ad — playable with audio
+                </div>
+                <video
+                  key={c.dialogue_scene_video_url}
+                  src={c.dialogue_scene_video_url}
+                  controls
+                  preload="metadata"
+                  className="w-full max-w-md rounded-lg ring-2 ring-fuchsia-400/40 shadow"
+                />
+                <div className="flex items-center gap-3 text-xs flex-wrap">
+                  <a
+                    href={c.dialogue_scene_video_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-spark hover:underline font-semibold"
+                    download
+                  >
+                    download Dialogue Scene Ad ↗
+                  </a>
+                  <button
+                    type="button"
+                    onClick={handleStitchDialogue}
+                    disabled={dialogueStitchBusy}
+                    className="text-[10px] text-zinc-500 hover:text-zinc-300 disabled:opacity-50"
+                    title="Re-stitch the cached line clips"
+                  >
+                    {dialogueStitchBusy ? 'Re-stitching…' : 'rebuild'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={handleStitchDialogue}
+                disabled={
+                  dialogueStitchBusy
+                  || !dialogueAllLinesReady
+                  || Boolean(dialogueLineGenId)
+                }
+                className="rounded-md bg-fuchsia-500/80 hover:bg-fuchsia-500 text-zinc-100 text-xs font-semibold px-3 py-1.5 disabled:opacity-50"
+              >
+                {dialogueStitchBusy
+                  ? 'Stitching Dialogue Scene…'
+                  : 'Stitch Dialogue Scene'}
+              </button>
+            )}
+            {!dialogueAllLinesReady && !dialogueSceneReady && (
+              <p className="text-[10px] text-zinc-500">
+                Generate every line before stitching.
+              </p>
+            )}
+            {c.dialogue_scene_error && c.dialogue_scene_status === 'failed' && (
+              <p className="text-[10px] text-rose-300" title={c.dialogue_scene_error}>
+                {c.dialogue_scene_error}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+
   const realtimeBody = (
     <div className="space-y-2">
       {avatarReady ? (
@@ -2326,6 +2830,12 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
       label: 'Voiced Storyboard',
       url: storyboardVoicedReady ? c.storyboard_voiced_url : null,
       meta: 'storyboard visual + host clip audio (ffmpeg)',
+    },
+    // PR AF — Dialogue Scene final output.
+    {
+      label: 'Dialogue Scene Ad',
+      url: dialogueSceneReady ? c.dialogue_scene_video_url : null,
+      meta: 'multi-character talking skit · sequential avatar_videos stitch (ffmpeg)',
     },
     {
       // PR AB — same artefact, user-facing rename. Meta still reports
@@ -2574,6 +3084,7 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
         {activeTab === 'visuals' && visualsBody}
         {activeTab === 'character' && characterBody}
         {activeTab === 'voice' && voiceBody}
+        {activeTab === 'dialogue' && dialogueBody}
         {activeTab === 'realtime' && realtimeBody}
         {activeTab === 'exports' && exportsBody}
       </div>

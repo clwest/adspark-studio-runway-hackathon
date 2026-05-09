@@ -161,4 +161,28 @@ export const api = {
       `/api/campaigns/${encodeURIComponent(campaignId)}/storyboard/shot/${encodeURIComponent(shotId)}/prompt`,
       { method: 'POST', body: JSON.stringify({ prompt }) },
     ),
+  // PR AF — Multi-Character Dialogue Scene Builder. Plan a 3-line
+  // scene, edit each line's text/character, render each line via
+  // avatar_videos, stitch into one MP4. Mirrors the storyboard
+  // helper shape.
+  planDialogue: (campaignId) =>
+    jsonFetch(
+      `/api/campaigns/${encodeURIComponent(campaignId)}/dialogue/plan`,
+      { method: 'POST' },
+    ),
+  saveDialogueLine: (campaignId, lineId, body = {}) =>
+    jsonFetch(
+      `/api/campaigns/${encodeURIComponent(campaignId)}/dialogue/line/${encodeURIComponent(lineId)}`,
+      { method: 'POST', body: JSON.stringify(body) },
+    ),
+  generateDialogueLine: (campaignId, lineId) =>
+    jsonFetch(
+      `/api/campaigns/${encodeURIComponent(campaignId)}/dialogue/generate-line/${encodeURIComponent(lineId)}`,
+      { method: 'POST' },
+    ),
+  stitchDialogue: (campaignId) =>
+    jsonFetch(
+      `/api/campaigns/${encodeURIComponent(campaignId)}/dialogue/stitch`,
+      { method: 'POST' },
+    ),
 }

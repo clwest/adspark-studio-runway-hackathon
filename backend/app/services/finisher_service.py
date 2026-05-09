@@ -446,6 +446,142 @@ class VideoFinisher:
                 error=f"unexpected: {exc!s}"[:200],
             )
 
+    # ---- PR AF — Dialogue Scene Builder ----------------------------
+
+    def dialogue_dir(self) -> Path:
+        d = self.dir.parent / "dialogue"
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
+    def dialogue_line_path(self, campaign_id: str, line_id: str) -> Path:
+        return self.dialogue_dir() / f"{campaign_id}-{line_id}.mp4"
+
+    def dialogue_scene_path(self, campaign_id: str) -> Path:
+        return self.dir / f"{campaign_id}-dialogue-scene.mp4"
+
+    def has_dialogue_scene(self, campaign_id: str) -> bool:
+        return self.dialogue_scene_path(campaign_id).exists()
+
+    def build_dialogue_scene(
+        self,
+        campaign_id: str,
+        line_paths: "list[Path]",
+        *,
+        target_w: int = 1088,
+        target_h: int = 704,
+        fps: int = 30,
+        timeout: float = 240.0,
+    ) -> CommercialResult:
+        """PR AF — concat N talking-avatar line clips into a single
+        sequential dialogue MP4 via ffmpeg's filter_complex `concat`
+        filter with **audio preserved** (a=1). Each line is normalised
+        to the avatar_videos native dim (1088×704) at 30 fps so a
+        future polish pass with mixed-source clips would still concat
+        cleanly, even though all V1 inputs share the gwm1_avatars
+        dimensions.
+
+        Outputs h264 video + AAC audio. Mirrors `build_storyboard` in
+        shape but keeps the audio track because dialogue lines carry
+        the spokesperson speech.
+        """
+        if not is_ffmpeg_available():
+            return CommercialResult(
+                status="unavailable",
+                error="ffmpeg not found on PATH",
+            )
+        if not line_paths:
+            return CommercialResult(
+                status="failed",
+                error="no dialogue line inputs supplied",
+            )
+        for p in line_paths:
+            if not p.exists():
+                return CommercialResult(
+                    status="failed",
+                    error=f"missing dialogue line input: {p.name}",
+                )
+
+        target = self.dialogue_scene_path(campaign_id)
+        tmp = target.with_suffix(".mp4.tmp")
+
+        # Normalise each input then concat with audio.
+        norm_filters = []
+        concat_in = ""
+        for idx in range(len(line_paths)):
+            norm_filters.append(
+                f"[{idx}:v]scale={target_w}:{target_h}:force_original_aspect_ratio=increase,"
+                f"crop={target_w}:{target_h},setsar=1,fps={fps}[v{idx}]"
+            )
+            # Re-encode + resample audio so silent placeholders + real
+            # AAC tracks share a uniform stream the concat filter accepts.
+            norm_filters.append(
+                f"[{idx}:a]aresample=async=1,asetpts=N/SR/TB[a{idx}]"
+            )
+            concat_in += f"[v{idx}][a{idx}]"
+        filter_complex = (
+            ";".join(norm_filters)
+            + f";{concat_in}concat=n={len(line_paths)}:v=1:a=1[outv][outa]"
+        )
+
+        cmd = ["ffmpeg", "-y", "-loglevel", "error"]
+        for p in line_paths:
+            cmd += ["-i", str(p)]
+        cmd += [
+            "-filter_complex", filter_complex,
+            "-map", "[outv]",
+            "-map", "[outa]",
+            "-c:v", "libx264",
+            "-preset", "veryfast",
+            "-crf", "23",
+            "-pix_fmt", "yuv420p",
+            "-c:a", "aac",
+            "-b:a", "192k",
+            "-movflags", "+faststart",
+            "-f", "mp4",
+            str(tmp),
+        ]
+        try:
+            logger.info(
+                "ffmpeg dialogue stitch campaign=%s lines=%d",
+                campaign_id, len(line_paths),
+            )
+            result = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=timeout
+            )
+            if result.returncode != 0:
+                stderr = (result.stderr or "").strip()[-400:]
+                tmp.unlink(missing_ok=True)
+                return CommercialResult(
+                    status="failed",
+                    error=f"ffmpeg rc={result.returncode}: {stderr}",
+                )
+            if not tmp.exists():
+                return CommercialResult(
+                    status="failed",
+                    error="ffmpeg ok but dialogue scene output missing",
+                )
+            tmp.replace(target)
+            return CommercialResult(status="ok", output_path=target)
+        except subprocess.TimeoutExpired:
+            tmp.unlink(missing_ok=True)
+            return CommercialResult(
+                status="failed",
+                error=f"ffmpeg timed out after {timeout}s",
+            )
+        except OSError as exc:
+            tmp.unlink(missing_ok=True)
+            return CommercialResult(
+                status="failed",
+                error=f"io error: {exc}"[:200],
+            )
+        except Exception as exc:
+            tmp.unlink(missing_ok=True)
+            logger.exception("unexpected ffmpeg error (dialogue stitch)")
+            return CommercialResult(
+                status="failed",
+                error=f"unexpected: {exc!s}"[:200],
+            )
+
     def build_voiced_storyboard(
         self,
         campaign_id: str,

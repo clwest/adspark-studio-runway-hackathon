@@ -37,6 +37,7 @@ from ..services.finisher_service import (
     is_ffmpeg_available,
 )
 from ..services import storyboard_service as storyboard_service  # type: ignore[attr-defined]
+from ..services import dialogue_service as dialogue_service  # type: ignore[attr-defined]
 from ..services.storage import CampaignStore, VideoCache
 
 logger = logging.getLogger(__name__)
@@ -140,6 +141,10 @@ def delete_campaign(
         candidates.append(data / "storyboard" / f"{campaign_id}-{shot.id}.mp4")
     candidates.append(data / "finished" / f"{campaign_id}-storyboard.mp4")
     candidates.append(data / "finished" / f"{campaign_id}-storyboard-voice.mp4")
+    # PR AF — Dialogue scene line caches + stitched output.
+    for line in (record.dialogue_lines or []):
+        candidates.append(data / "dialogue" / f"{campaign_id}-{line.id}.mp4")
+    candidates.append(data / "finished" / f"{campaign_id}-dialogue-scene.mp4")
 
     for path in candidates:
         try:
@@ -1013,6 +1018,334 @@ def get_storyboard_voiced_video(
         str(path),
         media_type="video/mp4",
         filename=f"adspark-{campaign_id}-storyboard-voice.mp4",
+    )
+
+
+# ---- PR AF — Multi-Character Dialogue Scene Builder ----------------
+
+
+def _line_video_url(campaign_id: str, line_id: str) -> str:
+    return f"/api/campaigns/{campaign_id}/dialogue/line/{line_id}"
+
+
+_DIALOGUE_LINE_MAX = 300
+
+
+@router.post("/{campaign_id}/dialogue/plan", response_model=Campaign)
+def post_dialogue_plan(
+    campaign_id: str,
+    settings: Settings = Depends(get_settings),
+    store: CampaignStore = Depends(_store),
+) -> Campaign:
+    """Generate a deterministic 3-line dialogue scene from the saved
+    campaign + attached character + a second ready character (when
+    available). Pure local computation — no Runway calls.
+    """
+    record = store.get(campaign_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="campaign not found")
+
+    lines, err = dialogue_service.plan_lines(record, settings)
+    if err:
+        raise HTTPException(status_code=409, detail=err)
+
+    serialised = [line.model_dump() for line in lines]
+    updated = store.update_dialogue_plan(
+        campaign_id,
+        lines=serialised,
+        dialogue_scene_status="ready",
+        dialogue_scene_error=None,
+    )
+    if not updated:
+        raise HTTPException(status_code=404, detail="campaign not found")
+    logger.info(
+        "dialogue plan campaign=%s lines=%d",
+        campaign_id, len(lines),
+    )
+    return updated
+
+
+class DialogueLineBody(BaseModel):
+    """PATCH-shaped body for editing a planned dialogue line."""
+
+    text: Optional[str] = Field(default=None, max_length=_DIALOGUE_LINE_MAX)
+    character_id: Optional[str] = Field(default=None)
+
+
+@router.post(
+    "/{campaign_id}/dialogue/line/{line_id}",
+    response_model=Campaign,
+)
+def post_dialogue_line(
+    campaign_id: str,
+    line_id: str,
+    body: DialogueLineBody,
+    settings: Settings = Depends(get_settings),
+    store: CampaignStore = Depends(_store),
+) -> Campaign:
+    """Update a planned dialogue line's text and/or speaker. Resets
+    that line's status to ``idle`` so the next Generate Line uses the
+    new text + character; invalidates the stitched scene.
+    """
+    record = store.get(campaign_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="campaign not found")
+    if not any(l.id == line_id for l in (record.dialogue_lines or [])):
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"line {line_id!r} not found — plan the dialogue first "
+                "(POST /dialogue/plan)."
+            ),
+        )
+
+    update_kwargs: dict = {"status": "idle"}
+    if body.text is not None:
+        text = body.text.strip()
+        if text and len(text) > _DIALOGUE_LINE_MAX:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"line text exceeds the {_DIALOGUE_LINE_MAX}-char "
+                    f"avatar_videos limit ({len(text)} chars)."
+                ),
+            )
+        update_kwargs["text"] = text
+    if body.character_id is not None:
+        cid = body.character_id.strip() or None
+        if cid:
+            # Verify the character exists + has a ready avatar.
+            ready = dialogue_service._ready_characters(settings)
+            match = next((c for c in ready if c["id"] == cid), None)
+            if not match:
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        f"character {cid!r} has no ready Runway avatar. "
+                        "Create or finish binding the avatar first."
+                    ),
+                )
+            update_kwargs["character_id"] = match["id"]
+            update_kwargs["character_name"] = match["name"]
+            update_kwargs["avatar_id"] = match["avatar_id"]
+        else:
+            update_kwargs["clear_character"] = True
+
+    updated = store.update_dialogue_line(campaign_id, line_id, **update_kwargs)
+    if not updated:
+        raise HTTPException(status_code=404, detail="campaign not found")
+    return updated
+
+
+@router.post(
+    "/{campaign_id}/dialogue/generate-line/{line_id}",
+    response_model=Campaign,
+)
+def post_dialogue_generate_line(
+    campaign_id: str,
+    line_id: str,
+    settings: Settings = Depends(get_settings),
+    store: CampaignStore = Depends(_store),
+) -> Campaign:
+    """Render one dialogue line via Runway avatar_videos. Mock mode
+    produces a deterministic ffmpeg-lavfi placeholder MP4.
+    """
+    record = store.get(campaign_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="campaign not found")
+
+    lines = list(record.dialogue_lines or [])
+    if not lines:
+        raise HTTPException(
+            status_code=409,
+            detail="Plan the dialogue first (POST /dialogue/plan).",
+        )
+    target = next((l for l in lines if l.id == line_id), None)
+    if not target:
+        raise HTTPException(
+            status_code=404,
+            detail=f"line {line_id!r} not found in dialogue plan",
+        )
+
+    if not target.avatar_id:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Line has no avatar_id. Pick a character with a ready "
+                "Runway avatar before generating."
+            ),
+        )
+    if not (target.text or "").strip():
+        raise HTTPException(
+            status_code=409,
+            detail="Line text is empty. Write the spoken line first.",
+        )
+
+    store.update_dialogue_line(campaign_id, line_id, status="running", error=None)
+
+    result = dialogue_service.generate_line(record, target, settings)
+    if result.status == "ok":
+        logger.info(
+            "dialogue line ok campaign=%s line=%s task=%s mock=%s",
+            campaign_id, line_id, result.task_id, result.mock_mode,
+        )
+        updated = store.update_dialogue_line(
+            campaign_id, line_id,
+            status="ok",
+            task_id=result.task_id,
+            video_url=_line_video_url(campaign_id, line_id),
+            cache_filename=(
+                result.output_path.name if result.output_path else None
+            ),
+            error=None,
+            mock_mode=result.mock_mode,
+        )
+        # Stitched scene is stale once any line changes.
+        if updated:
+            updated = store.update_dialogue_stitch(
+                campaign_id,
+                dialogue_scene_video_url=None,
+                dialogue_scene_status="ready",
+                dialogue_scene_error=None,
+            ) or updated
+    else:
+        logger.warning(
+            "dialogue line %s campaign=%s line=%s err=%s",
+            result.status, campaign_id, line_id, result.error,
+        )
+        updated = store.update_dialogue_line(
+            campaign_id, line_id,
+            status="failed",
+            task_id=result.task_id,
+            video_url=None,
+            error=result.error,
+            mock_mode=result.mock_mode,
+        )
+    if not updated:
+        raise HTTPException(status_code=404, detail="campaign not found")
+    return updated
+
+
+@router.post("/{campaign_id}/dialogue/stitch", response_model=Campaign)
+def post_dialogue_stitch(
+    campaign_id: str,
+    settings: Settings = Depends(get_settings),
+    store: CampaignStore = Depends(_store),
+    finisher: VideoFinisher = Depends(_finisher),
+) -> Campaign:
+    """Concat all generated dialogue line clips into one MP4 with
+    audio preserved. Refuses unless every line is ``ok``.
+    """
+    record = store.get(campaign_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="campaign not found")
+    lines = list(record.dialogue_lines or [])
+    if not lines:
+        raise HTTPException(
+            status_code=409,
+            detail="Plan the dialogue first (POST /dialogue/plan).",
+        )
+    if any(line.status != "ok" for line in lines):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "All dialogue lines must be ready before stitching. "
+                "Generate every line first."
+            ),
+        )
+    if not is_ffmpeg_available():
+        store.update_dialogue_stitch(
+            campaign_id,
+            dialogue_scene_video_url=None,
+            dialogue_scene_status="failed",
+            dialogue_scene_error="ffmpeg not found on PATH",
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="ffmpeg is not installed on the server",
+        )
+
+    line_paths = [
+        dialogue_service.line_path(settings, campaign_id, line.id)
+        for line in lines
+    ]
+    missing = [p.name for p in line_paths if not p.exists()]
+    if missing:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "One or more line caches are missing on disk: "
+                f"{missing}. Re-generate those lines."
+            ),
+        )
+
+    store.update_dialogue_stitch(
+        campaign_id,
+        dialogue_scene_video_url=None,
+        dialogue_scene_status="stitching",
+        dialogue_scene_error=None,
+    )
+
+    result = finisher.build_dialogue_scene(campaign_id, line_paths)
+    if result.status == "ok":
+        logger.info(
+            "dialogue stitch ok campaign=%s -> %s",
+            campaign_id, result.output_path,
+        )
+        updated = store.update_dialogue_stitch(
+            campaign_id,
+            dialogue_scene_video_url=f"/api/campaigns/{campaign_id}/dialogue-scene",
+            dialogue_scene_status="ok",
+            dialogue_scene_error=None,
+        )
+    else:
+        logger.warning(
+            "dialogue stitch %s campaign=%s err=%s",
+            result.status, campaign_id, result.error,
+        )
+        updated = store.update_dialogue_stitch(
+            campaign_id,
+            dialogue_scene_video_url=None,
+            dialogue_scene_status="failed",
+            dialogue_scene_error=result.error,
+        )
+    return updated or record
+
+
+@router.get("/{campaign_id}/dialogue-scene")
+def get_dialogue_scene_video(
+    campaign_id: str,
+    finisher: VideoFinisher = Depends(_finisher),
+) -> FileResponse:
+    path = finisher.dialogue_scene_path(campaign_id)
+    if not path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="No stitched dialogue scene for this campaign",
+        )
+    return FileResponse(
+        str(path),
+        media_type="video/mp4",
+        filename=f"adspark-{campaign_id}-dialogue-scene.mp4",
+    )
+
+
+@router.get("/{campaign_id}/dialogue/line/{line_id}")
+def get_dialogue_line_video(
+    campaign_id: str,
+    line_id: str,
+    settings: Settings = Depends(get_settings),
+) -> FileResponse:
+    path = dialogue_service.line_path(settings, campaign_id, line_id)
+    if not path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"No cached line {line_id!r} for this campaign",
+        )
+    return FileResponse(
+        str(path),
+        media_type="video/mp4",
+        filename=f"adspark-{campaign_id}-{line_id}.mp4",
     )
 
 

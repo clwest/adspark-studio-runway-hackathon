@@ -412,6 +412,122 @@ class CampaignStore:
                     return Campaign.model_validate(row)
         return None
 
+    # ---- PR AF — Multi-Character Dialogue Scene Builder ------------
+
+    def update_dialogue_plan(
+        self,
+        campaign_id: str,
+        lines: "list[dict]",
+        dialogue_scene_status: Optional[str],
+        dialogue_scene_error: Optional[str] = None,
+    ) -> Optional[Campaign]:
+        """Persist a freshly-planned dialogue scene. Resets the stitched
+        video so a re-plan invalidates any older final output.
+        """
+        with _LOCK:
+            rows = self._read()
+            for row in rows:
+                if row.get("id") == campaign_id:
+                    row["dialogue_lines"] = lines
+                    row["dialogue_scene_status"] = dialogue_scene_status
+                    row["dialogue_scene_error"] = dialogue_scene_error
+                    row["dialogue_scene_video_url"] = None
+                    self._write(rows)
+                    return Campaign.model_validate(row)
+        return None
+
+    def update_dialogue_line(
+        self,
+        campaign_id: str,
+        line_id: str,
+        *,
+        character_id: Optional[str] = None,
+        character_name: Optional[str] = None,
+        avatar_id: Optional[str] = None,
+        text: Optional[str] = None,
+        status: Optional[str] = None,
+        task_id: Optional[str] = None,
+        video_url: Optional[str] = None,
+        cache_filename: Optional[str] = None,
+        error: Optional[str] = None,
+        mock_mode: Optional[bool] = None,
+        clear_text: bool = False,
+        clear_character: bool = False,
+    ) -> Optional[Campaign]:
+        """Patch a single dialogue line. Pass ``None`` to leave a field
+        untouched; use ``clear_text=True`` / ``clear_character=True`` to
+        explicitly clear those fields. When status is set to ``idle`` we
+        also clear video_url + task_id + error (e.g. after a text/character
+        edit that invalidates the previous render).
+        """
+        with _LOCK:
+            rows = self._read()
+            for row in rows:
+                if row.get("id") == campaign_id:
+                    lines = list(row.get("dialogue_lines") or [])
+                    matched = False
+                    for line in lines:
+                        if line.get("id") == line_id:
+                            matched = True
+                            if clear_character:
+                                line["character_id"] = None
+                                line["character_name"] = None
+                                line["avatar_id"] = None
+                            if character_id is not None:
+                                line["character_id"] = character_id
+                            if character_name is not None:
+                                line["character_name"] = character_name
+                            if avatar_id is not None:
+                                line["avatar_id"] = avatar_id
+                            if clear_text:
+                                line["text"] = ""
+                            elif text is not None:
+                                line["text"] = text
+                            if status is not None:
+                                line["status"] = status
+                                if status == "idle":
+                                    line["video_url"] = None
+                                    line["task_id"] = None
+                                    line["error"] = None
+                            if task_id is not None:
+                                line["task_id"] = task_id
+                            if video_url is not None:
+                                line["video_url"] = video_url
+                            if cache_filename is not None:
+                                line["cache_filename"] = cache_filename
+                            line["error"] = error
+                            if mock_mode is not None:
+                                line["mock_mode"] = mock_mode
+                            break
+                    if not matched:
+                        return None
+                    row["dialogue_lines"] = lines
+                    # Any line edit invalidates the stitched output.
+                    if row.get("dialogue_scene_status") == "ok":
+                        row["dialogue_scene_status"] = "ready"
+                    row["dialogue_scene_video_url"] = None
+                    self._write(rows)
+                    return Campaign.model_validate(row)
+        return None
+
+    def update_dialogue_stitch(
+        self,
+        campaign_id: str,
+        dialogue_scene_video_url: Optional[str],
+        dialogue_scene_status: Optional[str],
+        dialogue_scene_error: Optional[str],
+    ) -> Optional[Campaign]:
+        with _LOCK:
+            rows = self._read()
+            for row in rows:
+                if row.get("id") == campaign_id:
+                    row["dialogue_scene_video_url"] = dialogue_scene_video_url
+                    row["dialogue_scene_status"] = dialogue_scene_status
+                    row["dialogue_scene_error"] = dialogue_scene_error
+                    self._write(rows)
+                    return Campaign.model_validate(row)
+        return None
+
     def update_commercial_script(
         self,
         campaign_id: str,
