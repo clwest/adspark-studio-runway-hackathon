@@ -320,6 +320,32 @@ across all five calls — confirming no PATCH side effects.
 `data-testid` hooks: `custom-voice-refresh-avatar` (the
 button), `custom-voice-refresh-status` (the busy / error row).
 
+#### Verification freshness label (PR AW)
+
+A tiny relative-time caption — *"Last checked just now / 4m
+ago / 2h ago / 3d ago / Not checked yet"* — sits below the
+pill row whenever the character has both an avatar and a
+cloned voice. Updates immediately after every clone / apply /
+refresh response since each one persists a fresh
+`avatar_voice_verified_at` timestamp.
+
+Buckets:
+
+| Δt | Caption |
+|---|---|
+| < 45 s | *"Last checked just now"* |
+| < 60 m | *"Last checked Nm ago"* |
+| < 24 h | *"Last checked Nh ago"* |
+| ≥ 24 h | *"Last checked Nd ago"* |
+| no timestamp | *"Not checked yet"* |
+| future timestamp (clock skew) | clamps to *"just now"* |
+
+Pure frontend formatter — no date library, no polling, no
+new backend route. The hover tooltip shows the raw ISO
+timestamp for diagnostics.
+
+`data-testid` hook: `custom-voice-verify-freshness`.
+
 #### Recording in-browser (PR AO)
 
 Below the file picker on each library tile sits a small

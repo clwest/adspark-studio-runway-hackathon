@@ -1,15 +1,13 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after PR AV (Avatar Status Manual Refresh)
-on top of the PR AG–AU / SESSION 011 anchors. Backend route
-count is **67** application routes — PR AV adds one new
-endpoint (`POST /api/characters/{id}/refresh-avatar-voice`)
-on top of the 66 routes from PR AU. The route is read-only:
-it reuses `fetch_avatar_voice` (PR AS) +
-`compute_voice_drift_status` (PR AT) without ever touching the
-PR AQ PATCH path, so an operator can re-check Runway state
-without mutating the binding.
+context-kit refresh after PR AW (Voice Verification Freshness
+Label) on top of the PR AG–AV / SESSION 011 anchors. Backend
+route count is **67** application routes — PR AW is a
+frontend-only slice that turns the existing
+`avatar_voice_verified_at` timestamp into an inline relative-
+time label so operators can tell at a glance how stale the
+verification is. No new endpoint added.
 
 ## Backend (`backend/`)
 
@@ -70,7 +68,7 @@ without mutating the binding.
 | `src/components/CharacterStudio.jsx` | real | **PR K + V + AA** — top-level studio panel with editable Portrait Prompt textarea + voice preset dropdown with **PR AA description chip** + create form + character library |
 | `src/components/CharacterCard.jsx` | real | Single tile component reused in studio library and per-campaign attach picker |
 | `src/components/ModeBanner.jsx` | real | Readiness chip, per-provider pills, optional credits/cap chip |
-| `tests/adspark-smoke.spec.js` | real | Playwright single-shot mock-mode end-to-end; covers PR A through PR AP (Stage-3 Commercial Script + breadcrumb, Storyboard subsection, Ad Mode picker w/ 3 cards, Spokesperson Ad rename, Dialogue tab + Plan button, all Exports rows + the captioned reels labels, Realtime grounding card + Conversation transcript card with **export button assertions: copy-markdown, download-txt, post-fetch enable + status banner**, brand colour control, Character custom-voice section + **MediaRecorder Start recording button** + **negative assertions for the PR AP preview audio + helper text in idle state**) |
+| `tests/adspark-smoke.spec.js` | real | Playwright single-shot mock-mode end-to-end; covers PR A through PR AW (Stage-3 Commercial Script + breadcrumb, Storyboard subsection, Ad Mode picker w/ 3 cards, Spokesperson Ad rename, Dialogue tab + Plan button, all Exports rows + the captioned reels labels, Realtime grounding card + Conversation transcript card with **export button assertions: copy-markdown, download-txt, post-fetch enable + status banner**, brand colour control, Character custom-voice section + **MediaRecorder Start recording button** + **negative assertions for the PR AP preview audio + helper text in idle state** + **PR AS/AT/AU/AV/AW resilient assertions for resolved/drift/unverified pills, repair button, refresh button, and freshness label**) |
 | `src/transcriptExport.js` | real | **PR AL** — pure helpers `buildTranscriptMarkdown`, `buildTranscriptText`, `transcriptFilename`, `copyToClipboard`, `downloadTextFile`. No backend round-trip — operates on the turns persisted by PR AJ on the Campaign payload. Markdown output uses bold-speaker syntax + the campaign / conversation-id / fetched-at preamble; text output is plain ASCII with `Speaker:` prefixes |
 
 ## Key-dependent behavior
@@ -217,6 +215,7 @@ the line's own `avatar_id`).
 | PR AT | Avatar Voice Drift Detection (compare cloned vs resolved voice id; persist match/drift/unknown; collapse PR AS pill into three operator-facing branches: match / drift / unverified) | (post-v13) |
 | PR AU | Voice Drift Repair Action (frontend-only one-click "Repair voice drift" button on the PR AT mismatch branch; reuses POST /apply-voice for PATCH + verify + drift; rose pill flips to emerald on success) | (post-v13) |
 | PR AV | Avatar Status Manual Refresh (read-only POST /refresh-avatar-voice route + Refresh avatar status button; reuses fetch_avatar_voice + compute_voice_drift_status without invoking PATCH; PR AQ patch fields preserved across refreshes) | (post-v13) |
+| PR AW | Voice Verification Freshness Label (frontend-only relative-time formatter + inline "Last checked … ago / Not checked yet" caption beside the verify pill) | (post-v13) |
 
 ## Known limitations (current main)
 

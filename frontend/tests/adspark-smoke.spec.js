@@ -297,6 +297,21 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
       .getByTestId('custom-voice-refresh-avatar')
       .count()
     expect(refreshButtons).toBeLessThanOrEqual(voiceSectionCount)
+    // PR AW — verify freshness label. Renders any time the
+    // character has both a cloned voice and a ready avatar
+    // (same gate as the PR AV refresh button). Bounded above
+    // by the voice section count; in the default smoke pass
+    // with no cloned voices the count is 0. When present, the
+    // first label must contain either "just now" / "Nm ago"
+    // / "Nh ago" / "Nd ago" / "Not checked yet".
+    const freshnessLabels = page.getByTestId('custom-voice-verify-freshness')
+    const freshnessCount = await freshnessLabels.count()
+    expect(freshnessCount).toBeLessThanOrEqual(voiceSectionCount)
+    if (freshnessCount > 0) {
+      await expect(freshnessLabels.first()).toContainText(
+        /(just now|\d+m ago|\d+h ago|\d+d ago|Not checked yet)/i,
+      )
+    }
   }
 
   // 7b.6. PR U — stage order: Spokesperson leads, Campaign Brief

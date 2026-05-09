@@ -4,35 +4,33 @@
 `108ca3b`; PR AJ `444cb6a`; PR AK `c59251a`; PR AL `8a43af2`;
 PR AM `3e12d27`; PR AN `f255c22`; PR AO `5bca7c4`; PR AP
 `3c6483e`; PR AQ `ec35c0e`; PR AR `5aa5579`; PR AS `2321fd7`;
-PR AT `632b696`; PR AU `485310a feat: repair detected voice
-drift in one click`; PR AV Avatar Status Manual Refresh in
-flight on top — SESSION_012–SESSION_027 handoffs added).
+PR AT `632b696`; PR AU `485310a`; PR AV `b9b7fee feat:
+read-only refresh for avatar voice status`; PR AW Voice
+Verification Freshness Label in flight on top —
+SESSION_012–SESSION_028 handoffs added).
 
 ## Where things stand
 
-- **Branch:** `main` at `485310a` (`feat: repair detected voice
-  drift in one click`) on `origin/main`. PR AV patch in flight
-  on top — no new commit / tag yet, both pending explicit
-  user approval.
+- **Branch:** `main` at `b9b7fee` (`feat: read-only refresh for
+  avatar voice status`) on `origin/main`. PR AW patch in flight
+  on top — no new commit / tag yet, both pending explicit user
+  approval.
 - **Latest tag:** still **`hackathon-submission-v13`** at `ec446e4`
-  (PR AF). PR AG–AU shipped clone → apply → preview → verify
-  → drift detect → drift repair; PR AV adds the read-only
-  counterpart so operators can re-check Runway state without
-  mutating the binding.
+  (PR AF). PR AG–AV shipped clone → apply → preview → verify
+  → drift detect → drift repair → read-only refresh; PR AW
+  adds inline UX clarity so operators can tell at a glance
+  how stale the verification is.
 - **Backend routes:** **67** application + FastAPI built-ins
-  (was 66 at PR AU). PR AV adds one new endpoint:
-  `POST /api/characters/{id}/refresh-avatar-voice` (read-only
-  GET /v1/avatars/{id} + drift recompute, no PATCH).
-- **Frontend build:** 321.88 KB initial JS / 90.29 KB gzip +
-  561.97 KB lazy `@runwayml/avatars-react` chunk (≈ +1.3 KB
-  initial / +0.2 KB gzip vs PR AU — PR AV added the refresh
-  button + busy/error state + handler wiring).
-- **Playwright smoke:** `1 passed (~21.7 s)` against the mock
-  backend; PR AV extends the resilient assertion so the
-  refresh-button count is bounded by the voice section count.
-  Read-only proof verified out-of-band: 5 back-to-back
-  refreshes preserve `custom_voice_avatar_patch_status` and
-  `custom_voice_avatar_patched_at` byte-for-byte.
+  (unchanged from PR AV; PR AW is frontend-only).
+- **Frontend build:** 322.44 KB initial JS / 90.49 KB gzip +
+  561.97 KB lazy `@runwayml/avatars-react` chunk (≈ +0.6 KB
+  initial / +0.2 KB gzip vs PR AV — PR AW added the relative-
+  time formatter + freshness line).
+- **Playwright smoke:** `1 passed (~26.7 s)` against the mock
+  backend; PR AW extends the resilient assertion so the
+  freshness-label count is bounded by the voice section
+  count, and asserts the first label matches one of the
+  five freshness phrases.
 - **Repo:** https://github.com/clwest/adspark-studio-runway-hackathon
   (private). Pushes happen on explicit user approval.
 - **Stale local feature branches:** 22 left over from PR A through
@@ -134,6 +132,14 @@ flight on top — SESSION_012–SESSION_027 handoffs added).
   `custom_voice_avatar_patch_status` + `_patched_at`
   byte-identical. data-testid: `custom-voice-refresh-avatar`,
   `custom-voice-refresh-status`.
+- **Voice verification freshness** (PR AW) — frontend-only
+  *"Last checked … ago / Not checked yet"* caption beside the
+  verify pill. Pure helper `formatVerifyFreshness(iso)` buckets
+  into just-now / Nm / Nh / Nd / Not-checked-yet (no date
+  library). Updates immediately after every clone / apply /
+  refresh response. Future-skewed timestamps clamp to *"just
+  now"* so the label never reads negative time. data-testid:
+  `custom-voice-verify-freshness`.
 - New backend route: `POST /api/characters/{id}/clone-voice`
   (multipart form with `audio` + optional `name`). The route
   validates mime + size (cap 15 MB locally; Runway docs say

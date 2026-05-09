@@ -40,6 +40,33 @@ function _slug(name) {
     || 'character'
 }
 
+// PR AW — Voice verification freshness formatter. Pure helper that
+// turns an ISO timestamp into "Last checked just now / 4m ago / 2h ago
+// / 3d ago / Not checked yet". No date library — everything stays
+// inside the existing JS surface so the bundle doesn't grow.
+//
+// Buckets:
+//   < 45 s        → "just now"
+//   < 60 m        → "Nm ago"
+//   < 24 h        → "Nh ago"
+//   else          → "Nd ago"
+//
+// Future timestamps (clock skew on a stale tab) clamp to "just now"
+// so the label never reads negative time.
+export function formatVerifyFreshness(isoString, nowMs = Date.now()) {
+  if (!isoString) return 'Not checked yet'
+  const ts = Date.parse(isoString)
+  if (!Number.isFinite(ts)) return 'Not checked yet'
+  const deltaMs = nowMs - ts
+  if (deltaMs < 45_000) return 'Last checked just now'
+  const minutes = Math.floor(deltaMs / 60_000)
+  if (minutes < 60) return `Last checked ${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `Last checked ${hours}h ago`
+  const days = Math.floor(hours / 24)
+  return `Last checked ${days}d ago`
+}
+
 /**
  * Single character tile used by CharacterStudio (library grid) and the
  * Character picker that surfaces inside CampaignGallery's Brand
@@ -609,6 +636,21 @@ export default function CharacterCard({
               </span>
             )}
           </div>
+          {/* PR AW — voice verification freshness label. Renders any
+              time the character has both a cloned voice and an
+              avatar (same gate as PR AV's refresh button). When no
+              verify has run yet the line falls through to "Not
+              checked yet" rather than disappearing — operators can
+              tell at a glance how stale the verification is. */}
+          {customVoiceReady && avatarReady && (
+            <p
+              data-testid="custom-voice-verify-freshness"
+              className="text-[9px] text-zinc-500 font-mono"
+              title={c.avatar_voice_verified_at || 'no verification timestamp'}
+            >
+              {formatVerifyFreshness(c.avatar_voice_verified_at)}
+            </p>
+          )}
           <div className="flex items-center gap-1 flex-wrap">
             <input
               ref={fileInputRef}
