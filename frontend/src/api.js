@@ -229,4 +229,23 @@ export const api = {
       `/api/campaigns/${encodeURIComponent(campaignId)}/brand-color`,
       { method: 'POST', body: JSON.stringify({ color }) },
     ),
+  // PR AN — Custom voice cloning foundation. Multipart upload of a
+  // 10 s – 5 min audio sample to /api/characters/{id}/clone-voice;
+  // the backend POSTs Runway /v1/voices with from.type=audio (or
+  // mocks deterministically). Optional ``name`` overrides the
+  // default "AdSpark — <character>" voice label.
+  cloneCharacterVoice: async (characterId, file, name) => {
+    const fd = new FormData()
+    fd.append('audio', file)
+    if (name && name.trim()) fd.append('name', name.trim())
+    const resp = await fetch(
+      `/api/characters/${encodeURIComponent(characterId)}/clone-voice`,
+      { method: 'POST', body: fd },
+    )
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => '')
+      throw new Error(`${resp.status} ${resp.statusText}: ${text}`)
+    }
+    return resp.json()
+  },
 }

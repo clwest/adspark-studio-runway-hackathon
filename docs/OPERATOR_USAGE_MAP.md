@@ -95,8 +95,58 @@ campaign auto-attaches them via `/api/campaigns/{id}/attach-character`.
   credits previewing.
 - Once an Avatar is bound, the **Spokesperson Ad** itself is the
   fastest way to hear the voice in context.
-- Custom voice cloning via `POST /v1/voices` `from.type=audio` is
-  documented but not yet wired in AdSpark (Tier-1 future polish).
+- ~~Custom voice cloning via `POST /v1/voices` `from.type=audio`
+  is documented but not yet wired in AdSpark.~~ **Resolved by
+  PR AN — see "Cloning a custom voice" below.**
+
+### Cloning a custom voice (PR AN)
+
+Each Character Studio library tile carries a compact **Voice**
+section under the portrait + status pill:
+
+- A **status pill** that reads `preset · <name>` (default), or
+  `cloned` (real Runway), or `cloned · mock` (mock mode), or
+  `clone failed` with the upstream error in the tooltip.
+- A **file picker** (`<input type="file" accept="audio/*">`)
+  + **Clone voice** button. Audio mimetypes accepted:
+  `audio/mpeg`, `audio/wav`, `audio/m4a`, `audio/mp4`,
+  `audio/aac`, `audio/webm`, `audio/ogg`. Cap: 15 MB locally
+  (Runway docs say 10 MB).
+- Helper copy: "Upload a sample to clone a custom voice for this
+  character. Used the next time you Create Runway Avatar." When
+  a voice is cloned but the avatar still uses the preset:
+  "Voice ready — Create Runway Avatar to bind it."
+
+Backend:
+
+```
+POST /api/characters/{id}/clone-voice
+  multipart/form-data
+    audio: <file>      # required, ≤ 15 MB, audio/* mime
+    name:  "..."       # optional voice label (defaults to "AdSpark — <character>")
+```
+
+In mock mode the route returns a deterministic
+`mock_voice_<sha256(name + audio bytes)[:16]>` id and persists
+the `cloned · mock` status on the character. Re-uploading the
+same sample is idempotent; a fresh sample yields a new id.
+
+In real mode the backend embeds the audio as a base64 data URI
+and POSTs `/v1/voices` with `from.type=audio`. Failure modes:
+
+- **404** — character not found.
+- **413** — audio sample exceeds the 15 MB cap.
+- **415** — unsupported audio mime type.
+- **422** — empty / unreadable audio body.
+- **502** — Runway upstream rejection.
+
+Wiring: when the operator next clicks **Create Runway Avatar**
+on the character, `services.character_studio_client._create_avatar_real`
+sees `character.custom_voice_id` and posts
+`voice: {type: "custom", voiceId: <id>}` instead of the
+`runway-live-preset` binding. Existing avatars created before
+the clone keep their preset; the operator can re-create the
+avatar to pick up the cloned voice (no avatar PATCH today).
 
 ### Where this maps to backend
 - `POST /api/characters` (record), `POST /api/characters/{id}/generate-portrait`,

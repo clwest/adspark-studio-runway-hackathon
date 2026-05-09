@@ -1,3 +1,5 @@
+import { useRef, useState } from 'react'
+
 /**
  * Single character tile used by CharacterStudio (library grid) and the
  * Character picker that surfaces inside CampaignGallery's Brand
@@ -23,6 +25,10 @@ export default function CharacterCard({
   // calls onSetActive(true|false).
   isActive = false,
   onSetActive,
+  // PR AN — Custom voice cloning. Library tiles (compact=false) expose
+  // a small upload + clone affordance. The picker (compact=true) skips
+  // it to keep that surface tight.
+  onCloneVoice,
 }) {
   const c = character
   const portraitUrl = c.portrait_url
@@ -31,6 +37,26 @@ export default function CharacterCard({
   const avatarMock = avatarStatus === 'mock'
   const avatarFailed = avatarStatus === 'failed'
   const hasPortrait = Boolean(portraitUrl)
+  // PR AN — Custom voice cloning state. Local refs only; the upload
+  // call bubbles up via onCloneVoice(file).
+  const fileInputRef = useRef(null)
+  const [voiceClonePending, setVoiceClonePending] = useState(false)
+  const customVoiceId = c.custom_voice_id
+  const customVoiceStatus = c.custom_voice_status
+  const customVoiceMock = c.custom_voice_mock_mode === true
+  const customVoiceReady = ['ready', 'mock'].includes(customVoiceStatus || '')
+  const customVoiceFailed = customVoiceStatus === 'failed'
+
+  const handleVoiceFile = async (file) => {
+    if (!file || !onCloneVoice) return
+    setVoiceClonePending(true)
+    try {
+      await onCloneVoice(c, file)
+    } finally {
+      setVoiceClonePending(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
 
   return (
     <div
@@ -122,6 +148,92 @@ export default function CharacterCard({
           </span>
         )}
       </div>
+
+      {/* PR AN — Custom voice cloning. Library-only tile section
+          (skipped on compact tiles inside the picker). Uploads a 10 s
+          – 5 min audio sample to Runway's POST /v1/voices and persists
+          the returned voice id on the character. The next created
+          avatar will bind to the cloned voice instead of the preset. */}
+      {!compact && onCloneVoice && (
+        <div className="border-t border-zinc-800/60 pt-1.5 space-y-1" data-testid="custom-voice-section">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[9px] uppercase tracking-wide text-zinc-500 font-mono">
+              Voice
+            </span>
+            {customVoiceReady ? (
+              <span
+                data-testid="custom-voice-status"
+                className={
+                  customVoiceMock
+                    ? 'text-[9px] rounded-full bg-amber-500/20 text-amber-200 ring-1 ring-amber-400/40 px-1.5 py-0.5 font-mono'
+                    : 'text-[9px] rounded-full bg-emerald-500/25 text-emerald-200 ring-1 ring-emerald-400/40 px-1.5 py-0.5 font-mono'
+                }
+                title={customVoiceId ? `voiceId=${customVoiceId}` : ''}
+              >
+                {customVoiceMock ? 'cloned · mock' : 'cloned'}
+              </span>
+            ) : customVoiceFailed ? (
+              <span
+                data-testid="custom-voice-status"
+                className="text-[9px] rounded-full bg-rose-500/25 text-rose-200 ring-1 ring-rose-400/40 px-1.5 py-0.5 font-mono"
+                title={c.custom_voice_error || ''}
+              >
+                clone failed
+              </span>
+            ) : (
+              <span
+                data-testid="custom-voice-status"
+                className="text-[9px] rounded-full bg-zinc-800 text-zinc-300 ring-1 ring-zinc-700 px-1.5 py-0.5 font-mono"
+                title={`preset · ${c.voice_preset}`}
+              >
+                preset · {c.voice_preset}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-1 flex-wrap">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="audio/*"
+              data-testid="custom-voice-upload"
+              onChange={(e) => handleVoiceFile(e.target.files?.[0])}
+              disabled={voiceClonePending || Boolean(busyAction)}
+              className="text-[9px] text-zinc-300 file:rounded file:border-0 file:bg-zinc-800 file:text-zinc-100 file:text-[9px] file:px-2 file:py-0.5 file:mr-1 disabled:opacity-50"
+              title="Upload a 10 s – 5 min audio sample (≤ 10 MB) — supported: mp3 / wav / m4a / aac / webm / ogg"
+            />
+            <button
+              type="button"
+              data-testid="custom-voice-create"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={voiceClonePending || Boolean(busyAction)}
+              className="text-[9px] rounded bg-emerald-500/30 hover:bg-emerald-500/45 text-emerald-100 ring-1 ring-emerald-400/40 px-2 py-0.5 font-semibold disabled:opacity-50"
+              title="Open the file picker, then we'll POST /v1/voices with from.type=audio"
+            >
+              {voiceClonePending
+                ? 'Cloning…'
+                : customVoiceReady
+                ? 'Re-clone'
+                : 'Clone voice'}
+            </button>
+          </div>
+          {customVoiceFailed && c.custom_voice_error && (
+            <p className="text-[9px] text-rose-300" title={c.custom_voice_error}>
+              {c.custom_voice_error}
+            </p>
+          )}
+          {!customVoiceReady && !customVoiceFailed && (
+            <p className="text-[9px] text-zinc-500">
+              Upload a sample to clone a custom voice for this character.
+              Used the next time you Create Runway Avatar.
+            </p>
+          )}
+          {customVoiceReady && !avatarReady && (
+            <p className="text-[9px] text-emerald-300">
+              Voice ready — Create Runway Avatar to bind it.
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Action row — context-aware */}
       <div className="flex items-center gap-1 flex-wrap pt-0.5">

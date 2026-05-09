@@ -198,6 +198,22 @@ export default function CharacterStudio({
     }
   }
 
+  // PR AN — Custom voice cloning. Multipart upload bubbles up here from
+  // each library tile. Updates the character record in place so the
+  // status pill re-renders immediately.
+  const handleCloneVoice = async (c, file) => {
+    setBusy(c.id, 'voice-clone')
+    try {
+      const updated = await api.cloneCharacterVoice(c.id, file)
+      setCharacters((cs) => cs.map((x) => (x.id === c.id ? updated : x)))
+      onCharactersChanged?.()
+    } catch (e) {
+      setErrMsg(friendlyError(e, `Voice clone failed for ${c.name}`))
+    } finally {
+      clearBusy(c.id)
+    }
+  }
+
   const handleDelete = async (c) => {
     if (!confirm(`Delete character "${c.name}"? This is local only — the Runway avatar is not removed.`)) return
     setBusy(c.id, 'delete')
@@ -483,6 +499,10 @@ export default function CharacterStudio({
               onGeneratePortrait={handleGeneratePortrait}
               onCreateAvatar={handleCreateAvatar}
               onDelete={handleDelete}
+              // PR AN — pass the voice-clone handler so library tiles
+              // expose the upload + clone affordance. The picker
+              // (compact mode in CampaignGallery) doesn't pass this.
+              onCloneVoice={handleCloneVoice}
               // PR U — Spokesperson-first flow: pass active state +
               // toggle handler so the tile lights up + the action row
               // shows "Use as Spokesperson" / "Active" affordances.

@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
@@ -25,6 +25,11 @@ from ..services.character_studio_client import (
     PORTRAIT_TEMPLATES,
 )
 from ..services.character_host_client import SUPPORTED_VOICE_PRESETS
+from ..services.voice_clone_client import (
+    MAX_AUDIO_BYTES,
+    SUPPORTED_AUDIO_MIMES,
+    clone_voice_from_audio,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -203,6 +208,100 @@ def post_create_avatar(
             runway_avatar_status="failed",
             runway_avatar_error=result.error,
         )
+    return updated or record
+
+
+# ---- PR AN — Custom voice cloning foundation ----------------------
+#
+# Multipart upload of a 10 s – 5 min audio sample. POST /v1/voices
+# with from.type=audio creates a Runway voice id; AdSpark persists it
+# on the Character record and prefers it over the runway-live-preset
+# binding the next time an avatar is created. Mock mode short-circuits
+# with a deterministic ``mock_voice_<sha>`` id keyed off the character
+# + sample bytes so re-uploads are idempotent and re-recordings yield
+# a fresh id.
+
+
+@router.post("/{character_id}/clone-voice", response_model=Character)
+async def post_clone_voice(
+    character_id: str,
+    audio: UploadFile = File(..., description="10 s – 5 min audio sample (≤ 10 MB)"),
+    name: Optional[str] = Form(default=None),
+    settings: Settings = Depends(get_settings),
+    store: CharacterStore = Depends(_store),
+) -> Character:
+    """PR AN — clone a voice from an uploaded audio sample. Returns the
+    updated Character with ``custom_voice_*`` fields populated.
+
+    Real mode: ``POST /v1/voices`` with ``from.type=audio`` (audio is
+    embedded as a base64 data URI). Mock mode: deterministic
+    ``mock_voice_<sha256(name + bytes)[:16]>``.
+
+    Failure modes:
+    - 404 — character not found.
+    - 415 — unsupported audio mime type.
+    - 413 — audio sample exceeds the local 15 MB cap.
+    - 422 — empty / unreadable audio body.
+    - 502 — Runway upstream rejection (real mode only).
+    """
+    record = store.get(character_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="character not found")
+
+    mime = (audio.content_type or "").lower().strip()
+    if mime not in SUPPORTED_AUDIO_MIMES:
+        raise HTTPException(
+            status_code=415,
+            detail=(
+                f"unsupported audio mime type '{mime or audio.filename or ''}'. "
+                f"accepted: {sorted(set(SUPPORTED_AUDIO_MIMES))}"
+            ),
+        )
+
+    audio_bytes = await audio.read()
+    if not audio_bytes:
+        raise HTTPException(status_code=422, detail="audio sample is empty")
+    if len(audio_bytes) > MAX_AUDIO_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                f"audio sample is {len(audio_bytes):,} bytes "
+                f"(cap: {MAX_AUDIO_BYTES:,}); Runway's documented limit is 10 MB."
+            ),
+        )
+
+    voice_name = (
+        (name or "").strip()
+        or f"AdSpark — {(record.name or 'Character')[:60]}"
+    )
+    result = clone_voice_from_audio(voice_name, audio_bytes, mime, settings)
+
+    if result.status == "failed" or not result.voice_id:
+        store.update(
+            character_id,
+            custom_voice_id=None,
+            custom_voice_name=voice_name,
+            custom_voice_status="failed",
+            custom_voice_error=result.error,
+            custom_voice_mock_mode=result.mock_mode,
+        )
+        raise HTTPException(
+            status_code=502,
+            detail=f"voice clone failed: {result.error or 'unknown error'}",
+        )
+
+    updated = store.update(
+        character_id,
+        custom_voice_id=result.voice_id,
+        custom_voice_name=voice_name,
+        custom_voice_status=result.status,
+        custom_voice_error=None,
+        custom_voice_mock_mode=result.mock_mode,
+    )
+    logger.info(
+        "character %s voice cloned -> %s (status=%s mock=%s)",
+        character_id, result.voice_id, result.status, result.mock_mode,
+    )
     return updated or record
 
 

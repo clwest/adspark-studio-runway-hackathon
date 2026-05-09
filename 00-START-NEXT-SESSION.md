@@ -1,33 +1,36 @@
 # START NEXT SESSION — AdSpark Studio
 
 **Last touched:** 2026-05-09 (PR AG/AH `6157512`; PR AI
-`108ca3b`; PR AJ `444cb6a`; PR AK `c59251a`; PR AL `8a43af2
-feat: export transcripts as markdown or txt`; PR AM Caption
-Contrast Polish in flight on top — SESSION_012–SESSION_018
-handoffs added).
+`108ca3b`; PR AJ `444cb6a`; PR AK `c59251a`; PR AL `8a43af2`;
+PR AM `3e12d27 feat: contrast-aware reels caption styling`;
+PR AN Custom Voice Cloning Foundation in flight on top —
+SESSION_012–SESSION_019 handoffs added).
 
 ## Where things stand
 
-- **Branch:** `main` at `8a43af2` (`feat: export transcripts as
-  markdown or txt`) on `origin/main`. PR AM patch in flight on
+- **Branch:** `main` at `3e12d27` (`feat: contrast-aware reels
+  caption styling`) on `origin/main`. PR AN patch in flight on
   top — no new commit / tag yet, both pending explicit user
   approval.
 - **Latest tag:** still **`hackathon-submission-v13`** at `ec446e4`
-  (PR AF). PR AG–AL shipped the funnel + polish stack; PR AM
-  closes the loop on PR AK by making PR AH captions readable on
-  light brand backdrops.
-- **Backend routes:** **64** application + FastAPI built-ins
-  (unchanged from PR AK / PR AL; PR AM is backend-only and does
-  not add endpoints).
-- **Frontend build:** 305.43 KB initial JS / 86.53 KB gzip +
-  561.97 KB lazy `@runwayml/avatars-react` chunk (unchanged from
-  PR AL — PR AM is backend-only).
-- **Playwright smoke:** `1 passed (~22.7 s)` against the mock
-  backend; existing assertions cover the captioned reels labels +
-  brand colour control + transcript export. PR AM contrast logic
-  is verified by frame-level pixel sampling rather than UI
-  assertions (the dark / light backdrops produce visibly different
-  caption-box pixels in the cached output).
+  (PR AF). PR AG–AM shipped the funnel + polish stack; PR AN
+  starts the persistent-voice-identity arc by letting brands
+  clone a founder / mascot voice and bind it to new avatars.
+- **Backend routes:** **65** application + FastAPI built-ins
+  (was 64 at PR AM). PR AN adds one new endpoint:
+  `POST /api/characters/{id}/clone-voice`.
+- **Frontend build:** 308.74 KB initial JS / 87.34 KB gzip +
+  561.97 KB lazy `@runwayml/avatars-react` chunk (≈ +3.3 KB
+  initial / +0.8 KB gzip vs PR AL — PR AN added the upload + clone
+  affordance on each Character Studio library tile).
+- **Playwright smoke:** `1 passed (~23.5 s)` against the mock
+  backend; new assertions verify each existing CharacterCard
+  exposes the upload input, clone button, and status pill via
+  `data-testid` hooks (`custom-voice-section`,
+  `custom-voice-upload`, `custom-voice-create`,
+  `custom-voice-status`). The smoke is conditional on the
+  library having any pre-existing characters so a freshly-clean
+  data dir still passes.
 - **Repo:** https://github.com/clwest/adspark-studio-runway-hackathon
   (private). Pushes happen on explicit user approval.
 - **Stale local feature branches:** 22 left over from PR A through
@@ -35,6 +38,37 @@ handoffs added).
   (the user can run `git branch -d feature/...` whenever).
 
 ## What's implemented (full feature stack on `main`)
+
+### Character layer (PR AN — Custom Voice Cloning Foundation)
+
+- **Custom voice cloning** on every Character Studio library tile
+  (PR AN). Compact upload + clone affordance under the portrait /
+  status pill: native `<input type="file" accept="audio/*">` +
+  `Clone voice` button + colour-coded status pill (`preset · …`,
+  `cloned`, `cloned · mock`, `clone failed`).
+- New backend route: `POST /api/characters/{id}/clone-voice`
+  (multipart form with `audio` + optional `name`). The route
+  validates mime + size (cap 15 MB locally; Runway docs say
+  10 MB), embeds the audio as a base64 data URI, and POSTs
+  Runway `/v1/voices` with `from.type=audio`. Mock mode emits a
+  deterministic `mock_voice_<sha256(name + bytes)[:16]>` so
+  re-uploads are idempotent and a fresh sample yields a new id.
+- New voice-clone client at
+  `app/services/voice_clone_client.py` (separate module from
+  `audio_client.py` — same `/v1/voices` umbrella, distinct `from`
+  shape + persistence target).
+- Persisted on `Character`: `custom_voice_id`,
+  `custom_voice_name`, `custom_voice_status`
+  (`ready` / `failed` / `mock`), `custom_voice_error`,
+  `custom_voice_mock_mode`. Reuses the existing
+  `CharacterStore.update(...)` generic helper — no new storage
+  helper needed.
+- Wired into `services.character_studio_client._create_avatar_real`:
+  when `character.custom_voice_id` is set, the avatar binds to
+  `voice: {type: "custom", voiceId: ...}` instead of the
+  `runway-live-preset` binding. Existing avatars retain their
+  preset; the operator clicks **Create Runway Avatar** again to
+  pick up the cloned voice.
 
 ### Conversation layer (PR AI — Avatar documentIds for Grounded Realtime · PR AJ — Transcript Retrieval + Replay UX · PR AL — Transcript Export / Share)
 

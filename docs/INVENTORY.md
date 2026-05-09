@@ -1,12 +1,11 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after PR AM (Caption Contrast Polish for
-Brand-Coloured Reels) on top of the PR AG / PR AH / PR AI /
-PR AJ / PR AK / PR AL / SESSION 011 anchors. Backend route count
-is **64** application routes — PR AM is a backend-only finishing-
-layer slice and adds no new endpoints (extends `color_utils.py`
-and the existing `build_reels_export` filter chain).
+context-kit refresh after PR AN (Custom Voice Cloning Foundation)
+on top of the PR AG–AM / SESSION 011 anchors. Backend route count
+is **65** application routes — PR AN adds one new endpoint
+(`POST /api/characters/{id}/clone-voice`) on top of the 64 routes
+from PR AM.
 
 ## Backend (`backend/`)
 
@@ -26,7 +25,8 @@ and the existing `build_reels_export` filter chain).
 | `app/services/color_utils.py` | real | **PR AK** — `normalize_brand_color` accepts `#RRGGBB` / `RRGGBB` / `0xRRGGBB` / `#RGB`, normalises to lowercase `#RRGGBB` for storage, returns `None` on unparseable input. `to_ffmpeg_color` wraps the value as `0xRRGGBB` for ffmpeg's `pad=…:color=…`, falling back to `DEFAULT_REELS_BACKDROP` (`0x0b1220`) when the input is missing or invalid. **PR AM** — adds `hex_to_rgb`, WCAG `relative_luminance`, `is_light_color` (>= 0.5 luminance threshold), and `caption_style_for_backdrop(value) -> {font_color, box_color, box_alpha, is_light_backdrop}`. The dark default style mirrors PR AH exactly (white text / black@0.6 box) so untouched callers see no rendering change |
 | `app/services/documents_client.py` | real + mock | **PR AI** — thin wrapper around `POST /v1/documents` (`{name, content}` ≤ 40,000 chars, plain text + Markdown), `PATCH /v1/avatars/{id}` (`{documentIds: [...]}` best-effort), and `build_campaign_brief_markdown(campaign, character)` for the standard brand-brief shape. Mock mode returns deterministic `mock_doc_<sha256-of-name+content>` ids so smoke + offline demo flows can flip the grounding badge end-to-end without burning credits |
 | `app/services/audio_client.py` | real + mock | `/v1/voices` text design + `/v1/voice_dubbing`; 29-language `SUPPORTED_DUB_LANGS`; ffmpeg lavfi mock MP3s |
-| `app/services/character_studio_client.py` | real + mock | **PR K** — `PORTRAIT_TEMPLATES` (4 locked: mascot, founder, coach, local_guide); `build_prompt()`; `generate_portrait()` calls `/v1/text_to_image`; `create_avatar()` reads cached portrait → data URI → `POST /v1/avatars` → poll READY |
+| `app/services/voice_clone_client.py` | real + mock | **PR AN** — wraps `POST /v1/voices` with `from.type=audio` for custom voice cloning. `clone_voice_from_audio(name, audio_bytes, mime, settings)` returns a `VoiceCloneResult`; mock mode emits a deterministic `mock_voice_<sha256(name + bytes)[:16]>` so re-uploads of the same sample are idempotent and a fresh sample yields a new id. Caps audio at 15 MB (Runway docs say 10 MB) so an oversized sample fails with a friendly 413 before hitting the wire. Allowlist of `audio/mpeg`, `audio/wav`, `audio/m4a`, `audio/mp4`, `audio/aac`, `audio/webm`, `audio/ogg` |
+| `app/services/character_studio_client.py` | real + mock | **PR K** — `PORTRAIT_TEMPLATES` (4 locked: mascot, founder, coach, local_guide); `build_prompt()`; `generate_portrait()` calls `/v1/text_to_image`; `create_avatar()` reads cached portrait → data URI → `POST /v1/avatars` → poll READY. **PR AN** — when `character.custom_voice_id` is set, the avatar create body uses `voice: {type: "custom", voiceId: ...}` instead of the runway-live-preset binding |
 | `app/services/character_store.py` | real | **PR K** — JSON-file Character store at `backend/data/characters.json`; threading.Lock; atomic writes |
 | `app/services/storyboard_service.py` | real + mock | **PR Z + PR AC** — script-aware `_split_script_beats` planner + per-shot `image_to_video` generation + ffmpeg lavfi mock; `_shot_prompt` weaves narrative cues from `campaign.commercial_script` |
 | `app/services/dialogue_service.py` | real + mock | **PR AF** — `plan_lines` builds Hook/Beat/Closer with primary + secondary speaker selection from ready characters; `generate_line` wraps `avatar_videos` (real) + ffmpeg lavfi (mock) targeted at the line's speaker avatar |
@@ -80,7 +80,7 @@ and the existing `build_reels_export` filter chain).
 *optional* PR-F knobs — defaults are `vincent` and a curated
 Unsplash portrait URL.
 
-## Endpoints (64 application + FastAPI built-ins)
+## Endpoints (65 application + FastAPI built-ins)
 
 ```
 GET    /health
@@ -140,7 +140,8 @@ GET    /api/characters
 POST   /api/characters
 GET    /api/characters/{id}
 POST   /api/characters/{id}/generate-portrait              (PR K + PR V)
-POST   /api/characters/{id}/create-avatar                  (PR K)
+POST   /api/characters/{id}/create-avatar                  (PR K + PR AN — uses custom_voice_id when set)
+POST   /api/characters/{id}/clone-voice                    (PR AN — multipart audio upload → /v1/voices from.type=audio)
 GET    /api/characters/{id}/portrait
 DELETE /api/characters/{id}
 plus /openapi.json, /docs, /docs/oauth2-redirect, /redoc
@@ -201,6 +202,7 @@ the line's own `avatar_id`).
 | PR AK | Brand Colour Storage + Reels Styling Polish (compact card-header colour picker + ffmpeg pad colour wired into both reels routes) | (post-v13) |
 | PR AL | Transcript Export / Share (frontend-only Copy Markdown + Download TXT on the PR AJ replay card; navigator.clipboard + Blob/object-URL with safe textarea fallback) | (post-v13) |
 | PR AM | Caption Contrast Polish for Brand-Coloured Reels (WCAG luminance threshold flips drawtext fontcolor + boxcolor + alpha so captions stay readable on light brand backdrops) | (post-v13) |
+| PR AN | Custom Voice Cloning Foundation (POST /v1/voices from.type=audio, multipart upload UI on the Character Studio library tile, persisted on Character, used at Avatar create time) | (post-v13) |
 
 ## Known limitations (current main)
 

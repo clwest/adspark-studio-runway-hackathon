@@ -187,6 +187,28 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
   // the form is open.
   await page.getByRole('button', { name: /^Cancel$/i }).click()
 
+  // 7b.5d. PR AN — Custom voice cloning section. Lives inside each
+  //         CharacterCard tile in the library. The smoke campaign
+  //         doesn't create a fresh character (would mutate
+  //         characters.json), so this assertion is conditional on the
+  //         existence of any pre-existing characters in the library.
+  //         When present, every tile must expose the upload input,
+  //         the clone button, and the voice status pill.
+  const voiceSections = page.getByTestId('custom-voice-section')
+  const voiceSectionCount = await voiceSections.count()
+  if (voiceSectionCount > 0) {
+    await expect(voiceSections.first()).toBeVisible()
+    await expect(
+      voiceSections.first().getByTestId('custom-voice-upload'),
+    ).toBeVisible()
+    await expect(
+      voiceSections.first().getByTestId('custom-voice-create'),
+    ).toBeVisible()
+    await expect(
+      voiceSections.first().getByTestId('custom-voice-status'),
+    ).toBeVisible()
+  }
+
   // 7b.6. PR U — stage order: Spokesperson leads, Campaign Brief
   //        follows. PR AC' — Stage 2 title reverted to "Campaign
   //        Brief"; the Commercial Script editor moved into Stage 3

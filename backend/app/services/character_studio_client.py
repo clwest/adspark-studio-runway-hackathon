@@ -354,12 +354,24 @@ def _create_avatar_real(
     voice_preset: str,
     personality: Optional[str],
     settings: Settings,
+    *,
+    custom_voice_id: Optional[str] = None,
 ) -> tuple[str, Optional[str]]:
-    """Returns (avatar_id, processed_thumbnail_url). Raises on failure."""
+    """Returns (avatar_id, processed_thumbnail_url). Raises on failure.
+
+    PR AN — when ``custom_voice_id`` is set, the avatar binds to the
+    cloned voice (`voice: {type: "custom", voiceId: ...}`) instead of
+    the runway-live-preset. Falls back to the preset binding when no
+    custom voice has been cloned for the Character yet.
+    """
+    if custom_voice_id:
+        voice_block: dict = {"type": "custom", "voiceId": custom_voice_id}
+    else:
+        voice_block = {"type": "runway-live-preset", "presetId": voice_preset}
     body = {
         "name": name,
         "referenceImage": portrait_data_uri,
-        "voice": {"type": "runway-live-preset", "presetId": voice_preset},
+        "voice": voice_block,
         "personality": personality or "Reusable AI brand character.",
     }
     url = f"{settings.runway_api_base}/v1/avatars"
@@ -443,6 +455,7 @@ def create_avatar(
             voice_preset=voice,
             personality=personality_override or character.personality,
             settings=settings,
+            custom_voice_id=character.custom_voice_id,  # PR AN
         )
         logger.info(
             "character avatar ready character=%s avatar=%s",

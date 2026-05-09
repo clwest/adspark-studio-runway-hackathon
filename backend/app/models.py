@@ -301,6 +301,17 @@ class Character(BaseModel):
     personality: Optional[str] = None
     catchphrases: list[str] = []
     voice_preset: str = "vincent"
+    # PR AN — Custom voice cloning foundation. ``custom_voice_id`` is
+    # the Runway voice id returned by ``POST /v1/voices`` with
+    # ``from.type=audio`` (or a deterministic ``mock_voice_<sha>`` in
+    # mock mode). When set, downstream avatar creation prefers
+    # ``voice: {type: "custom", voiceId: <id>}`` over the runway-live-
+    # preset binding.
+    custom_voice_id: Optional[str] = None
+    custom_voice_name: Optional[str] = None
+    custom_voice_status: Optional[Literal["ready", "failed", "mock"]] = None
+    custom_voice_error: Optional[str] = None
+    custom_voice_mock_mode: Optional[bool] = None
 
     # Portrait — local cache lives at backend/data/characters/<id>-portrait.png
     portrait_url: Optional[str] = None  # /api/characters/{id}/portrait

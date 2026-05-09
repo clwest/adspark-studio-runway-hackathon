@@ -43,12 +43,15 @@ stitched into a longer (~15 s) silent or voiced cut.
    MP4 to disk so they survive Runway's URL expiry.
 7. **Campaign Pack** — three platform-tuned MP4s built by local
    ffmpeg: Landscape 1280×720, Reels 720×1280, Square 960×960.
-8. **Reusable Brand Character (PR K + V)** — first-class resource
-   in `data/characters.json`. `gen4_image_turbo` generates a
-   portrait from one of four locked templates (mascot / founder /
-   coach / local_guide); `/v1/avatars` binds the cached portrait
-   into a Runway Avatar. Editable Portrait Prompt textarea for
-   advanced framing.
+8. **Reusable Brand Character (PR K + V + AN)** — first-class
+   resource in `data/characters.json`. `gen4_image_turbo`
+   generates a portrait from one of four locked templates
+   (mascot / founder / coach / local_guide); `/v1/avatars` binds
+   the cached portrait into a Runway Avatar. Editable Portrait
+   Prompt textarea for advanced framing. **PR AN** — each
+   character can also carry a cloned custom voice
+   (`POST /v1/voices` `from.type=audio`); when set, new avatars
+   bind to the cloned voice instead of the runway-live-preset.
 9. **Brand Spokesperson resolution chain** —
    `character.runway_avatar_id > selected_avatar_id >
    host_avatar_id`. Drives Spokesperson Ad, Realtime session, and
