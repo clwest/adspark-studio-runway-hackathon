@@ -312,6 +312,17 @@ class Character(BaseModel):
     custom_voice_status: Optional[Literal["ready", "failed", "mock"]] = None
     custom_voice_error: Optional[str] = None
     custom_voice_mock_mode: Optional[bool] = None
+    # PR AQ — Avatar PATCH for custom voice swap. After a successful
+    # clone, AdSpark auto-PATCHes the existing Runway avatar (when
+    # one is bound) so the cloned voice applies without an avatar
+    # recreate. ``pending_avatar`` is the safe baseline when no
+    # avatar exists yet — the next Create Runway Avatar will bind
+    # the voice via the PR AN create-avatar payload.
+    custom_voice_avatar_patch_status: Optional[Literal[
+        "applied", "mock_patched", "failed", "pending_avatar"
+    ]] = None
+    custom_voice_avatar_patch_error: Optional[str] = None
+    custom_voice_avatar_patched_at: Optional[datetime] = None
 
     # Portrait — local cache lives at backend/data/characters/<id>-portrait.png
     portrait_url: Optional[str] = None  # /api/characters/{id}/portrait

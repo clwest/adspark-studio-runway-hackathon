@@ -144,9 +144,44 @@ Wiring: when the operator next clicks **Create Runway Avatar**
 on the character, `services.character_studio_client._create_avatar_real`
 sees `character.custom_voice_id` and posts
 `voice: {type: "custom", voiceId: <id>}` instead of the
-`runway-live-preset` binding. Existing avatars created before
-the clone keep their preset; the operator can re-create the
-avatar to pick up the cloned voice (no avatar PATCH today).
+`runway-live-preset` binding.
+
+#### Auto-PATCH for existing avatars (PR AQ)
+
+Already-bound avatars no longer have to be re-created to pick up
+a freshly cloned voice. After every successful
+`POST /clone-voice`, the route runs a best-effort
+`PATCH /v1/avatars/{id}` body `{voice: {type: "custom",
+voiceId: <id>}}` against the character's existing
+`runway_avatar_id`. The result is persisted on the character
+record as one of:
+
+| Patch state | When | UI pill (alongside the cloned-voice pill) |
+|---|---|---|
+| `pending_avatar` | Voice cloned but no avatar bound yet | grey *"pending avatar"* |
+| `applied` | Real PATCH returned 2xx | emerald *"applied to avatar"* |
+| `mock_patched` | runway_mock OR avatar id starts with `mock_` | amber *"applied · mock"* |
+| `failed` | Non-2xx / network / unexpected | rose *"patch failed"* + tooltip |
+
+When the patch state is `failed`, the voice section also surfaces
+a small **`Apply to existing avatar`** button (testid
+`custom-voice-apply-avatar`) that retries via
+`POST /api/characters/{id}/apply-voice` without re-uploading the
+audio. Failure stays best-effort — the cloned `custom_voice_id`
+remains usable for any future avatar recreate.
+
+Backend manual-retry route:
+
+```
+POST /api/characters/{id}/apply-voice
+  → 200  { ...character, custom_voice_avatar_patch_status: "applied" | "mock_patched" }
+  → 409  no custom voice cloned yet
+  → 502  Runway upstream rejection
+```
+
+`data-testid` hooks: `custom-voice-avatar-patch-status` (the
+status pill), `custom-voice-apply-avatar` (the manual retry
+button — only renders on the `failed` branch).
 
 #### Recording in-browser (PR AO)
 

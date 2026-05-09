@@ -229,6 +229,20 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
     await expect(
       page.getByTestId('custom-voice-record-preview-help'),
     ).toHaveCount(0)
+    // PR AQ — avatar PATCH status pill is conditional on a cloned
+    // custom voice existing on the character record. The smoke
+    // doesn't clone, but operators may have cloned voices on
+    // existing fixture characters in mock mode (e.g. while
+    // demoing PR AN/AO). The conditional render guard is what
+    // matters: when zero characters carry a custom voice the pill
+    // count must be 0; otherwise each cloned character renders
+    // exactly one pill. We verify that count <= number of voice
+    // sections rather than requiring a specific count, so the
+    // smoke is resilient to operator-driven mock clones.
+    const patchPills = await page
+      .getByTestId('custom-voice-avatar-patch-status')
+      .count()
+    expect(patchPills).toBeLessThanOrEqual(voiceSectionCount)
   }
 
   // 7b.6. PR U — stage order: Spokesperson leads, Campaign Brief

@@ -69,6 +69,10 @@ export default function CharacterCard({
   // a small upload + clone affordance. The picker (compact=true) skips
   // it to keep that surface tight.
   onCloneVoice,
+  // PR AQ — Apply already-cloned voice to the existing Runway avatar
+  // (PATCH /v1/avatars/{id}). Library tiles can wire this so a manual
+  // retry surfaces when the auto-patch failed.
+  onApplyVoiceToAvatar,
 }) {
   const c = character
   const portraitUrl = c.portrait_url
@@ -86,6 +90,26 @@ export default function CharacterCard({
   const customVoiceMock = c.custom_voice_mock_mode === true
   const customVoiceReady = ['ready', 'mock'].includes(customVoiceStatus || '')
   const customVoiceFailed = customVoiceStatus === 'failed'
+  // PR AQ — avatar PATCH status derived from the persisted character
+  // record. ``patchStatus`` drives the second pill in the voice
+  // section so the operator can tell at a glance whether the cloned
+  // voice has actually been bound to the existing avatar.
+  const patchStatus = c.custom_voice_avatar_patch_status
+  const patchPending = patchStatus === 'pending_avatar'
+  const patchApplied = patchStatus === 'applied'
+  const patchMock = patchStatus === 'mock_patched'
+  const patchFailed = patchStatus === 'failed'
+  const [patchPending2, setPatchPending2] = useState(false)
+
+  const handleApplyVoice = async () => {
+    if (!onApplyVoiceToAvatar) return
+    setPatchPending2(true)
+    try {
+      await onApplyVoiceToAvatar(c)
+    } finally {
+      setPatchPending2(false)
+    }
+  }
 
   const handleVoiceFile = async (file) => {
     if (!file || !onCloneVoice) return
@@ -412,6 +436,45 @@ export default function CharacterCard({
                 preset · {c.voice_preset}
               </span>
             )}
+            {/* PR AQ — avatar PATCH status pill. Only visible when
+                a custom voice is cloned; otherwise the preset pill
+                above is the only signal. */}
+            {customVoiceReady && patchApplied && (
+              <span
+                data-testid="custom-voice-avatar-patch-status"
+                className="text-[9px] rounded-full bg-emerald-500/25 text-emerald-200 ring-1 ring-emerald-400/40 px-1.5 py-0.5 font-mono"
+                title="PATCH /v1/avatars/{id} succeeded — the existing avatar speaks with the cloned voice"
+              >
+                applied to avatar
+              </span>
+            )}
+            {customVoiceReady && patchMock && (
+              <span
+                data-testid="custom-voice-avatar-patch-status"
+                className="text-[9px] rounded-full bg-amber-500/20 text-amber-200 ring-1 ring-amber-400/40 px-1.5 py-0.5 font-mono"
+                title="Mock-mode patch recorded — real Runway PATCH skipped"
+              >
+                applied · mock
+              </span>
+            )}
+            {customVoiceReady && patchPending && (
+              <span
+                data-testid="custom-voice-avatar-patch-status"
+                className="text-[9px] rounded-full bg-zinc-800 text-zinc-300 ring-1 ring-zinc-700 px-1.5 py-0.5 font-mono"
+                title="Voice cloned — Create Runway Avatar to bind it"
+              >
+                pending avatar
+              </span>
+            )}
+            {customVoiceReady && patchFailed && (
+              <span
+                data-testid="custom-voice-avatar-patch-status"
+                className="text-[9px] rounded-full bg-rose-500/25 text-rose-200 ring-1 ring-rose-400/40 px-1.5 py-0.5 font-mono"
+                title={c.custom_voice_avatar_patch_error || 'PATCH failed'}
+              >
+                patch failed
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-1 flex-wrap">
             <input
@@ -442,6 +505,37 @@ export default function CharacterCard({
           {customVoiceFailed && c.custom_voice_error && (
             <p className="text-[9px] text-rose-300" title={c.custom_voice_error}>
               {c.custom_voice_error}
+            </p>
+          )}
+          {/* PR AQ — manual retry surface. Auto-patch already runs
+              after every clone; this button only appears when the
+              auto attempt failed so the operator can re-trigger
+              without re-uploading. */}
+          {customVoiceReady && patchFailed && onApplyVoiceToAvatar && (
+            <div className="space-y-0.5">
+              <button
+                type="button"
+                onClick={handleApplyVoice}
+                disabled={patchPending2 || Boolean(busyAction)}
+                data-testid="custom-voice-apply-avatar"
+                className="text-[9px] rounded bg-rose-500/30 hover:bg-rose-500/45 text-rose-100 ring-1 ring-rose-400/40 px-2 py-0.5 font-semibold disabled:opacity-50"
+                title="Retry PATCH /v1/avatars/{id} with the cloned voice"
+              >
+                {patchPending2 ? 'Applying…' : 'Apply to existing avatar'}
+              </button>
+              {c.custom_voice_avatar_patch_error && (
+                <p
+                  className="text-[9px] text-rose-300"
+                  title={c.custom_voice_avatar_patch_error}
+                >
+                  {c.custom_voice_avatar_patch_error}
+                </p>
+              )}
+            </div>
+          )}
+          {customVoiceReady && patchPending && avatarReady && (
+            <p className="text-[9px] text-amber-300">
+              Voice cloned but no avatar bound yet — Create Runway Avatar to bind.
             </p>
           )}
           {!customVoiceReady && !customVoiceFailed && (

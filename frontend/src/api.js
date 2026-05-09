@@ -248,4 +248,12 @@ export const api = {
     }
     return resp.json()
   },
+  // PR AQ — manual retry for the avatar voice swap. The clone route
+  // already auto-PATCHes the avatar after a successful clone; this
+  // endpoint lets the operator retry without re-uploading.
+  applyCharacterVoiceToAvatar: (characterId) =>
+    jsonFetch(
+      `/api/characters/${encodeURIComponent(characterId)}/apply-voice`,
+      { method: 'POST' },
+    ),
 }

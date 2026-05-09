@@ -2,33 +2,36 @@
 
 **Last touched:** 2026-05-09 (PR AG/AH `6157512`; PR AI
 `108ca3b`; PR AJ `444cb6a`; PR AK `c59251a`; PR AL `8a43af2`;
-PR AM `3e12d27`; PR AN `f255c22`; PR AO `5bca7c4 feat: record
-voice samples in-browser for cloning`; PR AP In-Card Voice
-Recording Playback Preview in flight on top —
-SESSION_012–SESSION_021 handoffs added).
+PR AM `3e12d27`; PR AN `f255c22`; PR AO `5bca7c4`; PR AP
+`3c6483e feat: preview recorded voice before cloning`; PR AQ
+Avatar PATCH for Custom Voice Swap in flight on top —
+SESSION_012–SESSION_022 handoffs added).
 
 ## Where things stand
 
-- **Branch:** `main` at `5bca7c4` (`feat: record voice samples
-  in-browser for cloning`) on `origin/main`. PR AP patch in
-  flight on top — no new commit / tag yet, both pending explicit
-  user approval.
+- **Branch:** `main` at `3c6483e` (`feat: preview recorded voice
+  before cloning`) on `origin/main`. PR AQ patch in flight on
+  top — no new commit / tag yet, both pending explicit user
+  approval.
 - **Latest tag:** still **`hackathon-submission-v13`** at `ec446e4`
-  (PR AF). PR AG–AO shipped the funnel + polish + voice-identity
-  stack; PR AP polishes the recording flow by letting operators
-  preview a take before sending it to Runway.
-- **Backend routes:** **65** application + FastAPI built-ins
-  (unchanged from PR AN/AO; PR AP is frontend-only and adds no
-  endpoints).
-- **Frontend build:** 314.86 KB initial JS / 88.87 KB gzip +
-  561.97 KB lazy `@runwayml/avatars-react` chunk (≈ +0.5 KB
-  initial / +0.2 KB gzip vs PR AO — PR AP only added the
-  preview state + audio element).
-- **Playwright smoke:** `1 passed (~23.7 s)` against the mock
-  backend; the existing PR AO assertions still pass and PR AP
-  adds two negative assertions confirming the preview audio +
-  helper text don't render in the default idle state (the
-  conditional render guard never regresses).
+  (PR AF). PR AG–AP shipped the funnel + polish + voice-identity
+  + recording stack; PR AQ closes the loop by letting cloned
+  voices apply to existing avatars without an avatar recreate.
+- **Backend routes:** **66** application + FastAPI built-ins
+  (was 65 at PR AN/AP). PR AQ adds one new endpoint:
+  `POST /api/characters/{id}/apply-voice` (manual retry for the
+  avatar voice swap). The PR AN `clone-voice` route now also
+  runs an automatic `PATCH /v1/avatars/{id}` after every
+  successful clone.
+- **Frontend build:** 317.26 KB initial JS / 89.28 KB gzip +
+  561.97 KB lazy `@runwayml/avatars-react` chunk (≈ +2.4 KB
+  initial / +0.4 KB gzip vs PR AP — PR AQ added the patch
+  status pill + manual retry button + handler wiring).
+- **Playwright smoke:** `1 passed (~21.4 s)` against the mock
+  backend; existing PR AP assertions still pass; PR AQ adds a
+  resilient assertion that the patch-status pill count never
+  exceeds the number of voice sections (works whether the
+  operator has cloned voices on fixture characters or not).
 - **Repo:** https://github.com/clwest/adspark-studio-runway-hackathon
   (private). Pushes happen on explicit user approval.
 - **Stale local feature branches:** 22 left over from PR A through
@@ -62,6 +65,18 @@ SESSION_012–SESSION_021 handoffs added).
   Object URLs are revoked on discard, successful clone, component
   unmount, and the next recording start so the browser never
   holds a stale Blob.
+- **Avatar PATCH for voice swap** (PR AQ) — every successful
+  `POST /clone-voice` now also runs a best-effort
+  `PATCH /v1/avatars/{id}` body
+  `{voice: {type: "custom", voiceId: <id>}}` against the
+  character's existing avatar so the cloned voice applies
+  without a recreate. Persists `custom_voice_avatar_patch_status`
+  ∈ `{applied, mock_patched, pending_avatar, failed}` plus
+  error + timestamp on the Character record. UI surfaces a
+  second pill in the voice section + a manual `Apply to existing
+  avatar` button on the failed branch (POST `/apply-voice`).
+  Mock mode short-circuits to `mock_patched` without HTTP so
+  the demo flow shows the linkage end-to-end.
 - New backend route: `POST /api/characters/{id}/clone-voice`
   (multipart form with `audio` + optional `name`). The route
   validates mime + size (cap 15 MB locally; Runway docs say

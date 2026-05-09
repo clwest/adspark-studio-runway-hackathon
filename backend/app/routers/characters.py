@@ -10,6 +10,7 @@ Locked design in
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
@@ -28,6 +29,7 @@ from ..services.character_host_client import SUPPORTED_VOICE_PRESETS
 from ..services.voice_clone_client import (
     MAX_AUDIO_BYTES,
     SUPPORTED_AUDIO_MIMES,
+    apply_voice_to_avatar,
     clone_voice_from_audio,
 )
 
@@ -290,6 +292,24 @@ async def post_clone_voice(
             detail=f"voice clone failed: {result.error or 'unknown error'}",
         )
 
+    # PR AQ — auto-PATCH the existing Runway avatar so the cloned
+    # voice swaps in without an avatar recreate. Best-effort: a
+    # patch failure preserves the cloned voice id and surfaces a
+    # friendly error on the character record. The next
+    # Create Runway Avatar click would still bind the voice via the
+    # PR AN create-avatar payload.
+    apply_result = apply_voice_to_avatar(
+        record.runway_avatar_id,
+        result.voice_id,
+        settings,
+        avatar_is_mock=(record.runway_avatar_status == "mock"),
+    )
+    patched_at = (
+        datetime.now(timezone.utc)
+        if apply_result.status in {"applied", "mock_patched"}
+        else None
+    )
+
     updated = store.update(
         character_id,
         custom_voice_id=result.voice_id,
@@ -297,11 +317,74 @@ async def post_clone_voice(
         custom_voice_status=result.status,
         custom_voice_error=None,
         custom_voice_mock_mode=result.mock_mode,
+        custom_voice_avatar_patch_status=apply_result.status,
+        custom_voice_avatar_patch_error=apply_result.error,
+        custom_voice_avatar_patched_at=(patched_at.isoformat() if patched_at else None),
     )
     logger.info(
-        "character %s voice cloned -> %s (status=%s mock=%s)",
-        character_id, result.voice_id, result.status, result.mock_mode,
+        "character %s voice cloned -> %s (status=%s mock=%s; patch=%s)",
+        character_id, result.voice_id, result.status,
+        result.mock_mode, apply_result.status,
     )
+    return updated or record
+
+
+# ---- PR AQ — manual retry for the avatar voice swap ---------------
+#
+# The clone route auto-PATCHes the avatar after a successful clone.
+# This route lets the operator retry the swap manually when the auto
+# attempt failed (real-mode upstream blip, network, etc) without
+# re-uploading the audio sample.
+
+
+@router.post("/{character_id}/apply-voice", response_model=Character)
+def post_apply_voice_to_avatar(
+    character_id: str,
+    settings: Settings = Depends(get_settings),
+    store: CharacterStore = Depends(_store),
+) -> Character:
+    """PR AQ — apply the character's already-cloned ``custom_voice_id``
+    to the bound Runway avatar via ``PATCH /v1/avatars/{id}``.
+
+    Failure modes:
+    - 404 — character not found.
+    - 409 — character has no cloned voice yet.
+    - 502 — Runway upstream rejection.
+    """
+    record = store.get(character_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="character not found")
+    if not record.custom_voice_id:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "no custom voice cloned for this character yet — "
+                "upload or record an audio sample first."
+            ),
+        )
+
+    apply_result = apply_voice_to_avatar(
+        record.runway_avatar_id,
+        record.custom_voice_id,
+        settings,
+        avatar_is_mock=(record.runway_avatar_status == "mock"),
+    )
+    patched_at = (
+        datetime.now(timezone.utc)
+        if apply_result.status in {"applied", "mock_patched"}
+        else None
+    )
+    updated = store.update(
+        character_id,
+        custom_voice_avatar_patch_status=apply_result.status,
+        custom_voice_avatar_patch_error=apply_result.error,
+        custom_voice_avatar_patched_at=(patched_at.isoformat() if patched_at else None),
+    )
+    if apply_result.status == "failed":
+        raise HTTPException(
+            status_code=502,
+            detail=f"avatar voice PATCH failed: {apply_result.error or 'unknown'}",
+        )
     return updated or record
 
 

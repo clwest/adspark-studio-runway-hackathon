@@ -190,3 +190,93 @@ def clone_voice_from_audio(
             error=f"unexpected: {exc!s}"[:200],
         )
     return VoiceCloneResult(status="ready", voice_id=voice_id)
+
+
+# ---- PR AQ — Avatar PATCH for custom voice swap -------------------
+
+
+@dataclass
+class VoiceApplyResult:
+    """Result of `PATCH /v1/avatars/{id}` swapping in a custom voice.
+
+    Status vocabulary mirrors the persisted enum on the Character
+    record so the route hands the value straight to the storage
+    helper. ``mock_patched`` distinguishes the offline-demo path
+    from a real patch.
+    """
+
+    status: str  # "applied" | "mock_patched" | "failed" | "pending_avatar"
+    error: Optional[str] = None
+
+
+def apply_voice_to_avatar(
+    avatar_id: Optional[str],
+    voice_id: Optional[str],
+    settings: Settings,
+    *,
+    avatar_is_mock: bool = False,
+    timeout: float = 15.0,
+) -> VoiceApplyResult:
+    """PATCH ``/v1/avatars/{avatar_id}`` so an existing Runway avatar
+    starts speaking with the supplied custom ``voice_id`` — without
+    recreating the avatar.
+
+    Mirrors PR AI's `attach_documents_to_avatar` shape: the route
+    treats the result as best-effort, persists the status, and the
+    overall clone flow still succeeds even if the patch fails.
+
+    Branches:
+    - ``pending_avatar`` — caller has no real avatar id yet (mock or
+      missing). The next ``Create Runway Avatar`` click will bind
+      the voice via the PR AN avatar-create payload, so we just
+      surface the state without raising.
+    - ``mock_patched`` — runway_mock is true (or avatar id is mock).
+      Records the linkage without any HTTP so the demo flow can show
+      the patch state end-to-end.
+    - ``applied`` — real `PATCH /v1/avatars/{id}` returned 2xx.
+    - ``failed`` — non-2xx / network / unexpected error. Stored on
+      the character; the cloned voice id stays usable for future
+      avatar recreates.
+
+    Never raises; the route inspects the result and persists it.
+    """
+    if not avatar_id or not voice_id:
+        return VoiceApplyResult(
+            status="pending_avatar",
+            error=(None if not voice_id else "no avatar to apply voice to"),
+        )
+    if settings.runway_mock or avatar_is_mock or str(avatar_id).startswith("mock_"):
+        return VoiceApplyResult(status="mock_patched")
+
+    url = f"{settings.runway_api_base}/v1/avatars/{avatar_id}"
+    body = {"voice": {"type": "custom", "voiceId": voice_id}}
+    headers = {
+        "Authorization": f"Bearer {settings.runway_api_key}",
+        "X-Runway-Version": settings.runway_api_version,
+        "Content-Type": "application/json",
+    }
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            resp = client.patch(url, headers=headers, json=body)
+    except httpx.HTTPError as exc:
+        logger.warning("avatar PATCH voice http error for %s: %s", avatar_id, exc)
+        return VoiceApplyResult(
+            status="failed",
+            error=f"http error: {exc!s}"[:200],
+        )
+    except Exception as exc:  # pragma: no cover — defensive
+        logger.exception("avatar PATCH voice unexpected")
+        return VoiceApplyResult(
+            status="failed",
+            error=f"unexpected: {exc!s}"[:200],
+        )
+    if resp.status_code >= 400:
+        logger.warning(
+            "avatar PATCH voice non-2xx for %s: %s %s",
+            avatar_id, resp.status_code, resp.text[:200],
+        )
+        return VoiceApplyResult(
+            status="failed",
+            error=f"PATCH rc={resp.status_code}: {resp.text[:200]}",
+        )
+    return VoiceApplyResult(status="applied")
