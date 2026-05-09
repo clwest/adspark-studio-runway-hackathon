@@ -1,3 +1,5 @@
+import { useRef, useState, useEffect } from 'react'
+
 // Mirror of backend GENERATION_POLICY (services/runway_client.py). Keep in
 // sync with the backend table — the backend is the source of truth, but the
 // UI uses this map to gate inputs before the user clicks Generate Video.
@@ -15,6 +17,17 @@ const RATIOS = [
   { value: '1280:720', label: 'Landscape · YouTube · 1280×720' },
   { value: '720:1280', label: 'Reels / TikTok · 720×1280' },
   { value: '960:960', label: 'Square · Instagram · 960×960' },
+]
+
+// PR R — Visual Source flow. Four explicit options the user can pick
+// before clicking Generate Video. Each option drives different state
+// transitions (model, textOnly, imageUrl) to remove the "where is the
+// image coming from?" ambiguity that PromptPreview used to hide.
+const VISUAL_SOURCES = [
+  { key: 'generate',  label: 'Generate image',  hint: 'Runway gen4_image_turbo from your prompt' },
+  { key: 'upload',    label: 'Upload image',    hint: 'PNG / JPG / WebP, ≤10 MB' },
+  { key: 'character', label: 'Use Character',   hint: 'Reuse a Character Studio portrait' },
+  { key: 'text-only', label: 'Text-only video', hint: 'Gen-4.5 — no image needed' },
 ]
 
 export default function PromptPreview({
@@ -39,21 +52,125 @@ export default function PromptPreview({
   onRatioChange,
   duration,
   onDurationChange,
+  // PR R — Visual Source flow
+  imageSource,        // "upload" | undefined — set when an upload landed
+  onUploadImage,
+  uploadBusy,
+  characters = [],
 }) {
   const trimmedImage = (imageUrl || '').trim()
   const textOnlyAllowed = model === 'gen4.5'
   const effectiveTextOnly = textOnly && textOnlyAllowed
+
+  // PR R — visual-source state. Initial value derived from current
+  // imageUrl + textOnly so a reload lands on whatever the user last
+  // had picked.
+  const initialSource = effectiveTextOnly
+    ? 'text-only'
+    : trimmedImage.startsWith('/api/characters/') && trimmedImage.endsWith('/portrait')
+    ? 'character'
+    : imageSource === 'upload'
+    ? 'upload'
+    : trimmedImage.startsWith('/api/runway/image/')
+    ? 'generate'
+    : trimmedImage
+    ? 'upload'  // any external/typed URL — surfaced under upload affordance
+    : 'generate'
+  const [visualSource, setVisualSource] = useState(initialSource)
+
   const showImageField = !effectiveTextOnly
   const blockedByImage = requireImage && showImageField && !trimmedImage
   const cannotGenerate =
     busy || disabled || !prompt.trim() || blockedByImage
 
   const isLocalGenerated = trimmedImage.startsWith('/api/runway/image/')
+  const isCharacterPortrait =
+    trimmedImage.startsWith('/api/characters/') && trimmedImage.endsWith('/portrait')
 
   const allowedDurations = GENERATION_POLICY[model]?.durations || [5]
   const durationLocked = allowedDurations.length === 1
   const ratioLabel =
     RATIOS.find((r) => r.value === ratio)?.label.split(' · ')[0] || ratio
+
+  // Characters with a generated portrait + (ideally) a ready avatar are
+  // candidates for the "Use Character" path. We accept "ready" + "mock"
+  // since the visual is the portrait, not the avatar binding.
+  const charactersWithPortrait = (characters || []).filter((c) => c?.portrait_url)
+
+  const fileInputRef = useRef(null)
+  const [localCharacterId, setLocalCharacterId] = useState(() => {
+    if (!isCharacterPortrait) return null
+    const m = trimmedImage.match(/\/api\/characters\/([^/]+)\/portrait/)
+    return m ? m[1] : null
+  })
+
+  // Coordinate visual-source selection with downstream state.
+  const handleSourceChange = (next) => {
+    setVisualSource(next)
+    if (next === 'text-only') {
+      // Force gen4.5 + textOnly on. Image URL stays cached but the
+      // generate path skips it.
+      if (!textOnlyAllowed) onModelChange?.('gen4.5')
+      onTextOnlyChange?.(true)
+      return
+    }
+    // Any non-text-only path needs textOnly off.
+    if (textOnly) onTextOnlyChange?.(false)
+    if (next === 'character') {
+      // If a character is already selected, refresh the URL; otherwise
+      // wait for the user to pick one from the inline list.
+      if (localCharacterId) {
+        onImageUrlChange?.(`/api/characters/${localCharacterId}/portrait`)
+      } else {
+        onImageUrlChange?.('')
+      }
+      return
+    }
+    if (next === 'upload') {
+      // Don't clobber an existing uploaded URL.
+      if (!trimmedImage || isLocalGenerated || isCharacterPortrait) {
+        onImageUrlChange?.('')
+      }
+      return
+    }
+    if (next === 'generate') {
+      if (!trimmedImage || isCharacterPortrait || imageSource === 'upload') {
+        onImageUrlChange?.('')
+      }
+    }
+  }
+
+  const handlePickCharacter = (id) => {
+    setLocalCharacterId(id)
+    if (!id) {
+      onImageUrlChange?.('')
+      return
+    }
+    onImageUrlChange?.(`/api/characters/${id}/portrait`)
+  }
+
+  // When the chooser is on the character path but the picked character
+  // disappears from the library (e.g. deletion via Studio), gracefully
+  // reset.
+  useEffect(() => {
+    if (visualSource !== 'character') return
+    if (!localCharacterId) return
+    const exists = charactersWithPortrait.some((c) => c.id === localCharacterId)
+    if (!exists) {
+      setLocalCharacterId(null)
+      onImageUrlChange?.('')
+    }
+  }, [visualSource, localCharacterId, charactersWithPortrait, onImageUrlChange])
+
+  const generateButtonLabel = busy
+    ? 'Submitting…'
+    : visualSource === 'character'
+    ? 'Generate Video from Character'
+    : visualSource === 'upload'
+    ? 'Generate Video from Image'
+    : visualSource === 'text-only'
+    ? 'Generate Text-Only Video'
+    : 'Generate Video'
 
   return (
     <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5 space-y-3">
@@ -122,21 +239,23 @@ export default function PromptPreview({
           </select>
         </label>
 
+        {/* PR R — text-only is now driven by the Visual Source
+            selector below, which sets model + textOnly together so
+            users can't pick incompatible combinations. We keep the
+            label here as an accessibility marker so the smoke can
+            still find it ("Use text-only video"). */}
         <label
           className={`text-sm flex items-end gap-2 pb-1 ${
             textOnlyAllowed ? 'text-zinc-300' : 'text-zinc-600'
           }`}
-          title={
-            textOnlyAllowed
-              ? 'Skip the reference image and let Gen-4.5 generate purely from text'
-              : 'Only available with Gen-4.5'
-          }
+          title="Pick the Text-only Visual Source below — this label is informational"
         >
           <input
             type="checkbox"
             disabled={!textOnlyAllowed}
             checked={!!textOnly}
             onChange={(e) => onTextOnlyChange?.(e.target.checked)}
+            aria-label="Use text-only video"
           />
           Use text-only video
         </label>
@@ -148,50 +267,228 @@ export default function PromptPreview({
         when the source already shares their aspect.
       </p>
 
-      {showImageField && (
-        <div className="space-y-2 pt-1">
-          <div className="flex items-center justify-between">
-            <label className="text-sm text-zinc-300">
-              Reference image URL{' '}
-              {requireImage ? (
-                <span className="text-rose-300">(required in real mode)</span>
-              ) : (
-                <span className="text-zinc-500">(optional in mock mode)</span>
-              )}
-            </label>
+      {/* PR R — Visual Source selector. Four explicit options so the
+          user always knows where the video's input image is coming
+          from. Replaces the lone "Reference image URL" field that used
+          to assume the user already had a URL on hand. */}
+      <div
+        role="radiogroup"
+        aria-label="visual source"
+        className="space-y-2 pt-1"
+      >
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <span className="text-sm text-zinc-300 font-semibold">
+            Visual Source
+          </span>
+          <span className="text-[10px] text-zinc-500">
+            Where does the video's input image come from?
+          </span>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+          {VISUAL_SOURCES.map((s) => {
+            const active = visualSource === s.key
+            return (
+              <button
+                key={s.key}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                onClick={() => handleSourceChange(s.key)}
+                className={`text-left rounded-md px-2 py-1.5 text-xs ring-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-spark ${
+                  active
+                    ? 'bg-spark/15 text-spark ring-spark/50 font-semibold'
+                    : 'bg-zinc-950/40 text-zinc-300 ring-zinc-800 hover:ring-spark/30 hover:text-zinc-100'
+                }`}
+              >
+                <div>{s.label}</div>
+                <div
+                  className={`text-[10px] mt-0.5 ${
+                    active ? 'text-spark/80' : 'text-zinc-500'
+                  }`}
+                >
+                  {s.hint}
+                </div>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Per-source body. Only the selected one renders so the panel
+            doesn't sprawl. Each branch keeps the existing imageUrl
+            state so the generate-video pipeline doesn't change. */}
+
+        {visualSource === 'generate' && (
+          <div className="space-y-2 rounded-lg ring-1 ring-zinc-800/60 bg-zinc-950/40 p-3">
+            <p className="text-[11px] text-zinc-500 leading-relaxed">
+              Runway <span className="font-mono text-zinc-300">gen4_image_turbo</span>{' '}
+              synthesises a reference image from the prompt above.
+              Mock-safe — produces a stdlib PNG when no Runway key is set.
+            </p>
             <button
               type="button"
               onClick={onGenerateImage}
               disabled={!onGenerateImage || imageBusy || !prompt.trim()}
-              className="rounded-md border border-zinc-700 hover:border-spark text-xs px-2 py-1 text-zinc-200 disabled:opacity-50"
-              title="Use Runway gen4_image_turbo to synthesize a reference image from the prompt above (mock-safe)"
+              className="rounded-md bg-spark/80 hover:bg-spark text-ink text-xs font-semibold px-3 py-1.5 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-spark"
             >
               {imageBusy ? 'Generating image…' : 'Generate Reference Image'}
             </button>
+            {isLocalGenerated && (
+              <div className="rounded-lg ring-1 ring-zinc-800 bg-zinc-950/60 p-2">
+                <p className="text-xs text-zinc-500 mb-1">
+                  Generated reference image
+                  {imageMockMode ? ' (mock placeholder)' : ''} —
+                  <span className="text-emerald-300"> selected as Visual Source</span>:
+                </p>
+                <img
+                  src={imageUrl}
+                  alt="Generated reference"
+                  className="w-full max-h-40 object-cover rounded-md ring-1 ring-zinc-800"
+                />
+              </div>
+            )}
           </div>
-          <input
-            type="url"
-            value={imageUrl || ''}
-            onChange={(e) => onImageUrlChange(e.target.value)}
-            placeholder="https://images.unsplash.com/photo-...jpg"
-            className={`w-full rounded-lg bg-zinc-950 border px-3 py-2 outline-none text-sm
-              ${blockedByImage ? 'border-rose-500/60 focus:border-rose-400' : 'border-zinc-800 focus:border-spark'}`}
-          />
-          {isLocalGenerated && (
-            <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-2">
-              <p className="text-xs text-zinc-500 mb-1">
-                Generated reference image
-                {imageMockMode ? ' (mock placeholder)' : ''}:
-              </p>
-              <img
-                src={imageUrl}
-                alt="Generated reference"
-                className="w-full max-h-40 object-cover rounded-md border border-zinc-800"
+        )}
+
+        {visualSource === 'upload' && (
+          <div className="space-y-2 rounded-lg ring-1 ring-zinc-800/60 bg-zinc-950/40 p-3">
+            <p className="text-[11px] text-zinc-500 leading-relaxed">
+              Upload your own PNG / JPG / WebP (≤10 MB). The file caches
+              under <span className="font-mono text-zinc-300">backend/data/images/</span>{' '}
+              and feeds straight into Generate Video.
+            </p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={(e) => {
+                  const f = e.target.files?.[0]
+                  if (f) onUploadImage?.(f)
+                  // Reset so re-selecting the same file fires onChange.
+                  e.target.value = ''
+                }}
+                className="text-[11px] text-zinc-300 file:mr-2 file:rounded file:border-0 file:bg-spark/80 file:text-ink file:text-xs file:font-semibold file:px-2 file:py-1 file:cursor-pointer"
+                aria-label="upload image file"
+              />
+              {uploadBusy && (
+                <span className="text-[11px] text-zinc-500">uploading…</span>
+              )}
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] text-zinc-500 block">
+                or paste an image URL
+              </label>
+              <input
+                type="url"
+                value={imageUrl || ''}
+                onChange={(e) => onImageUrlChange(e.target.value)}
+                placeholder="https://images.unsplash.com/photo-...jpg"
+                className={`w-full rounded-lg bg-zinc-950 ring-1 px-3 py-2 outline-none text-sm focus-visible:ring-2 ${
+                  blockedByImage
+                    ? 'ring-rose-500/60 focus:ring-rose-400'
+                    : 'ring-zinc-800 focus:ring-spark'
+                }`}
               />
             </div>
-          )}
-        </div>
-      )}
+            {(isLocalGenerated || imageSource === 'upload') && trimmedImage && (
+              <div className="rounded-lg ring-1 ring-zinc-800 bg-zinc-950/60 p-2">
+                <p className="text-xs text-emerald-300 mb-1">
+                  Uploaded image — selected as Visual Source:
+                </p>
+                <img
+                  src={imageUrl}
+                  alt="Uploaded reference"
+                  className="w-full max-h-40 object-cover rounded-md ring-1 ring-zinc-800"
+                />
+              </div>
+            )}
+          </div>
+        )}
+
+        {visualSource === 'character' && (
+          <div className="space-y-2 rounded-lg ring-1 ring-pink-400/30 bg-pink-500/5 p-3">
+            {charactersWithPortrait.length === 0 ? (
+              <div className="space-y-1.5 text-center py-2">
+                <p className="text-[11px] text-zinc-300">
+                  No characters with a portrait yet.
+                </p>
+                <p className="text-[10px] text-zinc-500">
+                  Create a Character first (mascot / founder / coach /
+                  local guide) — Runway generates the portrait automatically.
+                </p>
+                <a
+                  href="#character-studio"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    document
+                      .getElementById('character-studio-anchor')
+                      ?.scrollIntoView({ behavior: 'smooth' })
+                  }}
+                  className="inline-block rounded-md bg-pink-500/80 hover:bg-pink-500 text-zinc-100 text-[11px] px-3 py-1.5 mt-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-400"
+                >
+                  Open Character Studio →
+                </a>
+              </div>
+            ) : (
+              <>
+                <p className="text-[11px] text-zinc-400 leading-relaxed">
+                  Pick a character — its portrait drives the video.
+                  Runway will animate the character itself instead of
+                  the campaign hero shot.
+                </p>
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5">
+                  {charactersWithPortrait.map((ch) => {
+                    const picked = localCharacterId === ch.id
+                    return (
+                      <button
+                        key={ch.id}
+                        type="button"
+                        onClick={() => handlePickCharacter(picked ? null : ch.id)}
+                        aria-pressed={picked}
+                        title={`${ch.name} (${ch.template})`}
+                        className={`rounded-md p-1 ring-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-400 ${
+                          picked
+                            ? 'ring-2 ring-pink-400 bg-pink-500/10'
+                            : 'ring-zinc-800 bg-zinc-950/40 hover:ring-pink-400/40'
+                        }`}
+                      >
+                        <img
+                          src={ch.portrait_url}
+                          alt={ch.name}
+                          className="w-full aspect-square object-cover rounded"
+                        />
+                        <div className="text-[9px] text-zinc-300 mt-1 truncate">
+                          {ch.name}
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+                {isCharacterPortrait && (
+                  <p className="text-[11px] text-emerald-300">
+                    Character portrait selected as Visual Source.
+                  </p>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {visualSource === 'text-only' && (
+          <div className="space-y-1.5 rounded-lg ring-1 ring-zinc-800/60 bg-zinc-950/40 p-3">
+            <p className="text-[11px] text-zinc-300 leading-relaxed">
+              <span className="font-mono text-zinc-100">Gen-4.5 text-only</span>{' '}
+              — no image required. Runway generates the video from your
+              prompt directly.
+            </p>
+            <p className="text-[10px] text-zinc-500 leading-relaxed">
+              Slightly slower than image-to-video and credits cost a touch
+              more, but lets you skip the Visual Source step entirely
+              when the prompt alone tells the story.
+            </p>
+          </div>
+        )}
+      </div>
 
       {/* Active settings summary — small chip row above the Generate button. */}
       <div
@@ -217,9 +514,9 @@ export default function PromptPreview({
         type="button"
         disabled={cannotGenerate}
         onClick={onGenerate}
-        className="rounded-lg bg-spark text-ink font-semibold px-4 py-2 disabled:opacity-50"
+        className="rounded-lg bg-spark text-ink font-semibold px-4 py-2 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-spark"
       >
-        {busy ? 'Submitting…' : effectiveTextOnly ? 'Generate Video (text-only)' : 'Generate Video'}
+        {generateButtonLabel}
       </button>
       <p className="text-[11px] text-zinc-500 leading-relaxed">
         Runway visual video is silent.{' '}
@@ -232,13 +529,8 @@ export default function PromptPreview({
       </p>
       {blockedByImage && (
         <p className="text-xs text-rose-300">
-          Backend is in real Runway mode. Add a reference image URL above —
-          or generate one — before generating video.
-        </p>
-      )}
-      {effectiveTextOnly && (
-        <p className="text-xs text-zinc-500">
-          Gen-4.5 text-only mode — no reference image will be sent to Runway.
+          Real Runway mode needs a Visual Source — pick Generate / Upload /
+          Character above, or switch to Text-only.
         </p>
       )}
     </div>

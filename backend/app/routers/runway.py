@@ -1,8 +1,9 @@
 import logging
+import uuid
 from typing import Optional
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
 from ..config import Settings, get_settings
@@ -16,6 +17,8 @@ from ..models import (
 from ..services.avatar_listing_client import list_avatars
 from ..services.image_client import (
     ImageGenerationError,
+    SUPPORTED_IMAGE_EXTS,
+    find_image_path,
     generate_prompt_image,
     path_for as image_path_for,
 )
@@ -112,10 +115,87 @@ def get_generated_image(
     # we still refuse anything path-like to keep this route hardened.
     if "/" in image_id or ".." in image_id or not image_id:
         raise HTTPException(status_code=400, detail="invalid image id")
-    path = image_path_for(settings, image_id)
-    if not path.exists():
+    # PR R — uploads can be png / jpg / webp. find_image_path tries each
+    # supported extension; serves the first match with the right
+    # media-type so browser previews render correctly across formats.
+    path = find_image_path(settings, image_id)
+    if path is None:
         raise HTTPException(status_code=404, detail="image not found")
-    return FileResponse(str(path), media_type="image/png", filename=f"{image_id}.png")
+    media = {
+        "png": "image/png",
+        "jpg": "image/jpeg",
+        "jpeg": "image/jpeg",
+        "webp": "image/webp",
+    }.get(path.suffix.lstrip(".").lower(), "image/png")
+    return FileResponse(str(path), media_type=media, filename=path.name)
+
+
+# PR R — Visual Source flow: dedicated upload endpoint so the frontend
+# can offer "Upload image" alongside the existing Generate / Character /
+# Text-only options. Saves into the same backend/data/images/ cache the
+# generator uses, so the resulting URL drops into the generate-video
+# pipeline without any further translation.
+_UPLOAD_MAX_BYTES = 10 * 1024 * 1024  # 10 MB
+_UPLOAD_EXT_FOR_TYPE = {
+    "image/png": "png",
+    "image/jpeg": "jpg",
+    "image/jpg": "jpg",
+    "image/webp": "webp",
+}
+
+
+@router.post("/upload-image", response_model=ImageGenerateResponse)
+async def post_upload_image(
+    file: UploadFile = File(...),
+    settings: Settings = Depends(get_settings),
+) -> ImageGenerateResponse:
+    """Accept a multipart image upload (png / jpg / webp, ≤10 MB) and
+    cache it under data/images/<id>.<ext>.  Returns the same shape as
+    /api/runway/image so the frontend can route the result through the
+    same generate-video helper.
+    """
+    ctype = (file.content_type or "").lower().split(";")[0].strip()
+    ext = _UPLOAD_EXT_FOR_TYPE.get(ctype)
+    if not ext:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"unsupported content-type {ctype or '(missing)'!r}. "
+                f"supported: {sorted(set(_UPLOAD_EXT_FOR_TYPE))}"
+            ),
+        )
+
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="empty upload")
+    if len(raw) > _UPLOAD_MAX_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                f"image exceeds cap ({_UPLOAD_MAX_BYTES} bytes; "
+                f"received {len(raw)})"
+            ),
+        )
+
+    image_id = uuid.uuid4().hex[:12]
+    target_dir = settings.data_path / "images"
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target = target_dir / f"{image_id}.{ext}"
+    tmp = target.with_suffix(target.suffix + ".tmp")
+    tmp.write_bytes(raw)
+    tmp.replace(target)
+    logger.info(
+        "uploaded image cached: %s (%d bytes, %s)",
+        target.name, len(raw), ctype,
+    )
+    # ImageGenerateResponse is reused so the frontend's existing
+    # generate-image consumer can swallow this without changes.
+    return ImageGenerateResponse(
+        image_id=image_id,
+        image_url=f"/api/runway/image/{image_id}",
+        mock_mode=False,
+        model="upload",
+    )
 
 
 @router.get("/avatars")

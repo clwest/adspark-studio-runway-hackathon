@@ -39,8 +39,9 @@ export default function App() {
   const [generatedImage, setGeneratedImage] = useState(null) // { image_url, image_id, mock_mode, model }
   const [task, setTask] = useState(null)
   const [campaigns, setCampaigns] = useState([])
+  const [characters, setCharacters] = useState([])
   const [savedId, setSavedId] = useState(null)
-  const [busy, setBusy] = useState({ concepts: false, runway: false, image: false })
+  const [busy, setBusy] = useState({ concepts: false, runway: false, image: false, upload: false })
   const [error, setError] = useState('')
   const pollRef = useRef({ active: false, attempts: 0 })
 
@@ -51,6 +52,10 @@ export default function App() {
     // it surface as an error or block the rest of the page.
     api.organization().then(setOrganization).catch(() => setOrganization(null))
     api.listCampaigns().then((d) => setCampaigns(d.campaigns || [])).catch(() => {})
+    // PR R — Character list is needed by the Visual Source selector
+    // ("Use Character" option). Cached at module-init; the studio
+    // refresh path keeps it fresh after creates/deletes.
+    api.listCharacters().then((d) => setCharacters(d.characters || [])).catch(() => {})
   }, [])
 
   // Persist settings whenever the user changes any one of them. The clamp
@@ -61,6 +66,8 @@ export default function App() {
 
   const refreshCampaigns = () =>
     api.listCampaigns().then((d) => setCampaigns(d.campaigns || [])).catch(() => {})
+  const refreshCharacters = () =>
+    api.listCharacters().then((d) => setCharacters(d.characters || [])).catch(() => {})
 
   const handleConcepts = async (formValue) => {
     setError('')
@@ -166,6 +173,23 @@ export default function App() {
       setError(friendlyError(e, ERROR_HINTS.image))
     } finally {
       setBusy((b) => ({ ...b, image: false }))
+    }
+  }
+
+  // PR R — Visual Source: upload path. Multipart upload returns the
+  // same shape as generate-image so we plug it into the same state.
+  const handleUploadImage = async (file) => {
+    if (!file) return
+    setError('')
+    setBusy((b) => ({ ...b, upload: true }))
+    try {
+      const resp = await api.uploadImage(file)
+      setGeneratedImage({ ...resp, source: 'upload' })
+      setImageUrl(resp.image_url)
+    } catch (e) {
+      setError(friendlyError(e, ERROR_HINTS.image || 'Upload'))
+    } finally {
+      setBusy((b) => ({ ...b, upload: false }))
     }
   }
 
@@ -365,6 +389,10 @@ export default function App() {
                 onGenerateImage={handleGenerateImage}
                 imageBusy={busy.image}
                 imageMockMode={generatedImage?.mock_mode}
+                imageSource={generatedImage?.source}
+                onUploadImage={handleUploadImage}
+                uploadBusy={busy.upload}
+                characters={characters}
                 ratio={ratio}
                 onRatioChange={setRatio}
                 duration={duration}
@@ -377,13 +405,21 @@ export default function App() {
         )}
 
         {/* ---- Stage 3 — Character Studio ---------------------------- */}
+        <div id="character-studio-anchor" />
         <Stage
           number={3}
           title="Character Studio"
           meta="Reusable brand mascot / founder / coach / local guide — bound to a Runway Avatar"
           accent="pink"
         >
-          <CharacterStudio onCharactersChanged={refreshCampaigns} />
+          <CharacterStudio
+            onCharactersChanged={() => {
+              // PR R — keep the visual-source selector's character list
+              // fresh after creates / deletes / portrait wins.
+              refreshCharacters()
+              refreshCampaigns()
+            }}
+          />
         </Stage>
 
         {/* ---- Stage 4 — Saved Campaigns ----------------------------- */}

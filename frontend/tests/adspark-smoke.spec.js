@@ -75,6 +75,20 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
     page.getByRole('button', { name: /^Generate Reference Image$/i }),
   ).toBeVisible()
 
+  // 7a.2. PR R — Visual Source selector. Four explicit options replace
+  //       the silent "imageUrl required" assumption. Default selection
+  //       is Generate (radio aria-checked=true), so the Generate
+  //       Reference Image button rendered in 7a is reachable inside
+  //       this radio's body.
+  const visualSourceGroup = page.getByRole('radiogroup', { name: /visual source/i })
+  await expect(visualSourceGroup).toBeVisible()
+  for (const optName of ['Generate image', 'Upload image', 'Use Character', 'Text-only video']) {
+    await expect(visualSourceGroup.getByRole('radio', { name: optName })).toBeVisible()
+  }
+  await expect(
+    visualSourceGroup.getByRole('radio', { name: /Generate image/i }),
+  ).toHaveAttribute('aria-checked', 'true')
+
   // 7b. PR C UI — source ratio + duration selectors with documented defaults.
   const ratioSelect = page.getByLabel('source ratio')
   const durationSelect = page.getByLabel('duration')
@@ -127,13 +141,23 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
   // Reset to landscape so the rest of the test resembles the original path.
   await ratioAfterReload.selectOption('1280:720')
 
-  // 8. Reference Image URL — placeholder value to mirror the demo path
+  // 8. PR R — switch the Visual Source to "Upload image" so the URL
+  //    paste field is reachable, then fill a placeholder URL to mirror
+  //    the original demo path. The Generate Video pipeline accepts
+  //    typed URLs identically to uploaded files in mock mode.
+  await page.getByRole('radio', { name: /Upload image/i }).click()
+  await expect(
+    page.getByRole('radio', { name: /Upload image/i }),
+  ).toHaveAttribute('aria-checked', 'true')
   await page
     .getByPlaceholder(/images\.unsplash\.com\/photo/i)
     .fill('https://example.com/placeholder.jpg')
 
-  // 9. Generate Video (mock task)
-  await page.getByRole('button', { name: /^Generate Video$/i }).click()
+  // 9. Generate Video (mock task). PR R — button label now adapts to
+  //    the active Visual Source ("Generate Video from Image" / "...from
+  //    Character" / "Generate Text-Only Video"). Use a flexible regex
+  //    that matches any of those + the legacy "Generate Video" form.
+  await page.getByRole('button', { name: /^Generate (?:Video|Text-Only Video)/i }).click()
 
   // 10. Wait for SUCCEEDED. Mock task duration ~12s; client poll every 5s + jitter.
   //     Allow up to 25s.

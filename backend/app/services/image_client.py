@@ -89,6 +89,12 @@ def _images_dir(settings: Settings) -> Path:
     return d
 
 
+# PR R — image cache now supports png + jpg + webp so user uploads can
+# coexist with gen4_image_turbo PNGs. Lookup tries each extension; the
+# generator path still always writes PNG.
+SUPPORTED_IMAGE_EXTS: tuple[str, ...] = ("png", "jpg", "jpeg", "webp")
+
+
 def _write_atomic(images_dir: Path, image_id: str, payload: bytes) -> _ImageWriteResult:
     target = images_dir / f"{image_id}.png"
     tmp = target.with_suffix(".png.tmp")
@@ -97,7 +103,23 @@ def _write_atomic(images_dir: Path, image_id: str, payload: bytes) -> _ImageWrit
     return _ImageWriteResult(image_id=image_id, path=target)
 
 
+def find_image_path(settings: Settings, image_id: str) -> Optional[Path]:
+    """Locate a cached image regardless of which supported extension it
+    was saved with. Returns None when no file exists for the id.
+    """
+    images_dir = _images_dir(settings)
+    for ext in SUPPORTED_IMAGE_EXTS:
+        candidate = images_dir / f"{image_id}.{ext}"
+        if candidate.exists():
+            return candidate
+    return None
+
+
 def path_for(settings: Settings, image_id: str) -> Path:
+    """Back-compat shim. Returns the PNG-conventional path even when no
+    file is present yet, since callers that write through this helper
+    still write PNG (see ``_write_atomic``).
+    """
     return _images_dir(settings) / f"{image_id}.png"
 
 

@@ -69,6 +69,23 @@ export const api = {
     ),
   deleteCampaign: (campaignId) =>
     jsonFetch(`/api/campaigns/${encodeURIComponent(campaignId)}`, { method: 'DELETE' }),
+  // PR R — visual-source flow: upload-image complements the existing
+  // /api/runway/image (generate) so the user can choose which path to
+  // take.  Uses native fetch since multipart bodies don't go through
+  // the JSON wrapper.
+  uploadImage: async (file) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    const resp = await fetch('/api/runway/upload-image', {
+      method: 'POST',
+      body: fd,
+    })
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => '')
+      throw new Error(`${resp.status} ${resp.statusText}: ${text}`)
+    }
+    return resp.json()
+  },
   listAvatars: () => jsonFetch('/api/runway/avatars'),
   selectAvatar: (campaignId, body) =>
     jsonFetch(

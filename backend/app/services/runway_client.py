@@ -89,6 +89,19 @@ def validate_generation_settings(
 # locally-served URL for a base64 data URI before posting to Runway. Mirrors
 # the FastAPI route registered at GET /api/runway/image/{image_id}.
 _LOCAL_IMAGE_PREFIX = "/api/runway/image/"
+# PR R — character portraits served at /api/characters/{id}/portrait. When
+# the user picks "Use Character" as the visual source, the frontend passes
+# this URL through as `prompt_image`; we resolve to the cached file +
+# embed as a data URI just like the standard image cache.
+_CHARACTER_PORTRAIT_PREFIX = "/api/characters/"
+_CHARACTER_PORTRAIT_SUFFIX = "/portrait"
+# Mapping of file extensions to the appropriate data-URI media types.
+_DATA_URI_MEDIA = {
+    "png": "image/png",
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "webp": "image/webp",
+}
 
 
 def resolve_model(req_model: Optional[str], settings: Settings) -> str:
@@ -187,18 +200,34 @@ def maybe_to_data_uri(prompt_image: str, settings: Settings) -> str:
     if not prompt_image:
         return prompt_image
     pi = prompt_image.strip()
+
+    # PR R — character portrait path: /api/characters/{id}/portrait
+    if pi.startswith(_CHARACTER_PORTRAIT_PREFIX) and pi.endswith(_CHARACTER_PORTRAIT_SUFFIX):
+        char_id = pi[len(_CHARACTER_PORTRAIT_PREFIX):-len(_CHARACTER_PORTRAIT_SUFFIX)]
+        if not char_id or "/" in char_id or ".." in char_id:
+            return pi
+        portrait: Path = settings.data_path / "characters" / f"{char_id}-portrait.png"
+        if not portrait.exists():
+            return pi
+        data = portrait.read_bytes()
+        b64 = base64.b64encode(data).decode("ascii")
+        return f"data:image/png;base64,{b64}"
+
     if not pi.startswith(_LOCAL_IMAGE_PREFIX):
         return pi
     image_id = pi[len(_LOCAL_IMAGE_PREFIX):]
     # Defensive: refuse path traversal attempts.
     if "/" in image_id or ".." in image_id:
         return pi
-    local: Path = settings.data_path / "images" / f"{image_id}.png"
-    if not local.exists():
-        return pi
-    data = local.read_bytes()
-    b64 = base64.b64encode(data).decode("ascii")
-    return f"data:image/png;base64,{b64}"
+    # PR R — try every supported extension (uploads can be jpg/webp).
+    images_dir: Path = settings.data_path / "images"
+    for ext, media in _DATA_URI_MEDIA.items():
+        candidate = images_dir / f"{image_id}.{ext}"
+        if candidate.exists():
+            data = candidate.read_bytes()
+            b64 = base64.b64encode(data).decode("ascii")
+            return f"data:{media};base64,{b64}"
+    return pi
 
 
 def create_task(req: RunwayGenerateRequest, settings: Settings) -> RunwayGenerateResponse:
