@@ -1,14 +1,15 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after PR AU (Voice Drift Repair Action) on
-top of the PR AG–AT / SESSION 011 anchors. Backend route count
-is **66** application routes — PR AU is a frontend-only slice
-that adds a one-click "Repair voice drift" button to the
-existing PR AT mismatch branch. The button reuses
-`POST /api/characters/{id}/apply-voice` (which already runs
-PATCH + verify + drift) so a click flips the rose pill back to
-emerald end-to-end without a new endpoint.
+context-kit refresh after PR AV (Avatar Status Manual Refresh)
+on top of the PR AG–AU / SESSION 011 anchors. Backend route
+count is **67** application routes — PR AV adds one new
+endpoint (`POST /api/characters/{id}/refresh-avatar-voice`)
+on top of the 66 routes from PR AU. The route is read-only:
+it reuses `fetch_avatar_voice` (PR AS) +
+`compute_voice_drift_status` (PR AT) without ever touching the
+PR AQ PATCH path, so an operator can re-check Runway state
+without mutating the binding.
 
 ## Backend (`backend/`)
 
@@ -83,7 +84,7 @@ emerald end-to-end without a new endpoint.
 *optional* PR-F knobs — defaults are `vincent` and a curated
 Unsplash portrait URL.
 
-## Endpoints (66 application + FastAPI built-ins)
+## Endpoints (67 application + FastAPI built-ins)
 
 ```
 GET    /health
@@ -146,6 +147,7 @@ POST   /api/characters/{id}/generate-portrait              (PR K + PR V)
 POST   /api/characters/{id}/create-avatar                  (PR K + PR AN — uses custom_voice_id when set)
 POST   /api/characters/{id}/clone-voice                    (PR AN + PR AQ — multipart audio upload → /v1/voices from.type=audio + auto-PATCH avatar voice when bound)
 POST   /api/characters/{id}/apply-voice                    (PR AQ — manual retry for the avatar voice swap when the auto-PATCH after a clone failed)
+POST   /api/characters/{id}/refresh-avatar-voice           (PR AV — read-only: GET /v1/avatars/{id} + drift recompute, no PATCH)
 GET    /api/characters/{id}/portrait
 DELETE /api/characters/{id}
 plus /openapi.json, /docs, /docs/oauth2-redirect, /redoc
@@ -214,6 +216,7 @@ the line's own `avatar_id`).
 | PR AS | Avatar Resource Introspection After Voice Patch (run GET /v1/avatars/{id} after every successful PR AQ PATCH; persist resolved voice block + verify status on Character; surface a third pill "Avatar using cloned voice" / "Avatar voice unverified" in CharacterCard) | (post-v13) |
 | PR AT | Avatar Voice Drift Detection (compare cloned vs resolved voice id; persist match/drift/unknown; collapse PR AS pill into three operator-facing branches: match / drift / unverified) | (post-v13) |
 | PR AU | Voice Drift Repair Action (frontend-only one-click "Repair voice drift" button on the PR AT mismatch branch; reuses POST /apply-voice for PATCH + verify + drift; rose pill flips to emerald on success) | (post-v13) |
+| PR AV | Avatar Status Manual Refresh (read-only POST /refresh-avatar-voice route + Refresh avatar status button; reuses fetch_avatar_voice + compute_voice_drift_status without invoking PATCH; PR AQ patch fields preserved across refreshes) | (post-v13) |
 
 ## Known limitations (current main)
 

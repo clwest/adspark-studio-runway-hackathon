@@ -288,6 +288,15 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
       .getByTestId('custom-voice-repair-drift')
       .count()
     expect(repairButtons).toBeLessThanOrEqual(verifyDrift)
+    // PR AV — Refresh avatar status button. Renders only when the
+    // character has both a cloned voice and a ready avatar (the
+    // backend route enforces the same gate). Bounded above by the
+    // voice section count; in the default smoke pass with no
+    // cloned voices the count is 0.
+    const refreshButtons = await page
+      .getByTestId('custom-voice-refresh-avatar')
+      .count()
+    expect(refreshButtons).toBeLessThanOrEqual(voiceSectionCount)
   }
 
   // 7b.6. PR U — stage order: Spokesperson leads, Campaign Brief

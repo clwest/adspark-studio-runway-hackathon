@@ -473,6 +473,91 @@ def post_apply_voice_to_avatar(
     return updated or record
 
 
+# ---- PR AV — Avatar status manual refresh -------------------------
+#
+# Read-only counterpart to PR AQ's apply-voice. Re-runs the PR AS
+# avatar introspection + PR AT drift recompute against the existing
+# avatar resource without ever calling PATCH. Useful when an operator
+# wants to re-check Runway state (e.g. after waiting for a queued
+# upstream change) without mutating the binding.
+
+
+@router.post("/{character_id}/refresh-avatar-voice", response_model=Character)
+def post_refresh_avatar_voice(
+    character_id: str,
+    settings: Settings = Depends(get_settings),
+    store: CharacterStore = Depends(_store),
+) -> Character:
+    """PR AV — re-run avatar voice introspection + drift recompute
+    without applying the PATCH. Calls only ``fetch_avatar_voice`` +
+    ``compute_voice_drift_status``; the PR AQ apply path is never
+    invoked from here so this route has no PATCH side effects.
+
+    Failure modes:
+    - 404 — character not found.
+    - 409 — character has no avatar bound yet (cannot introspect).
+    - 409 — character has no cloned voice yet (drift comparison
+      requires both ids to exist).
+
+    Real-mode HTTP / network failures persist as ``failed`` /
+    ``unverified`` on the character; the route still returns 200 so
+    the UI can render the new failure state. Mock mode short-circuits
+    via PR AS's existing helper to ``mock_verified`` + ``match``.
+    """
+    record = store.get(character_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="character not found")
+    if not record.runway_avatar_id:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "no Runway avatar bound to this character yet — "
+                "create the avatar before refreshing its status."
+            ),
+        )
+    if not record.custom_voice_id:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "no custom voice cloned for this character yet — "
+                "drift comparison requires both ids."
+            ),
+        )
+
+    state = fetch_avatar_voice(
+        record.runway_avatar_id,
+        settings,
+        avatar_is_mock=(record.runway_avatar_status == "mock"),
+        expected_voice_id=record.custom_voice_id,
+    )
+    verified_at = (
+        datetime.now(timezone.utc)
+        if state.status in {"verified", "mock_verified"}
+        else None
+    )
+    drift_status = compute_voice_drift_status(
+        record.custom_voice_id, state.resolved_id, state.status,
+    )
+    updated = store.update(
+        character_id,
+        # NOTE: the PR AQ patch fields are intentionally not touched
+        # — this route is verify-only. patch_status / patched_at
+        # remain whatever the prior PATCH set them to.
+        avatar_voice_resolved_type=state.resolved_type,
+        avatar_voice_resolved_id=state.resolved_id,
+        avatar_voice_resolved_label=state.resolved_label,
+        avatar_voice_verify_status=state.status,
+        avatar_voice_verified_at=(verified_at.isoformat() if verified_at else None),
+        avatar_voice_verify_error=state.error,
+        avatar_voice_drift_status=drift_status,
+    )
+    logger.info(
+        "character %s refresh-avatar-voice -> verify=%s drift=%s",
+        character_id, state.status, drift_status,
+    )
+    return updated or record
+
+
 @router.get("/{character_id}/portrait")
 def get_character_portrait(
     character_id: str,

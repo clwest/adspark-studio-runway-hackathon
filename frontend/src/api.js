@@ -256,4 +256,13 @@ export const api = {
       `/api/characters/${encodeURIComponent(characterId)}/apply-voice`,
       { method: 'POST' },
     ),
+  // PR AV — read-only refresh: re-runs the avatar introspection +
+  // drift recompute against the existing Runway avatar without
+  // calling PATCH. Useful after a queued upstream change or to
+  // confirm a previously-failed verify has cleared.
+  refreshCharacterAvatarVoice: (characterId) =>
+    jsonFetch(
+      `/api/characters/${encodeURIComponent(characterId)}/refresh-avatar-voice`,
+      { method: 'POST' },
+    ),
 }

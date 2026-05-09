@@ -73,6 +73,10 @@ export default function CharacterCard({
   // (PATCH /v1/avatars/{id}). Library tiles can wire this so a manual
   // retry surfaces when the auto-patch failed.
   onApplyVoiceToAvatar,
+  // PR AV — Read-only refresh of the avatar introspection + drift
+  // recompute. Library tiles surface a small button when both an
+  // avatar and a cloned voice exist.
+  onRefreshAvatarVoice,
 }) {
   const c = character
   const portraitUrl = c.portrait_url
@@ -156,6 +160,26 @@ export default function CharacterCard({
       setRepairBusy(false)
     }
   }
+  // PR AV — Read-only refresh of the avatar voice state. Distinct
+  // from PR AQ apply / PR AU repair: this never triggers a PATCH.
+  // Renders only when the character has both an avatar and a
+  // cloned voice (the same gates the backend route enforces).
+  const [refreshBusy, setRefreshBusy] = useState(false)
+  const [refreshError, setRefreshError] = useState('')
+  const handleRefreshAvatar = async () => {
+    if (!onRefreshAvatarVoice) return
+    setRefreshBusy(true)
+    setRefreshError('')
+    try {
+      await onRefreshAvatarVoice(c)
+    } catch (e) {
+      setRefreshError(`${e?.message || e}`)
+    } finally {
+      setRefreshBusy(false)
+    }
+  }
+  const refreshButtonShouldRender =
+    customVoiceReady && avatarReady && Boolean(onRefreshAvatarVoice)
 
   const handleVoiceFile = async (file) => {
     if (!file || !onCloneVoice) return
@@ -682,6 +706,44 @@ export default function CharacterCard({
                   className="text-[9px] text-zinc-500"
                 >
                   posting to /apply-voice…
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* PR AV — Read-only refresh button. Renders any time the
+              character has both an avatar and a cloned voice (the
+              backend route returns 409 otherwise so the gate matches
+              the wire contract). Distinct from PR AQ apply + PR AU
+              repair: this never PATCHes the avatar — only re-runs
+              the introspection + drift recompute. */}
+          {refreshButtonShouldRender && (
+            <div className="space-y-0.5">
+              <button
+                type="button"
+                onClick={handleRefreshAvatar}
+                disabled={refreshBusy || patchPending2 || repairBusy || Boolean(busyAction)}
+                data-testid="custom-voice-refresh-avatar"
+                className="text-[9px] rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-100 ring-1 ring-zinc-600 px-2 py-0.5 font-semibold disabled:opacity-50"
+                title="Re-run GET /v1/avatars/{id} + drift recompute. Read-only — no PATCH."
+              >
+                {refreshBusy ? 'Refreshing…' : 'Refresh avatar status'}
+              </button>
+              {refreshError && (
+                <p
+                  data-testid="custom-voice-refresh-status"
+                  className="text-[9px] text-rose-300"
+                  title={refreshError}
+                >
+                  {refreshError}
+                </p>
+              )}
+              {!refreshError && refreshBusy && (
+                <p
+                  data-testid="custom-voice-refresh-status"
+                  className="text-[9px] text-zinc-500"
+                >
+                  posting to /refresh-avatar-voice…
                 </p>
               )}
             </div>

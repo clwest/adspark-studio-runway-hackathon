@@ -290,6 +290,36 @@ While the request is in flight a one-line *"posting to
 `custom-voice-repair-status`); a failure replaces it with
 the error message.
 
+#### Read-only refresh (PR AV)
+
+A separate **`Refresh avatar status`** button (zinc, neutral)
+sits below the patch / verify / drift pills any time the
+character has both an avatar and a cloned voice. Clicking it
+re-runs `GET /v1/avatars/{id}` + `compute_voice_drift_status`
+and persists fresh resolved / verify / drift fields **without**
+ever invoking the PATCH path. Useful for confirming a
+previously-failed verify has cleared, or polling the avatar
+resource after a queued upstream change.
+
+Backend route:
+
+```
+POST /api/characters/{id}/refresh-avatar-voice
+  → 200  { ...character with refreshed verify + drift fields }
+  → 404  character not found
+  → 409  no Runway avatar bound
+  → 409  no custom voice cloned (drift compare requires both ids)
+```
+
+Read-only proof: PR AV's verification probe runs the refresh
+five times back-to-back against a healthy character and
+asserts `custom_voice_avatar_patch_status` and
+`custom_voice_avatar_patched_at` stay byte-for-byte identical
+across all five calls — confirming no PATCH side effects.
+
+`data-testid` hooks: `custom-voice-refresh-avatar` (the
+button), `custom-voice-refresh-status` (the busy / error row).
+
 #### Recording in-browser (PR AO)
 
 Below the file picker on each library tile sits a small

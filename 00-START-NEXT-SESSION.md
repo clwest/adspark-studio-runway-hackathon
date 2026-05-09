@@ -4,33 +4,35 @@
 `108ca3b`; PR AJ `444cb6a`; PR AK `c59251a`; PR AL `8a43af2`;
 PR AM `3e12d27`; PR AN `f255c22`; PR AO `5bca7c4`; PR AP
 `3c6483e`; PR AQ `ec35c0e`; PR AR `5aa5579`; PR AS `2321fd7`;
-PR AT `632b696 feat: detect drift between cloned and avatar
-voice`; PR AU Voice Drift Repair Action in flight on top —
-SESSION_012–SESSION_026 handoffs added).
+PR AT `632b696`; PR AU `485310a feat: repair detected voice
+drift in one click`; PR AV Avatar Status Manual Refresh in
+flight on top — SESSION_012–SESSION_027 handoffs added).
 
 ## Where things stand
 
-- **Branch:** `main` at `632b696` (`feat: detect drift between
-  cloned and avatar voice`) on `origin/main`. PR AU patch in
-  flight on top — no new commit / tag yet, both pending
-  explicit user approval.
+- **Branch:** `main` at `485310a` (`feat: repair detected voice
+  drift in one click`) on `origin/main`. PR AV patch in flight
+  on top — no new commit / tag yet, both pending explicit
+  user approval.
 - **Latest tag:** still **`hackathon-submission-v13`** at `ec446e4`
-  (PR AF). PR AG–AT shipped clone → apply → preview → verify
-  → drift detection; PR AU closes the loop with a one-click
-  drift-repair button that reuses the existing apply-voice
-  pipeline.
-- **Backend routes:** **66** application + FastAPI built-ins
-  (unchanged from PR AT; PR AU is frontend-only — reuses the
-  existing `POST /api/characters/{id}/apply-voice` route).
-- **Frontend build:** 320.61 KB initial JS / 90.05 KB gzip +
-  561.97 KB lazy `@runwayml/avatars-react` chunk (≈ +0.9 KB
-  initial / +0.2 KB gzip vs PR AT — PR AU added the repair
-  button + busy/error state).
-- **Playwright smoke:** `1 passed (~26.0 s)` against the mock
-  backend; PR AU extends the resilient assertion so the
-  repair-button count is bounded by the drift-pill count.
-  Mock fixture libraries usually have zero drift, so the
-  button never renders in the default smoke pass.
+  (PR AF). PR AG–AU shipped clone → apply → preview → verify
+  → drift detect → drift repair; PR AV adds the read-only
+  counterpart so operators can re-check Runway state without
+  mutating the binding.
+- **Backend routes:** **67** application + FastAPI built-ins
+  (was 66 at PR AU). PR AV adds one new endpoint:
+  `POST /api/characters/{id}/refresh-avatar-voice` (read-only
+  GET /v1/avatars/{id} + drift recompute, no PATCH).
+- **Frontend build:** 321.88 KB initial JS / 90.29 KB gzip +
+  561.97 KB lazy `@runwayml/avatars-react` chunk (≈ +1.3 KB
+  initial / +0.2 KB gzip vs PR AU — PR AV added the refresh
+  button + busy/error state + handler wiring).
+- **Playwright smoke:** `1 passed (~21.7 s)` against the mock
+  backend; PR AV extends the resilient assertion so the
+  refresh-button count is bounded by the voice section count.
+  Read-only proof verified out-of-band: 5 back-to-back
+  refreshes preserve `custom_voice_avatar_patch_status` and
+  `custom_voice_avatar_patched_at` byte-for-byte.
 - **Repo:** https://github.com/clwest/adspark-studio-runway-hackathon
   (private). Pushes happen on explicit user approval.
 - **Stale local feature branches:** 22 left over from PR A through
@@ -121,6 +123,17 @@ SESSION_012–SESSION_026 handoffs added).
   via `data-testid="custom-voice-repair-status"`. No new
   backend route — repair = apply (the route already does
   exactly what repair needs).
+- **Avatar status manual refresh** (PR AV) — read-only
+  *"Refresh avatar status"* button that renders any time the
+  character has both an avatar and a cloned voice. New route
+  `POST /api/characters/{id}/refresh-avatar-voice` calls only
+  `fetch_avatar_voice` (PR AS) + `compute_voice_drift_status`
+  (PR AT) — never PATCH. Persists fresh resolved / verify /
+  drift fields without touching the PR AQ patch fields.
+  Read-only proof: 5 back-to-back refreshes leave
+  `custom_voice_avatar_patch_status` + `_patched_at`
+  byte-identical. data-testid: `custom-voice-refresh-avatar`,
+  `custom-voice-refresh-status`.
 - New backend route: `POST /api/characters/{id}/clone-voice`
   (multipart form with `audio` + optional `name`). The route
   validates mime + size (cap 15 MB locally; Runway docs say

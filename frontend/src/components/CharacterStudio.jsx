@@ -229,6 +229,24 @@ export default function CharacterStudio({
     }
   }
 
+  // PR AV — read-only refresh of the avatar voice introspection +
+  // drift recompute. Mirrors handleApplyVoiceToAvatar's shape but
+  // bubbles up a thrown error so the tile can render an inline
+  // refresh-status row.
+  const handleRefreshAvatarVoice = async (c) => {
+    setBusy(c.id, 'voice-refresh')
+    try {
+      const updated = await api.refreshCharacterAvatarVoice(c.id)
+      setCharacters((cs) => cs.map((x) => (x.id === c.id ? updated : x)))
+      onCharactersChanged?.()
+    } catch (e) {
+      setErrMsg(friendlyError(e, `Refresh avatar status failed for ${c.name}`))
+      throw e
+    } finally {
+      clearBusy(c.id)
+    }
+  }
+
   const handleDelete = async (c) => {
     if (!confirm(`Delete character "${c.name}"? This is local only — the Runway avatar is not removed.`)) return
     setBusy(c.id, 'delete')
@@ -521,6 +539,11 @@ export default function CharacterStudio({
               // PR AQ — manual retry for the avatar voice swap. Only
               // visible inside the tile when the auto-patch failed.
               onApplyVoiceToAvatar={handleApplyVoiceToAvatar}
+              // PR AV — read-only refresh of the avatar introspection
+              // + drift recompute. Renders next to the patch / verify
+              // pills when the character has both an avatar and a
+              // cloned voice.
+              onRefreshAvatarVoice={handleRefreshAvatarVoice}
               // PR U — Spokesperson-first flow: pass active state +
               // toggle handler so the tile lights up + the action row
               // shows "Use as Spokesperson" / "Active" affordances.
