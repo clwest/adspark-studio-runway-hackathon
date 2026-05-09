@@ -11,8 +11,11 @@ import {
 } from './settings'
 // PR T — structured Runway video prompt builder.
 import { simplifyFromConcept } from './promptBuilder'
-// PR AA / PR AC — deterministic Commercial Script + length cap.
-import { buildCommercialScript, COMMERCIAL_SCRIPT_MAX } from './scriptBuilder'
+// PR AA / PR AC — deterministic Commercial Script generator. The
+// length cap (COMMERCIAL_SCRIPT_MAX) lives inside PromptPreview where
+// the editable textarea now renders; App.jsx only orchestrates
+// generation + draft persistence.
+import { buildCommercialScript } from './scriptBuilder'
 import CampaignForm from './components/CampaignForm.jsx'
 import ConceptCards from './components/ConceptCards.jsx'
 import PromptPreview from './components/PromptPreview.jsx'
@@ -439,12 +442,12 @@ export default function App() {
           />
         </Stage>
 
-        {/* ---- Stage 2 — Campaign Brief + Commercial Script (PR AC) -- */}
-        <Stage
-          number={2}
-          title="Campaign Brief + Script"
-          meta="Who is the ad for, and what does the spokesperson say?"
-        >
+        {/* ---- Stage 2 — Campaign Brief (PR U: was Stage 1) ---------- */}
+        {/* PR AC' — Commercial Script editor moved into Stage 3
+            PromptPreview alongside the Runway video prompt so the
+            spoken + visual creative direction live together. Stage 2
+            stays a simple brief form. */}
+        <Stage number={2} title="Campaign Brief" meta="Who is the ad for?">
           {/* PR U — active spokesperson chip when set. */}
           {activeCharacter && (
             <div
@@ -483,80 +486,6 @@ export default function App() {
             </div>
           )}
           <CampaignForm onSubmit={handleConcepts} busy={busy.concepts} />
-
-          {/* PR AC — Stage-2 Commercial Script editor. Lives BEFORE the
-              visual ad is generated so the user directs the spoken
-              pitch first; downstream Spokesperson Ad + Cinematic Ad
-              paths speak this verbatim. The draft persists into the
-              Campaign record on first save. */}
-          <div className="rounded-lg ring-1 ring-pink-400/30 bg-pink-500/5 p-3 space-y-2">
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-zinc-200">
-                  Commercial Script
-                </span>
-                <span
-                  className="text-[10px] text-zinc-500 font-mono"
-                  title="Spoken pitch the spokesperson reads in the Spokesperson Ad. Cinematic Ad mixes it as voiceover."
-                >
-                  spoken pitch · ≤ {COMMERCIAL_SCRIPT_MAX} chars
-                </span>
-              </div>
-              <span className="text-[10px] text-pink-300 font-mono">
-                Script → Storyboard → Video → Final Ad
-              </span>
-            </div>
-            <p className="text-[10px] text-zinc-500 leading-relaxed">
-              Direct the spokesperson before generating any visuals.
-              Generate Script pulls a deterministic pitch from the
-              brief above and the active spokesperson's personality.
-            </p>
-            <textarea
-              aria-label="Stage 2 Commercial Script"
-              value={commercialScriptDraft}
-              onChange={(e) =>
-                setCommercialScriptDraft(
-                  e.target.value.slice(0, COMMERCIAL_SCRIPT_MAX),
-                )
-              }
-              rows={3}
-              placeholder="Meet [your brand]. Built for [audience]. [hook]. [cta]."
-              className="w-full rounded-md bg-zinc-950 border border-zinc-800 px-2 py-1.5 text-xs text-zinc-100 focus:border-pink-400 outline-none font-mono leading-relaxed"
-            />
-            <div className="flex items-center justify-between gap-2 flex-wrap text-[10px]">
-              <span className="text-zinc-500 font-mono">
-                {commercialScriptDraft.length}/{COMMERCIAL_SCRIPT_MAX}
-              </span>
-              <button
-                type="button"
-                onClick={() => {
-                  if (!form && !conceptResp) return
-                  const synthCampaign = {
-                    business: form?.business,
-                    product: form?.product,
-                    tone: form?.tone,
-                    audience: form?.audience,
-                    selected_concept:
-                      conceptResp?.concepts?.[selectedIndex] || {},
-                  }
-                  const generated = buildCommercialScript({
-                    campaign: synthCampaign,
-                    character: activeCharacter,
-                  })
-                  if (generated) setCommercialScriptDraft(generated)
-                }}
-                disabled={!form}
-                className="rounded-md bg-pink-500/80 hover:bg-pink-500 text-zinc-100 text-[11px] font-semibold px-2 py-1 disabled:opacity-50"
-                title={
-                  form
-                    ? 'Regenerate from the brief + active spokesperson'
-                    : 'Fill the brief above first'
-                }
-              >
-                Generate Script
-              </button>
-            </div>
-          </div>
         </Stage>
 
         {/* ---- Stage 3 — Generate Visual Ad (PR U: was Stage 2) ------ */}
@@ -647,10 +576,30 @@ export default function App() {
                 // PR U — when an active spokesperson exists with a portrait,
                 // pre-fill the imageUrl + adapt the Generate Video button.
                 activeCharacter={activeCharacter}
-                // PR AC — surface the Stage-2 Commercial Script in the
-                // prompt panel so the visual + audio direction stay in
-                // the user's eye-line.
-                commercialScript={commercialScriptDraft}
+                // PR AC' — Commercial Script editor lives in the
+                // prompt panel now so the spoken + visual direction
+                // sit together. App.jsx still owns the draft state so
+                // it survives unmounting + persists into CampaignCreate
+                // on first save.
+                commercialScriptDraft={commercialScriptDraft}
+                onCommercialScriptChange={setCommercialScriptDraft}
+                onGenerateCommercialScript={() => {
+                  if (!form) return
+                  const synthCampaign = {
+                    business: form.business,
+                    product: form.product,
+                    tone: form.tone,
+                    audience: form.audience,
+                    selected_concept:
+                      conceptResp?.concepts?.[selectedIndex] || {},
+                  }
+                  const generated = buildCommercialScript({
+                    campaign: synthCampaign,
+                    character: activeCharacter,
+                  })
+                  if (generated) setCommercialScriptDraft(generated)
+                }}
+                canGenerateCommercialScript={Boolean(form)}
               />
             )}
 

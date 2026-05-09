@@ -187,27 +187,38 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
   // the form is open.
   await page.getByRole('button', { name: /^Cancel$/i }).click()
 
-  // 7b.6. PR U + PR AC — stage order. Stage 2 was renamed to
-  //        "Campaign Brief + Script". Spokesperson still leads.
+  // 7b.6. PR U — stage order: Spokesperson leads, Campaign Brief
+  //        follows. PR AC' — Stage 2 title reverted to "Campaign
+  //        Brief"; the Commercial Script editor moved into Stage 3
+  //        PromptPreview.
   const spokespersonHeading = page.getByRole('heading', { name: /^Spokesperson$/i })
-  const briefHeading = page.getByRole('heading', { name: /^Campaign Brief \+ Script$/i })
+  const briefHeading = page.getByRole('heading', { name: /^Campaign Brief$/i })
   const spokeBox = await spokespersonHeading.boundingBox()
   const briefBox = await briefHeading.boundingBox()
   expect(spokeBox).not.toBeNull()
   expect(briefBox).not.toBeNull()
   expect(spokeBox.y).toBeLessThan(briefBox.y)
-  // 7b.7. PR AC — Stage-2 Commercial Script editor renders before
-  //        Generate Concepts is clicked. Textarea + Generate Script
-  //        button are reachable; the breadcrumb chip carries the
-  //        directing flow ordering.
-  const stage2ScriptArea = page.getByLabel(/^Stage 2 Commercial Script$/)
-  await expect(stage2ScriptArea).toBeVisible()
+  // 7b.7. PR AC' — Commercial Script editor lives inside the Stage 3
+  //        PromptPreview (above the Runway video prompt). Textarea +
+  //        Generate Script button + breadcrumb pill are reachable now
+  //        that a concept is selected and PromptPreview is mounted.
+  await expect(
+    page.getByRole('heading', { name: /^Creative direction$/i }),
+  ).toBeVisible()
+  const promptScriptTextarea = page.getByLabel(/^Commercial Script$/)
+  await expect(promptScriptTextarea.first()).toBeVisible()
+  await expect(
+    page.getByText(/This is what the spokesperson says\. The Runway prompt below/i),
+  ).toBeVisible()
   await expect(
     page.getByRole('button', { name: /^Generate Script$/i }).first(),
   ).toBeVisible()
   await expect(
     page.getByText(/Script → Storyboard → Video → Final Ad/i).first(),
   ).toBeVisible()
+  // The Runway video prompt textarea is a separate element with its
+  // own aria-label — assert both surfaces coexist.
+  await expect(page.getByLabel(/^Runway video prompt$/i)).toBeVisible()
   // Stage progress trail: "Spokesperson" chip must appear in the hero
   // before "Brief" — verifies the trail array reflects the new order.
   const trailNav = page.getByRole('navigation', { name: /demo path/i })

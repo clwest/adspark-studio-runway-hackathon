@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 // PR T — quality hint copy.  Lives here in addition to promptBuilder.js
 // so the smoke can match either source; the strings are identical.
 import { PROMPT_QUALITY_HINT } from '../promptBuilder'
+// PR AC' — Commercial Script length cap mirrors avatar_videos' speech
+// limit; the editor lives in this panel now (was in App.jsx Stage 2).
+import { COMMERCIAL_SCRIPT_MAX } from '../scriptBuilder'
 
 // Mirror of backend GENERATION_POLICY (services/runway_client.py). Keep in
 // sync with the backend table — the backend is the source of truth, but the
@@ -39,10 +42,13 @@ export default function PromptPreview({
   imageUrl,
   onImageUrlChange,
   requireImage,
-  // PR AC — when the Stage-2 script editor has produced a draft, show
-  // a chip above the textarea so the user knows the visual prompt is
-  // being directed alongside a saved spoken pitch.
-  commercialScript = '',
+  // PR AC' — full Commercial Script editor lives in this panel so
+  // the spoken pitch + visual prompt sit side-by-side in the same
+  // creative-direction surface. App.jsx owns the draft state.
+  commercialScriptDraft = '',
+  onCommercialScriptChange,
+  onGenerateCommercialScript,
+  canGenerateCommercialScript = false,
   onGenerate,
   busy,
   disabled,
@@ -254,36 +260,95 @@ export default function PromptPreview({
   return (
     <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5 space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="font-semibold">Runway video prompt</h3>
-        <span className="text-xs text-zinc-500">edit before generating</span>
+        <h3 className="font-semibold">Creative direction</h3>
+        <span className="text-xs text-zinc-500">script + prompt</span>
       </div>
-      {/* PR AC — Commercial Script chip. Surfaces the Stage-2 script
-          right above the visual prompt so the user remembers what the
-          spokesperson will say while composing what the camera sees. */}
-      {commercialScript && commercialScript.trim() && (
-        <div className="rounded-md ring-1 ring-pink-400/30 bg-pink-500/5 px-2 py-1.5 text-[11px] text-zinc-300">
-          <span className="text-pink-300 font-semibold">
-            Commercial Script powering this campaign:
-          </span>{' '}
-          <span className="text-zinc-300">
-            {commercialScript.length > 120
-              ? `${commercialScript.slice(0, 120).trim()}…`
-              : commercialScript}
+
+      {/* PR AC' — Commercial Script editor (Section A: spoken pitch).
+          Sits ABOVE the Runway video prompt so the spokesperson copy
+          gets directed first; downstream Spokesperson Ad / Voiced
+          Commercial paths speak this verbatim. */}
+      <section
+        aria-label="Commercial Script section"
+        className="rounded-lg ring-1 ring-pink-400/30 bg-pink-500/5 p-3 space-y-2"
+      >
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-semibold text-pink-200">
+              Commercial Script
+            </span>
+            <span
+              className="text-[10px] text-pink-300/70 font-mono"
+              title="Spoken pitch the spokesperson reads in the Spokesperson Ad. Cinematic Ad mixes it as voiceover."
+            >
+              spoken pitch · ≤ {COMMERCIAL_SCRIPT_MAX} chars
+            </span>
+          </div>
+          <span className="text-[10px] text-pink-300 font-mono">
+            Script → Storyboard → Video → Final Ad
           </span>
         </div>
-      )}
-      <textarea
-        aria-label="Runway video prompt"
-        rows={4}
-        value={prompt}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-lg bg-zinc-950 border border-zinc-800 px-3 py-2 outline-none focus:border-spark text-sm"
-      />
+        <p className="text-[11px] text-zinc-400 leading-relaxed">
+          This is what the spokesperson says. The Runway prompt below
+          controls what the visual does.
+        </p>
+        <textarea
+          aria-label="Commercial Script"
+          rows={3}
+          value={commercialScriptDraft}
+          onChange={(e) =>
+            onCommercialScriptChange?.(
+              e.target.value.slice(0, COMMERCIAL_SCRIPT_MAX),
+            )
+          }
+          placeholder="Meet [your brand]. Built for [audience]. [hook]. [cta]."
+          className="w-full rounded-md bg-zinc-950 border border-zinc-800 px-2 py-1.5 text-xs text-zinc-100 focus:border-pink-400 outline-none font-mono leading-relaxed"
+        />
+        <div className="flex items-center justify-between gap-2 flex-wrap text-[10px]">
+          <span className="text-zinc-500 font-mono">
+            {(commercialScriptDraft || '').length}/{COMMERCIAL_SCRIPT_MAX}
+          </span>
+          <button
+            type="button"
+            onClick={() => onGenerateCommercialScript?.()}
+            disabled={!canGenerateCommercialScript || !onGenerateCommercialScript}
+            className="rounded-md bg-pink-500/80 hover:bg-pink-500 text-zinc-100 text-[11px] font-semibold px-2 py-1 disabled:opacity-50"
+            title={
+              canGenerateCommercialScript
+                ? 'Regenerate from the brief + selected concept + active spokesperson'
+                : 'Fill the Campaign Brief above first'
+            }
+          >
+            Generate Script
+          </button>
+        </div>
+      </section>
+
+      {/* Section B: Runway video prompt (visual direction). Visually
+          separated from the Commercial Script section above so the
+          user reads them as two distinct creative inputs. */}
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <span className="text-sm font-semibold text-zinc-100">
+            Runway Video Prompt
+          </span>
+          <span className="text-[10px] text-zinc-500">
+            controls what the visual does — silent
+          </span>
+        </div>
+        <textarea
+          aria-label="Runway video prompt"
+          rows={4}
+          value={prompt}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-full rounded-lg bg-zinc-950 border border-zinc-800 px-3 py-2 outline-none focus:border-spark text-sm"
+        />
+      </div>
       {/* PR AC — flow breadcrumb so the user knows the visual prompt
           sits in the middle of the directing flow, not the end. */}
       <p className="text-[10px] text-zinc-500 font-mono">
         Script → Storyboard → Video → Final Ad
-        {commercialScript && commercialScript.trim() && (
+        {commercialScriptDraft && commercialScriptDraft.trim() && (
           <span className="text-zinc-400"> · using saved commercial script</span>
         )}
       </p>
