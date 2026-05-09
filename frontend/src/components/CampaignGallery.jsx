@@ -693,6 +693,162 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
 
   const overviewBody = (
     <div className="space-y-3">
+      {/* PR AD — Two-mode Ad picker. Cinematic Commercial vs
+          Spokesperson Ad live as sibling final outputs. The picker
+          lives at the top of the Overview tab so users immediately
+          see they can pick the path that fits the campaign instead
+          of scrolling Visuals/Character looking for "the right one". */}
+      <section
+        aria-label="Ad mode picker"
+        className="rounded-xl ring-1 ring-zinc-800 bg-zinc-950/40 p-3 space-y-2"
+      >
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <span className="text-xs font-semibold text-zinc-100">
+            Pick your ad mode
+          </span>
+          <span className="text-[10px] text-zinc-500 font-mono">
+            two final outputs · same campaign brief
+          </span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {/* Cinematic Commercial */}
+          <div className="rounded-lg ring-1 ring-spark/30 bg-spark/5 p-2.5 space-y-1.5">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <span className="text-[12px] font-semibold text-spark">
+                Cinematic Commercial
+              </span>
+              <span
+                className={`text-[10px] rounded-full px-2 py-0.5 font-mono ${
+                  commercialReady
+                    ? 'bg-emerald-500/20 text-emerald-300'
+                    : 'bg-zinc-800 text-zinc-500'
+                }`}
+                title={commercialReady ? 'final voiced cinematic ad ready' : 'not built'}
+              >
+                {commercialReady ? 'ready' : 'idle'}
+              </span>
+            </div>
+            <p className="text-[10px] text-zinc-400 leading-relaxed">
+              Beautiful visual scene/storyboard with{' '}
+              <span className="text-zinc-300">voiceover</span>. Best for
+              product b-roll, atmosphere, and brand visuals.
+            </p>
+            <p className="text-[10px] text-amber-300/80 italic">
+              Visual is not lip-synced.
+            </p>
+            <button
+              type="button"
+              onClick={() => setActiveTab('visuals')}
+              className="rounded-md bg-spark/80 hover:bg-spark text-ink text-[11px] font-semibold px-2 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-spark"
+              title="Open the Visuals tab — visual cut, storyboard, Final Voiced Ad"
+            >
+              {commercialReady ? 'Open Cinematic Ad ↗' : 'Build Cinematic Ad ↗'}
+            </button>
+          </div>
+
+          {/* Spokesperson Ad */}
+          <div className="rounded-lg ring-1 ring-violet-400/40 bg-violet-500/5 p-2.5 space-y-1.5">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <span className="text-[12px] font-semibold text-violet-200">
+                Spokesperson Ad
+              </span>
+              <span
+                className={`text-[10px] rounded-full px-2 py-0.5 font-mono ${
+                  hostReady
+                    ? c.host_mock_mode
+                      ? 'bg-amber-500/20 text-amber-300'
+                      : 'bg-violet-500/25 text-violet-200 ring-1 ring-violet-400/40'
+                    : 'bg-zinc-800 text-zinc-500'
+                }`}
+                title={
+                  hostReady
+                    ? c.host_mock_mode
+                      ? 'mock placeholder'
+                      : 'lip synced + audio'
+                    : 'not recorded'
+                }
+              >
+                {hostReady
+                  ? c.host_mock_mode
+                    ? 'mock · lip sync'
+                    : 'lip synced'
+                  : 'idle'}
+              </span>
+            </div>
+            <p className="text-[10px] text-zinc-400 leading-relaxed">
+              Lip-synced talking ad — your selected character speaks
+              the saved script directly to camera. Best for{' '}
+              <span className="text-zinc-300">TikTok, Reels, UGC, mascots</span>,
+              and founder-style explainers.
+            </p>
+            <p className="text-[10px] text-zinc-500 italic">
+              Powered by Runway avatar_videos. Vertical export polish is a future pass.
+            </p>
+            {hostReady ? (
+              <div className="space-y-1">
+                <video
+                  key={c.host_video_url}
+                  src={c.host_video_url}
+                  controls
+                  preload="metadata"
+                  className="w-full rounded-md ring-1 ring-violet-400/40"
+                />
+                <div className="flex items-center gap-2 flex-wrap text-[10px]">
+                  <a
+                    href={c.host_video_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    download
+                    className="text-spark hover:underline font-semibold"
+                  >
+                    download Spokesperson Ad ↗
+                  </a>
+                  <button
+                    type="button"
+                    onClick={handlePresent}
+                    disabled={hostBusy}
+                    className="text-zinc-500 hover:text-zinc-300 disabled:opacity-50"
+                    title="Re-render the talking ad with the latest spokesperson + script"
+                  >
+                    {hostBusy ? 'Re-generating…' : 're-generate'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                {!avatarReady && (
+                  <p className="text-[10px] text-amber-300">
+                    Choose or create a spokesperson first.
+                  </p>
+                )}
+                {avatarReady && !hasScript && (
+                  <p className="text-[10px] text-amber-300">
+                    Write the commercial script first (Voice tab → Commercial Script).
+                  </p>
+                )}
+                <button
+                  type="button"
+                  onClick={handlePresent}
+                  disabled={hostBusy || !avatarReady}
+                  className="rounded-md bg-violet-500/80 hover:bg-violet-500 text-zinc-100 text-[11px] font-semibold px-2 py-1 disabled:opacity-50"
+                  title={
+                    avatarReady
+                      ? 'Render the lip-synced talking ad with the saved script'
+                      : 'Attach or create a spokesperson first'
+                  }
+                >
+                  {hostBusy
+                    ? 'Generating Spokesperson Ad…'
+                    : hostFailed
+                    ? 'Retry Spokesperson Ad'
+                    : 'Generate Spokesperson Ad'}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+
       {(promptShort || spokespersonName) && (
         <div className="rounded-md ring-1 ring-zinc-800/60 bg-zinc-950/40 px-2.5 py-1.5 text-[11px] space-y-0.5">
           {spokespersonName && (
@@ -932,7 +1088,7 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
         }
       >
         <div className="flex items-center justify-between gap-2 flex-wrap">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span
               className={
                 commercialReady
@@ -940,13 +1096,13 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
                   : 'text-xs font-semibold text-zinc-200'
               }
             >
-              Final Voiced Ad
+              Final Voiced Cinematic Ad
             </span>
             <span
               className="text-[10px] text-zinc-500 font-mono"
               title="Loops the visual cut while the Avatar Host Clip audio plays. AdSpark auto-creates the host clip first when missing."
             >
-              looped visual + spokesperson audio
+              cinematic visual + voiceover · not lip synced
             </span>
           </div>
           {commercialReady && (
@@ -1101,7 +1257,10 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
         <p className="text-[10px] text-zinc-500 leading-relaxed">
           Plans Hook → Action → Payoff prompts from the campaign + active
           character, then runs each shot through Runway image-to-video.
-          Stitches all three with ffmpeg into a longer commercial.
+          Stitches all three with ffmpeg into a longer{' '}
+          <span className="text-zinc-300">cinematic</span> commercial —{' '}
+          <span className="text-amber-300/80">not lip-synced</span>.
+          For talking-to-camera, use Spokesperson Ad in the Overview tab.
         </p>
 
         {!storyboardPlanned && (
@@ -1791,7 +1950,7 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
             </span>{' '}
             <span className="text-zinc-500">
               Best for B-roll / cinematic / product-only shots. Output:
-              "Final Voiced Ad".
+              "Final Voiced Cinematic Ad".
             </span>
           </li>
           <li>

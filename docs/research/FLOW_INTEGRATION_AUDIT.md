@@ -1069,3 +1069,94 @@ The same lavfi placeholder MP4 generation runs unchanged
 display "mock · lip sync" instead of "lip synced + audio" so the
 demo story stays honest under no-key conditions.
 
+---
+
+## PR AD — Two-mode architecture: Cinematic vs Spokesperson (2026-05-09)
+
+PR AB introduced the alias surface for the Spokesperson Ad and
+explained the Runway primitive split. PR AD follows up with the
+**UX that makes the architecture obvious to users**. The two ad
+modes are now sibling final outputs surfaced side-by-side in the
+Overview tab, instead of being scattered across Visuals/Character.
+
+### The product distinction (read the comparison once)
+
+| Mode | Visual primitive | Audio primitive | Lip sync | Identity stability | Best for |
+|---|---|---|---|---|---|
+| **Cinematic Commercial** | Runway `image_to_video` / `text_to_video` (silent) | Avatar Host Clip audio extracted via ffmpeg | **No** — visual is unrelated to mouth movement | **Drifts across frames** — character can morph mid-clip | Product b-roll, atmosphere, montage, brand visuals |
+| **Spokesperson Ad** | Runway `avatar_videos` (the avatar IS the visual) | Same avatar_videos render — speech and visual are baked together | **Yes** — synced mouth movement | **Stable** — avatar identity is a Runway-managed resource | TikTok / Reels / UGC, mascots, founder explainers, talking-head ads |
+
+### Why identity drifts in Cinematic mode
+
+`gen4_turbo` and `gen4.5` animate a reference image with a text
+prompt. They consume a single still as a style + composition anchor
+and generate motion from there — the model does not "know" the
+character is supposed to stay identical across frames the way an
+avatar does. Even with the same Character portrait pinned as
+`prompt_image` (PR W) and Narrative cues threaded into each shot
+prompt (PR AC), small details (eye color, hat, fur pattern) can
+shift between seconds 1 and 5. Every shot in a stitched storyboard
+is a fresh generation, which compounds the drift.
+
+This is **not a bug**. It's the documented behaviour of the
+`image_to_video` primitive. Runway also doesn't expose any "freeze
+identity" knob for these models. If consistent on-camera identity
+is the requirement, the right primitive is `avatar_videos`.
+
+### Why `avatar_videos` is identity-stable + lip-synced
+
+The `/v1/avatar_videos` endpoint takes a Runway-managed Avatar id
+(created from one portrait via `/v1/avatars`) plus a text script
+and renders the avatar speaking it. The avatar resource holds the
+identity; the render is conditioned on the script. Output:
+- Single MP4 with both video + audio streams (h264 + AAC).
+- ~1088×704 at the gwm1_avatars model — fixed by Runway.
+- Mouth movement is synced to the speech timing.
+
+Trade-off: it's not "cinematic" — there's no scene composition,
+camera movement, or B-roll. The avatar speaks against a neutral
+background. That's why the two modes are complementary, not
+competitive.
+
+### Surface change in PR AD
+
+- **Overview tab "Pick your ad mode" picker** — top-of-tab
+  side-by-side card pair. Cinematic card jumps to Visuals; the
+  Spokesperson Ad card has its own inline Generate / re-generate
+  / playback / download controls so the user never has to leave
+  Overview to render a talking ad.
+- **Visuals tab** — Final Voiced Ad header relabeled "**Final
+  Voiced Cinematic Ad**" with subtitle "*cinematic visual +
+  voiceover · not lip synced*". Existing jump-button to the
+  Spokesperson Ad surface is preserved.
+- **Storyboard subsection** — copy adds "*not lip-synced*" to make
+  the cinematic-only nature explicit.
+- **PromptPreview Visual Source / Use Character branch** — new
+  amber helper: *"Character portraits guide visual style, but
+  the cinematic video is **not lip-synced** and identity may
+  drift across frames. For the character speaking directly to
+  camera, build a Spokesperson Ad…"*
+- **Overview Ad Mode card explainer** — "Output: Final Voiced
+  Cinematic Ad" / "Output: Spokesperson Ad" lines so users see
+  which header they'll find downstream.
+
+### Backend surface (no changes in PR AD)
+
+`POST` + `GET /api/campaigns/{id}/spokesperson-ad` (PR AB) already
+delegate to `/host-video`. No new endpoints, no new persisted
+fields. The Overview Spokesperson Ad card calls the existing
+`api.generateSpokespersonAd` helper that has been wired since PR
+AB.
+
+### Future polish (deferred from PR AD)
+
+- **Vertical export polish** — Spokesperson Ads land in 1088×704;
+  TikTok / Reels users currently re-crop manually. A future PR
+  could run an ffmpeg pad / crop pass into 720×1280 with a brand
+  background.
+- **Per-shot identity-stability scoring** — surface drift
+  warnings inside the storyboard subsection when shot N's seed
+  diverges from shot N-1.
+- **Avatar conversation flow** — `/v1/avatar_conversations`
+  remains unbuilt; useful for "talking head Q&A ad" formats.
+

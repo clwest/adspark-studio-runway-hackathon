@@ -352,8 +352,13 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
   // visually outranks the silent source above. The Exports ledger row
   // (asserted later) still uses the "Voiced Commercial" label so the
   // CLI/file vocabulary stays consistent.
-  await expect(newestCard.getByText(/^Final Voiced Ad$/)).toBeVisible()
-  // PR AB — subtitle now distinguishes Cinematic Ad vs Spokesperson Ad.
+  // PR AD — Visuals tab final-output header relabeled to make the
+  // cinematic-vs-spokesperson distinction explicit. Subtitle still
+  // calls out the lip-sync gap.
+  await expect(newestCard.getByText(/^Final Voiced Cinematic Ad$/)).toBeVisible()
+  await expect(
+    newestCard.getByText(/cinematic visual \+ voiceover · not lip synced/i),
+  ).toBeVisible()
   await expect(
     newestCard.getByText(/This is the Cinematic Ad/i),
   ).toBeVisible()
@@ -382,6 +387,32 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
   ).toBeVisible()
   await expect(
     newestCard.getByRole('button', { name: /^Plan Storyboard$/i }),
+  ).toBeVisible()
+
+  // 13a.4 — PR AD — switch to Overview and assert the Ad Mode picker
+  //         renders both modes side-by-side. The smoke campaign has
+  //         no spokesperson attached, so the Spokesperson Ad button
+  //         shows the gated "Choose or create a spokesperson first"
+  //         copy; the Cinematic Commercial card stays "idle" with a
+  //         "Build Cinematic Ad ↗" jump button.
+  await newestCard.getByRole('tab', { name: 'Overview' }).click()
+  await expect(
+    newestCard.getByRole('region', { name: /^Ad mode picker$/i }),
+  ).toBeVisible()
+  await expect(newestCard.getByText(/^Pick your ad mode$/i)).toBeVisible()
+  await expect(newestCard.getByText(/^Cinematic Commercial$/i)).toBeVisible()
+  await expect(newestCard.getByText(/^Spokesperson Ad$/i).first()).toBeVisible()
+  await expect(
+    newestCard.getByText(/Lip-synced talking ad — your selected character/i),
+  ).toBeVisible()
+  await expect(
+    newestCard.getByText(/Visual is not lip-synced/i),
+  ).toBeVisible()
+  await expect(
+    newestCard.getByText(/Choose or create a spokesperson first/i),
+  ).toBeVisible()
+  await expect(
+    newestCard.getByRole('button', { name: /^Build Cinematic Ad/i }),
   ).toBeVisible()
 
   // 13b. Character tab — Brand Spokesperson section + Avatar Picker.

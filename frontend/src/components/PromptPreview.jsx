@@ -658,6 +658,22 @@ export default function PromptPreview({
                   Runway will animate the character itself instead of
                   the campaign hero shot.
                 </p>
+                {/* PR AD — identity-drift helper. Cinematic
+                    image_to_video uses the portrait as a style anchor
+                    but does NOT lip-sync; the user should reach for
+                    Spokesperson Ad (Runway avatar_videos) when they
+                    want the character speaking on camera. */}
+                <p className="text-[10px] text-amber-300/90 leading-relaxed">
+                  Character portraits guide visual style, but the
+                  cinematic video is{' '}
+                  <span className="text-amber-300 font-semibold">
+                    not lip-synced
+                  </span>{' '}
+                  and identity may drift across frames. For the character
+                  speaking directly to camera, build a{' '}
+                  <span className="text-violet-300">Spokesperson Ad</span>{' '}
+                  from the saved campaign card (Runway avatar_videos).
+                </p>
                 <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5">
                   {charactersWithPortrait.map((ch) => {
                     const picked = localCharacterId === ch.id
