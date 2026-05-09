@@ -247,6 +247,23 @@ export default function CharacterStudio({
     }
   }
 
+  // PR AX — re-fetch the cloned voice preview URL without re-cloning.
+  // Same in-place update + re-throw pattern as handleRefreshAvatarVoice.
+  const handleRefreshVoicePreview = async (c) => {
+    setBusy(c.id, 'voice-preview-refresh')
+    try {
+      const updated = await api.refreshCharacterVoicePreview(c.id)
+      setCharacters((cs) => cs.map((x) => (x.id === c.id ? updated : x)))
+      onCharactersChanged?.()
+      return updated
+    } catch (e) {
+      setErrMsg(friendlyError(e, `Refresh voice preview failed for ${c.name}`))
+      throw e
+    } finally {
+      clearBusy(c.id)
+    }
+  }
+
   const handleDelete = async (c) => {
     if (!confirm(`Delete character "${c.name}"? This is local only — the Runway avatar is not removed.`)) return
     setBusy(c.id, 'delete')
@@ -544,6 +561,10 @@ export default function CharacterStudio({
               // pills when the character has both an avatar and a
               // cloned voice.
               onRefreshAvatarVoice={handleRefreshAvatarVoice}
+              // PR AX — re-fetch the cloned voice preview URL without
+              // re-cloning. Renders below the cloned voice preview
+              // block whenever a cloned voice exists.
+              onRefreshVoicePreview={handleRefreshVoicePreview}
               // PR U — Spokesperson-first flow: pass active state +
               // toggle handler so the tile lights up + the action row
               // shows "Use as Spokesperson" / "Active" affordances.

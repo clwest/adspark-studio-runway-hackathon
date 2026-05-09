@@ -312,6 +312,14 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
         /(just now|\d+m ago|\d+h ago|\d+d ago|Not checked yet)/i,
       )
     }
+    // PR AX — Refresh preview button. Renders any time the
+    // character has a cloned voice (no avatar required by the
+    // route). Bounded above by the voice section count; in the
+    // default smoke pass with no cloned voices the count is 0.
+    const refreshPreviewButtons = await page
+      .getByTestId('custom-voice-refresh-preview')
+      .count()
+    expect(refreshPreviewButtons).toBeLessThanOrEqual(voiceSectionCount)
   }
 
   // 7b.6. PR U — stage order: Spokesperson leads, Campaign Brief

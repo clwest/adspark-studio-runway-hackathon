@@ -4,33 +4,35 @@
 `108ca3b`; PR AJ `444cb6a`; PR AK `c59251a`; PR AL `8a43af2`;
 PR AM `3e12d27`; PR AN `f255c22`; PR AO `5bca7c4`; PR AP
 `3c6483e`; PR AQ `ec35c0e`; PR AR `5aa5579`; PR AS `2321fd7`;
-PR AT `632b696`; PR AU `485310a`; PR AV `b9b7fee feat:
-read-only refresh for avatar voice status`; PR AW Voice
-Verification Freshness Label in flight on top —
-SESSION_012–SESSION_028 handoffs added).
+PR AT `632b696`; PR AU `485310a`; PR AV `b9b7fee`; PR AW
+`555ebf9 feat: surface voice verification freshness label`;
+PR AX Refresh Missing Cloned Voice Preview in flight on top —
+SESSION_012–SESSION_029 handoffs added).
 
 ## Where things stand
 
-- **Branch:** `main` at `b9b7fee` (`feat: read-only refresh for
-  avatar voice status`) on `origin/main`. PR AW patch in flight
-  on top — no new commit / tag yet, both pending explicit user
-  approval.
+- **Branch:** `main` at `555ebf9` (`feat: surface voice
+  verification freshness label`) on `origin/main`. PR AX patch
+  in flight on top — no new commit / tag yet, both pending
+  explicit user approval.
 - **Latest tag:** still **`hackathon-submission-v13`** at `ec446e4`
-  (PR AF). PR AG–AV shipped clone → apply → preview → verify
-  → drift detect → drift repair → read-only refresh; PR AW
-  adds inline UX clarity so operators can tell at a glance
-  how stale the verification is.
-- **Backend routes:** **67** application + FastAPI built-ins
-  (unchanged from PR AV; PR AW is frontend-only).
-- **Frontend build:** 322.44 KB initial JS / 90.49 KB gzip +
-  561.97 KB lazy `@runwayml/avatars-react` chunk (≈ +0.6 KB
-  initial / +0.2 KB gzip vs PR AV — PR AW added the relative-
-  time formatter + freshness line).
-- **Playwright smoke:** `1 passed (~26.7 s)` against the mock
-  backend; PR AW extends the resilient assertion so the
-  freshness-label count is bounded by the voice section
-  count, and asserts the first label matches one of the
-  five freshness phrases.
+  (PR AF). PR AG–AW shipped the full clone → apply → preview
+  → verify → drift detect → drift repair → read-only refresh
+  → freshness label loop; PR AX wires the dormant
+  `fetch_voice_preview` helper from PR AR to an operator-facing
+  button so a missing cloned-voice preview can be re-fetched
+  without re-uploading audio.
+- **Backend routes:** **68** application + FastAPI built-ins
+  (was 67 at PR AW). PR AX adds one new endpoint:
+  `POST /api/characters/{id}/refresh-voice-preview`.
+- **Frontend build:** 324.18 KB initial JS / 90.85 KB gzip +
+  561.97 KB lazy `@runwayml/avatars-react` chunk (≈ +1.7 KB
+  initial / +0.4 KB gzip vs PR AW — PR AX added the refresh-
+  preview button + busy/error/note state + handler wiring).
+- **Playwright smoke:** `1 passed (~21.7 s)` against the mock
+  backend; PR AX extends the resilient assertion so the
+  refresh-preview-button count is bounded by the voice
+  section count.
 - **Repo:** https://github.com/clwest/adspark-studio-runway-hackathon
   (private). Pushes happen on explicit user approval.
 - **Stale local feature branches:** 22 left over from PR A through
@@ -140,6 +142,20 @@ SESSION_012–SESSION_028 handoffs added).
   refresh response. Future-skewed timestamps clamp to *"just
   now"* so the label never reads negative time. data-testid:
   `custom-voice-verify-freshness`.
+- **Refresh missing cloned voice preview** (PR AX) — small
+  *"Refresh preview"* button next to the cloned-voice preview
+  audio (or unavailable copy) that re-runs `GET /v1/voices/{id}`
+  via the existing PR AR `fetch_voice_preview` helper. Persists
+  a freshly-returned URL on the character; preserves any
+  existing URL when the fetch returns nothing. Mock-mode short-
+  circuits to no URL with friendly informational copy. New
+  route `POST /api/characters/{id}/refresh-voice-preview`
+  (404 / 409 / 200). Read-only with respect to PR AQ patch
+  fields: 5 back-to-back refreshes leave
+  `custom_voice_avatar_patch_status`, `_patched_at`, and
+  `avatar_voice_verified_at` byte-identical. data-testid:
+  `custom-voice-refresh-preview`,
+  `custom-voice-refresh-preview-status`.
 - New backend route: `POST /api/characters/{id}/clone-voice`
   (multipart form with `audio` + optional `name`). The route
   validates mime + size (cap 15 MB locally; Runway docs say

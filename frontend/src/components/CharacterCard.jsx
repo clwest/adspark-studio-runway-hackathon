@@ -104,6 +104,11 @@ export default function CharacterCard({
   // recompute. Library tiles surface a small button when both an
   // avatar and a cloned voice exist.
   onRefreshAvatarVoice,
+  // PR AX — Re-fetch the cloned voice preview URL without re-cloning.
+  // Library tiles surface a small button whenever a cloned voice
+  // exists (the backend route gates on custom_voice_id; mock mode
+  // returns 200 with no URL change).
+  onRefreshVoicePreview,
 }) {
   const c = character
   const portraitUrl = c.portrait_url
@@ -207,6 +212,41 @@ export default function CharacterCard({
   }
   const refreshButtonShouldRender =
     customVoiceReady && avatarReady && Boolean(onRefreshAvatarVoice)
+  // PR AX — preview-refresh state. Renders any time a custom voice
+  // exists (no avatar required — the route only needs custom_voice_id).
+  // ``previewRefreshNote`` carries a one-line success/no-op caption
+  // when the operator clicks the button without a URL coming back.
+  const [previewRefreshBusy, setPreviewRefreshBusy] = useState(false)
+  const [previewRefreshError, setPreviewRefreshError] = useState('')
+  const [previewRefreshNote, setPreviewRefreshNote] = useState('')
+  const handleRefreshVoicePreview = async () => {
+    if (!onRefreshVoicePreview) return
+    setPreviewRefreshBusy(true)
+    setPreviewRefreshError('')
+    setPreviewRefreshNote('')
+    const hadUrlBefore = Boolean(c.custom_voice_preview_url)
+    try {
+      const updated = await onRefreshVoicePreview(c)
+      const hasUrlAfter = Boolean(updated?.custom_voice_preview_url)
+      if (!hasUrlAfter) {
+        setPreviewRefreshNote(
+          hadUrlBefore
+            ? 'Existing preview kept — Runway returned no fresh URL.'
+            : 'Runway returned no preview URL — try again in a moment.',
+        )
+      } else if (!hadUrlBefore) {
+        setPreviewRefreshNote('Preview URL fetched.')
+      } else {
+        setPreviewRefreshNote('Preview URL refreshed.')
+      }
+    } catch (e) {
+      setPreviewRefreshError(`${e?.message || e}`)
+    } finally {
+      setPreviewRefreshBusy(false)
+    }
+  }
+  const previewRefreshShouldRender =
+    customVoiceReady && Boolean(onRefreshVoicePreview)
 
   const handleVoiceFile = async (file) => {
     if (!file || !onCloneVoice) return
@@ -838,6 +878,53 @@ export default function CharacterCard({
                 ? 'Preview unavailable in mock mode.'
                 : 'Preview unavailable for this cloned voice.'}
             </p>
+          )}
+          {/* PR AX — Refresh preview button. Renders any time a
+              cloned voice exists (the backend route gates on
+              custom_voice_id; mock mode returns 200 without a URL
+              and preserves any existing one). Sits next to the
+              cloned-voice preview audio / unavailable copy so the
+              operator can re-fetch without going back to the audio
+              picker. */}
+          {previewRefreshShouldRender && (
+            <div className="space-y-0.5 pt-0.5">
+              <button
+                type="button"
+                onClick={handleRefreshVoicePreview}
+                disabled={previewRefreshBusy || Boolean(busyAction)}
+                data-testid="custom-voice-refresh-preview"
+                className="text-[9px] rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-100 ring-1 ring-zinc-600 px-2 py-0.5 font-semibold disabled:opacity-50"
+                title="GET /v1/voices/{voice_id} to re-fetch the preview URL. Read-only."
+              >
+                {previewRefreshBusy ? 'Refreshing…' : 'Refresh preview'}
+              </button>
+              {previewRefreshError && (
+                <p
+                  data-testid="custom-voice-refresh-preview-status"
+                  className="text-[9px] text-rose-300"
+                  title={previewRefreshError}
+                >
+                  {previewRefreshError}
+                </p>
+              )}
+              {!previewRefreshError && previewRefreshBusy && (
+                <p
+                  data-testid="custom-voice-refresh-preview-status"
+                  className="text-[9px] text-zinc-500"
+                >
+                  posting to /refresh-voice-preview…
+                </p>
+              )}
+              {!previewRefreshError && !previewRefreshBusy && previewRefreshNote && (
+                <p
+                  data-testid="custom-voice-refresh-preview-status"
+                  className="text-[9px] text-zinc-400"
+                  title={previewRefreshNote}
+                >
+                  {previewRefreshNote}
+                </p>
+              )}
+            </div>
           )}
 
           {/* PR AO — In-browser audio recording. Sits below the file

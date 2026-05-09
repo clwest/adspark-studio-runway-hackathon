@@ -265,4 +265,13 @@ export const api = {
       `/api/characters/${encodeURIComponent(characterId)}/refresh-avatar-voice`,
       { method: 'POST' },
     ),
+  // PR AX — re-fetch the cloned voice's previewUrl from Runway
+  // without re-cloning. Reuses the existing fetch_voice_preview
+  // helper. Mock mode short-circuits to no URL; existing URL is
+  // preserved if the new fetch returns nothing.
+  refreshCharacterVoicePreview: (characterId) =>
+    jsonFetch(
+      `/api/characters/${encodeURIComponent(characterId)}/refresh-voice-preview`,
+      { method: 'POST' },
+    ),
 }

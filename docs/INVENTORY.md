@@ -1,13 +1,13 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after PR AW (Voice Verification Freshness
-Label) on top of the PR AG–AV / SESSION 011 anchors. Backend
-route count is **67** application routes — PR AW is a
-frontend-only slice that turns the existing
-`avatar_voice_verified_at` timestamp into an inline relative-
-time label so operators can tell at a glance how stale the
-verification is. No new endpoint added.
+context-kit refresh after PR AX (Refresh Missing Cloned Voice
+Preview) on top of the PR AG–AW / SESSION 011 anchors. Backend
+route count is **68** application routes — PR AX adds one new
+endpoint (`POST /api/characters/{id}/refresh-voice-preview`)
+that wires the existing PR AR `fetch_voice_preview` helper to
+an operator-facing button so a missing `custom_voice_preview_url`
+can be re-fetched without re-uploading audio.
 
 ## Backend (`backend/`)
 
@@ -82,7 +82,7 @@ verification is. No new endpoint added.
 *optional* PR-F knobs — defaults are `vincent` and a curated
 Unsplash portrait URL.
 
-## Endpoints (67 application + FastAPI built-ins)
+## Endpoints (68 application + FastAPI built-ins)
 
 ```
 GET    /health
@@ -146,6 +146,7 @@ POST   /api/characters/{id}/create-avatar                  (PR K + PR AN — use
 POST   /api/characters/{id}/clone-voice                    (PR AN + PR AQ — multipart audio upload → /v1/voices from.type=audio + auto-PATCH avatar voice when bound)
 POST   /api/characters/{id}/apply-voice                    (PR AQ — manual retry for the avatar voice swap when the auto-PATCH after a clone failed)
 POST   /api/characters/{id}/refresh-avatar-voice           (PR AV — read-only: GET /v1/avatars/{id} + drift recompute, no PATCH)
+POST   /api/characters/{id}/refresh-voice-preview          (PR AX — re-fetch cloned voice previewUrl via GET /v1/voices/{voice_id})
 GET    /api/characters/{id}/portrait
 DELETE /api/characters/{id}
 plus /openapi.json, /docs, /docs/oauth2-redirect, /redoc
@@ -216,6 +217,7 @@ the line's own `avatar_id`).
 | PR AU | Voice Drift Repair Action (frontend-only one-click "Repair voice drift" button on the PR AT mismatch branch; reuses POST /apply-voice for PATCH + verify + drift; rose pill flips to emerald on success) | (post-v13) |
 | PR AV | Avatar Status Manual Refresh (read-only POST /refresh-avatar-voice route + Refresh avatar status button; reuses fetch_avatar_voice + compute_voice_drift_status without invoking PATCH; PR AQ patch fields preserved across refreshes) | (post-v13) |
 | PR AW | Voice Verification Freshness Label (frontend-only relative-time formatter + inline "Last checked … ago / Not checked yet" caption beside the verify pill) | (post-v13) |
+| PR AX | Refresh Missing Cloned Voice Preview (POST /refresh-voice-preview wires existing fetch_voice_preview helper to a Refresh preview button; preserves existing URL when fetch returns nothing) | (post-v13) |
 
 ## Known limitations (current main)
 

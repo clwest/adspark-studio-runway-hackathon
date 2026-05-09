@@ -33,6 +33,7 @@ from ..services.voice_clone_client import (
     clone_voice_from_audio,
     compute_voice_drift_status,
     fetch_avatar_voice,
+    fetch_voice_preview,
 )
 
 logger = logging.getLogger(__name__)
@@ -556,6 +557,68 @@ def post_refresh_avatar_voice(
         character_id, state.status, drift_status,
     )
     return updated or record
+
+
+# ---- PR AX — Refresh missing cloned voice preview ------------------
+#
+# Wires the existing PR AR `fetch_voice_preview` helper to a small
+# operator-facing route so a missing `custom_voice_preview_url` can
+# be re-fetched without re-uploading audio. Read-only relative to
+# the avatar binding (no PATCH); only the character's preview URL
+# field is touched, and only when Runway returns a fresh value.
+
+
+@router.post("/{character_id}/refresh-voice-preview", response_model=Character)
+def post_refresh_voice_preview(
+    character_id: str,
+    settings: Settings = Depends(get_settings),
+    store: CharacterStore = Depends(_store),
+) -> Character:
+    """PR AX — re-fetch the cloned voice's `previewUrl` from Runway
+    without cloning again.
+
+    Failure modes:
+    - 404 — character not found.
+    - 409 — character has no cloned voice yet.
+    - 200 with unchanged record — Runway returned no preview URL
+      (mock mode short-circuits here; real-mode failures also do).
+      The existing URL (if any) is preserved.
+    """
+    record = store.get(character_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="character not found")
+    if not record.custom_voice_id:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "no custom voice cloned for this character yet — "
+                "upload or record an audio sample first."
+            ),
+        )
+
+    fresh_url = fetch_voice_preview(record.custom_voice_id, settings)
+    if fresh_url:
+        # Persist the freshly-fetched preview URL.
+        updated = store.update(
+            character_id,
+            custom_voice_preview_url=fresh_url,
+        )
+        logger.info(
+            "character %s voice preview refreshed -> %s",
+            character_id, fresh_url,
+        )
+        return updated or record
+
+    # No URL surfaced (mock mode, real-mode network/upstream failure,
+    # or Runway hasn't generated one yet). Preserve the existing URL
+    # rather than clearing it; return the unchanged record so the UI
+    # can render a friendly "still unavailable" state without losing
+    # whatever audio was already playable.
+    logger.info(
+        "character %s voice preview refresh: no URL surfaced (existing preserved)",
+        character_id,
+    )
+    return record
 
 
 @router.get("/{character_id}/portrait")

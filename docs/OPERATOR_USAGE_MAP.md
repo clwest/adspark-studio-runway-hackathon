@@ -346,6 +346,49 @@ timestamp for diagnostics.
 
 `data-testid` hook: `custom-voice-verify-freshness`.
 
+#### Refreshing the cloned voice preview (PR AX)
+
+A small **`Refresh preview`** button (zinc, neutral colour)
+sits below the cloned-voice preview audio / *"Preview
+unavailable"* line whenever a cloned voice exists. Clicking it
+re-runs `GET /v1/voices/{voice_id}` via the existing PR AR
+`fetch_voice_preview` helper and persists a freshly-returned
+URL on the character.
+
+Backend route:
+
+```
+POST /api/characters/{id}/refresh-voice-preview
+  → 200 + updated Character
+        (URL persisted when Runway surfaced one;
+         existing URL preserved when fetch returned nothing)
+  → 404  character not found
+  → 409  no custom voice cloned yet
+```
+
+Mock mode short-circuits inside `fetch_voice_preview` (the
+helper returns `None` for mock voice ids), so the button
+returns 200 with `custom_voice_preview_url` unchanged. The UI
+reads:
+
+| Result | Status copy |
+|---|---|
+| URL freshly fetched | *"Preview URL fetched."* / *"Preview URL refreshed."* |
+| No URL surfaced, had one before | *"Existing preview kept — Runway returned no fresh URL."* |
+| No URL surfaced, didn't have one | *"Runway returned no preview URL — try again in a moment."* |
+| Network / upstream error | error row (rose) with the message |
+
+The route is **read-only with respect to the avatar binding**:
+`custom_voice_avatar_patch_status`,
+`custom_voice_avatar_patched_at`, and
+`avatar_voice_verified_at` all stay byte-identical across
+refreshes (verified by the targeted probe — 5 back-to-back
+refreshes preserve those three fields exactly).
+
+`data-testid` hooks: `custom-voice-refresh-preview` (button),
+`custom-voice-refresh-preview-status` (busy / error /
+informational row).
+
 #### Recording in-browser (PR AO)
 
 Below the file picker on each library tile sits a small
