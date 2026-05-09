@@ -6,44 +6,41 @@ PR AM `3e12d27`; PR AN `f255c22`; PR AO `5bca7c4`; PR AP
 `3c6483e`; PR AQ `ec35c0e`; PR AR `5aa5579`; PR AS `2321fd7`;
 PR AT `632b696`; PR AU `485310a`; PR AV `b9b7fee`; PR AW
 `555ebf9`; PR AX `9d86f2e`; PR AY `0a93c79`; PR AZ `2c16d30`;
-PR BA `9d0a99d`; PR BB `8702660`; PR BC `9eae15f feat: per-
-campaign transcript history audit trail`; PR BD UX v2 Flag +
-Shared Helpers in flight on top — SESSION_012–SESSION_035
-handoffs added).
+PR BA `9d0a99d`; PR BB `8702660`; PR BC `9eae15f`; PR BD
+`0171078 feat: ux v2 flag + shared audit-row helpers`; PR BE
+SpokespersonStudio scaffold in flight on top —
+SESSION_012–SESSION_036 handoffs added).
 
 ## Where things stand
 
-- **Branch:** `main` at `9eae15f` (`feat: per-campaign
-  transcript history audit trail`) on `origin/main`. PR BD
-  patch in flight on top — no new commit / tag yet, both
-  pending explicit user approval.
+- **Branch:** `main` at `0171078` (`feat: ux v2 flag + shared
+  audit-row helpers`) on `origin/main`. PR BE patch in flight
+  on top — no new commit / tag yet, both pending explicit
+  user approval.
 - **Latest tag:** still **`hackathon-submission-v13`** at `ec446e4`
-  (PR AF). PR AG–BC shipped the full voice arc + recording
-  feedback + auto-tick + library-level refresh-all + per-
-  character + per-campaign audit trails. PR BD opens the
-  foundation for the spokesperson-first UX redesign — adds the
-  UX v2 flag + a tiny footer toggle + lifts the PR BB audit-
-  row helpers into a shared module. **Default UX is
-  unchanged**; v2 is gated behind `?ux=v2` / localStorage so
-  v13 demos stay safe.
+  (PR AF). PR AG–BD shipped the full voice arc + audit
+  trails + UX v2 foundation. PR BE adds the first gated v2
+  surface — SpokespersonStudio + SpokespersonCard at Stage 1
+  when `isUxV2()` is true. Identity tab embeds today's
+  CharacterCard so v1 voice affordances survive intact; the
+  Knowledge + Appearances tabs render placeholders for now and
+  land in PR BF / PR BG. **Default load remains v1**; the v2
+  surface is reachable via the footer toggle or `?ux=v2`.
 - **Backend routes:** **68** application + FastAPI built-ins
-  (unchanged from PR BC; PR BD is frontend-only and adds no
+  (unchanged from PR BD; PR BE is frontend-only and adds no
   endpoints).
-- **Frontend build:** 334.75 KB initial JS / 93.84 KB gzip +
-  561.97 KB lazy `@runwayml/avatars-react` chunk (+1.60 KB
-  initial / +0.55 KB gzip vs PR BC — PR BD adds two small
-  modules and a footer toggle; helper extraction is a wash).
-- **Playwright smoke:** `1 passed (~20.9 s)` against the mock
-  backend; existing PR BC assertions still pass. PR BD adds
-  one minimal assertion that the footer's `ux-mode-toggle`
-  testid renders with `data-ux-mode="v1"` and copy `Try
-  preview UX`. The toggle itself is never clicked in the smoke
-  so the rest of the run stays on the legacy v1 path.
-- **Targeted probes:** 8/8 `uxFlag.js` precedence scenarios
-  pass via a Node probe (default → v1; URL param wins +
-  persists; storage v2 sticks; invalid storage / URL values
-  fall back to default; setUxMode write + read; setUxMode
-  invalid is a no-op).
+- **Frontend build:** 342.57 KB initial JS / 95.25 KB gzip +
+  561.97 KB lazy `@runwayml/avatars-react` chunk (+7.82 KB
+  initial / +1.41 KB gzip vs PR BD — two new components +
+  flag-aware mount).
+- **Playwright smoke:** `2 passed (~22.9 s)` against the mock
+  backend. The first test (~21.8 s) is the unchanged v1
+  end-to-end pass; the second test (~450 ms) loads `?ux=v2`,
+  asserts SpokespersonStudio + per-card tab strip + Identity-
+  default + placeholder copy on Knowledge/Appearances tabs.
+- **Targeted probes:** none new. PR BD's 8/8 `uxFlag.js`
+  precedence scenarios still pass; v2 mount logic is covered
+  end-to-end by the new smoke case.
 - **Repo:** https://github.com/clwest/adspark-studio-runway-hackathon
   (private). Pushes happen on explicit user approval.
 - **Stale local feature branches:** 22 left over from PR A through
@@ -52,7 +49,7 @@ handoffs added).
 
 ## What's implemented (full feature stack on `main`)
 
-### UX redesign foundation (PR BD — UX v2 Flag + Shared Helpers)
+### UX redesign foundation (PR BD — UX v2 Flag + Shared Helpers · PR BE — SpokespersonStudio Scaffold)
 
 - **UX v2 feature flag** at `frontend/src/uxFlag.js`. Resolves
   precedence URL `?ux=v2|v1` > localStorage `adspark.ux` >
@@ -63,7 +60,7 @@ handoffs added).
   Lifts `formatHistoryTimestamp`, `HISTORY_ACTION_PILLS`,
   `historyStatusClass`, `historyDriftClass` out of
   CharacterCard.jsx so the upcoming v2 spokesperson-first
-  surfaces (PR BE through PR BO) can render the same
+  surfaces (PR BF through PR BO) can render the same
   audit-row vocabulary without re-defining it.
 - **Tiny footer toggle** in App.jsx — reads the resolved mode
   at render time and surfaces either `"Try preview UX →"`
@@ -71,10 +68,23 @@ handoffs added).
   the flag in localStorage, strips `?ux=…` from the URL, and
   reloads. data-testid: `ux-mode-toggle` with
   `data-ux-mode="v1|v2"`.
+- **SpokespersonStudio scaffold** (PR BE) — first gated v2
+  surface. New `SpokespersonStudio.jsx` + `SpokespersonCard.jsx`.
+  Mounts at Stage 1 instead of CharacterStudio when
+  `isUxV2()` returns true. SpokespersonCard wraps the existing
+  CharacterCard inline so every v1 voice affordance (clone /
+  record / mic level / preview / patch / verify / drift /
+  repair / refresh / freshness / voice history disclosure /
+  action row) keeps working under v2 without rewriting. Tab
+  strip exposes Identity (active by default) plus Knowledge +
+  Appearances placeholders; PR BF / PR BG wire the latter two.
+  Library grid is `grid-cols-1 sm:grid-cols-2 md:grid-cols-3`
+  (wider than the v1 4-col layout to accommodate the embedded
+  CharacterCard + tab strip).
 - **Default behaviour unchanged.** v13 demos still load into
   the legacy 4-stage flow + 7-tab CampaignGallery + Character
   Studio panel. v2 path is gated; nothing visible changes
-  until the operator flips the flag.
+  until the operator flips the flag or visits with `?ux=v2`.
 
 ### Character layer (PR AN — Custom Voice Cloning Foundation · PR AO — In-Browser Recording)
 

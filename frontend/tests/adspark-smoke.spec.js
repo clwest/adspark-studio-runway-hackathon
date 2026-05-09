@@ -865,3 +865,104 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
     `unexpected console.error messages:\n  ${realConsoleErrors.join('\n  ')}`,
   ).toEqual([])
 })
+
+// PR BE — Gated v2 surface smoke. Visits with ?ux=v2 so the
+// SpokespersonStudio scaffold replaces Stage 1's CharacterStudio
+// panel. Asserts only the new surface — the rest of the app is
+// the same as the v1 path which the primary smoke above already
+// covers. Resilient to fixture state: passes whether the library
+// has zero characters (empty state) or N (library grid).
+test('AdSpark Studio UX v2 SpokespersonStudio scaffold', async ({ page }) => {
+  const consoleErrors = []
+  const pageErrors = []
+  page.on('console', (msg) => {
+    if (msg.type() === 'error') consoleErrors.push(msg.text())
+  })
+  page.on('pageerror', (err) => {
+    pageErrors.push(`${err.name}: ${err.message}`)
+  })
+
+  // Load with ?ux=v2 so getUxMode() resolves to v2 immediately
+  // (the URL param both sets the flag and persists it to
+  // localStorage on first read).
+  await page.goto('/?ux=v2')
+
+  // Footer toggle must reflect the active mode + offer the
+  // classic-UX escape hatch.
+  const uxToggle = page.getByTestId('ux-mode-toggle')
+  await expect(uxToggle).toBeVisible()
+  await expect(uxToggle).toHaveAttribute('data-ux-mode', 'v2')
+  await expect(uxToggle).toHaveText(/Use classic UX/i)
+
+  // Stage 1 panel must be the v2 SpokespersonStudio scaffold,
+  // NOT the legacy CharacterStudio. The studio heading carries
+  // the "Spokesperson Studio" copy + the "preview UX" badge.
+  const studio = page.getByTestId('spokesperson-studio')
+  await expect(studio).toBeVisible()
+  await expect(studio).toHaveAttribute('data-ux-mode', 'v2')
+  await expect(
+    studio.getByTestId('spokesperson-studio-heading'),
+  ).toContainText(/Spokesperson Studio/i)
+  // Tagline copy is part of the brief: persistent AI spokespeople
+  // language. Lives inside the same panel as the heading.
+  await expect(studio).toContainText(
+    /Create persistent AI spokespeople/i,
+  )
+
+  // Library must render either the grid (≥1 spokesperson card) or
+  // the empty state. Asserting the disjunction keeps the smoke
+  // resilient to whatever the operator's characters.json holds.
+  const cards = studio.getByTestId('spokesperson-card')
+  const emptyState = studio.getByTestId('spokesperson-empty-state')
+  const cardCount = await cards.count()
+  const emptyCount = await emptyState.count()
+  expect(cardCount + emptyCount).toBeGreaterThan(0)
+
+  if (cardCount > 0) {
+    // First card defaults to the Identity tab; Knowledge +
+    // Appearances tabs are present but render placeholder copy
+    // until PR BF / PR BG land.
+    const firstCard = cards.first()
+    await expect(
+      firstCard.getByTestId('spokesperson-tab-identity'),
+    ).toHaveAttribute('data-active', 'true')
+    await expect(
+      firstCard.getByTestId('spokesperson-tab-knowledge'),
+    ).toBeVisible()
+    await expect(
+      firstCard.getByTestId('spokesperson-tab-appearances'),
+    ).toBeVisible()
+    await expect(
+      firstCard.getByTestId('spokesperson-identity-tab'),
+    ).toBeVisible()
+
+    // Switching to Knowledge surfaces the placeholder copy.
+    await firstCard.getByTestId('spokesperson-tab-knowledge').click()
+    await expect(
+      firstCard.getByTestId('spokesperson-knowledge-tab'),
+    ).toContainText(/Knowledge wiring lands next/i)
+    // Identity content unmounts when Knowledge is active.
+    await expect(
+      firstCard.getByTestId('spokesperson-identity-tab'),
+    ).toHaveCount(0)
+
+    // Same shape for Appearances.
+    await firstCard.getByTestId('spokesperson-tab-appearances').click()
+    await expect(
+      firstCard.getByTestId('spokesperson-appearances-tab'),
+    ).toContainText(/Campaign appearances land next/i)
+  }
+
+  // Console / page errors stay clean on the v2 path too.
+  const realConsoleErrors = consoleErrors.filter(
+    (t) => !IGNORED_CONSOLE_ERRORS.some((rx) => rx.test(t)),
+  )
+  expect(
+    pageErrors,
+    `unexpected page errors (v2):\n  ${pageErrors.join('\n  ')}`,
+  ).toEqual([])
+  expect(
+    realConsoleErrors,
+    `unexpected console.error messages (v2):\n  ${realConsoleErrors.join('\n  ')}`,
+  ).toEqual([])
+})

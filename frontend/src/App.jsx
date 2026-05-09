@@ -27,7 +27,12 @@ import CharacterStudio from './components/CharacterStudio.jsx'
 // redesign). The flag itself is read on every getUxMode() call; the
 // footer toggle below is the only surface that mutates it. Default
 // remains the legacy v1 UX so v13 demos stay unchanged.
-import { getUxMode, setUxMode, UX_MODES } from './uxFlag.js'
+import { getUxMode, isUxV2, setUxMode, UX_MODES } from './uxFlag.js'
+// PR BE — first gated v2 surface. SpokespersonStudio replaces the
+// Stage 1 CharacterStudio panel when isUxV2() is true; all other
+// stages remain untouched in this slice. Subsequent PRs (BF/BG/BH+)
+// expand the v2 footprint into Knowledge/Appearances/lanes.
+import SpokespersonStudio from './components/SpokespersonStudio.jsx'
 
 const POLL_INTERVAL_MS = 5000
 const POLL_MAX_ATTEMPTS = 60
@@ -449,16 +454,32 @@ export default function App() {
           meta="Choose the face of this campaign — or skip and add one later."
           accent="pink"
         >
-          <CharacterStudio
-            onCharactersChanged={() => {
-              // PR U — keep both campaigns + characters fresh after Studio
-              // events (create / portrait / avatar / delete / attach).
-              refreshCharacters()
-              refreshCampaigns()
-            }}
-            activeCharacterId={activeCharacterId}
-            onSetActive={setActiveCharacterId}
-          />
+          {/* PR BE — when the UX v2 flag is on, Stage 1 swaps in the
+              SpokespersonStudio scaffold (gated v2 surface). Default
+              path stays on the legacy CharacterStudio so v13 demos
+              are unchanged. Both components consume the same handler
+              shape so refresh wiring stays identical. */}
+          {isUxV2() ? (
+            <SpokespersonStudio
+              onCharactersChanged={() => {
+                refreshCharacters()
+                refreshCampaigns()
+              }}
+              activeCharacterId={activeCharacterId}
+              onSetActive={setActiveCharacterId}
+            />
+          ) : (
+            <CharacterStudio
+              onCharactersChanged={() => {
+                // PR U — keep both campaigns + characters fresh after Studio
+                // events (create / portrait / avatar / delete / attach).
+                refreshCharacters()
+                refreshCampaigns()
+              }}
+              activeCharacterId={activeCharacterId}
+              onSetActive={setActiveCharacterId}
+            />
+          )}
         </Stage>
 
         {/* ---- Stage 2 — Campaign Brief (PR U: was Stage 1) ---------- */}
