@@ -1,11 +1,12 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after PR AL (Transcript Export / Share) on
-top of the PR AG / PR AH / PR AI / PR AJ / PR AK / SESSION 011
-anchors. Backend route count is **64** application routes — PR AL
-is a frontend-only slice and adds no new endpoints (operates on
-the transcript turns already persisted by PR AJ).
+context-kit refresh after PR AM (Caption Contrast Polish for
+Brand-Coloured Reels) on top of the PR AG / PR AH / PR AI /
+PR AJ / PR AK / PR AL / SESSION 011 anchors. Backend route count
+is **64** application routes — PR AM is a backend-only finishing-
+layer slice and adds no new endpoints (extends `color_utils.py`
+and the existing `build_reels_export` filter chain).
 
 ## Backend (`backend/`)
 
@@ -17,12 +18,12 @@ the transcript turns already persisted by PR AJ).
 | `app/services/concept_service.py` | real + mock fallback | OpenAI `gpt-4o-mini` JSON-mode call; deterministic mock |
 | `app/services/runway_client.py` | real + mock | `image_to_video` / `text_to_video` routing; `GENERATION_POLICY` validation |
 | `app/services/image_client.py` | real + mock | `/v1/text_to_image` (`gen4_image_turbo`); seeded `referenceImages`; stdlib zlib PNG mock |
-| `app/services/finisher_service.py` | real | Local ffmpeg Campaign Pack + **Voiced Cinematic Ad mux** (PR S/X `-stream_loop -1 -shortest`) + **Storyboard concat** (PR Z `concat=n=N:v=1:a=0`) + **Voiced Storyboard** (PR Z) + **Dialogue Scene concat** (PR AF `concat=n=N:v=1:a=1` audio-preserved) + **Reels export** (PR AG `scale=720:1280:force_original_aspect_ratio=decrease,pad=…` letterbox; synthesises a silent AAC track when the source has no audio so output stays h264 + AAC) + **Burned-in captions** (PR AH chained `drawtext=…enable='between(t,start,end)'` per segment, textwrap word-wrap, bottom-safe placement, `probe_duration` ffprobe helper) |
+| `app/services/finisher_service.py` | real | Local ffmpeg Campaign Pack + **Voiced Cinematic Ad mux** (PR S/X `-stream_loop -1 -shortest`) + **Storyboard concat** (PR Z `concat=n=N:v=1:a=0`) + **Voiced Storyboard** (PR Z) + **Dialogue Scene concat** (PR AF `concat=n=N:v=1:a=1` audio-preserved) + **Reels export** (PR AG `scale=720:1280:force_original_aspect_ratio=decrease,pad=…` letterbox; synthesises a silent AAC track when the source has no audio so output stays h264 + AAC) + **Burned-in captions** (PR AH chained `drawtext=…enable='between(t,start,end)'` per segment, textwrap word-wrap, bottom-safe placement, `probe_duration` ffprobe helper) + **Contrast-aware caption styling** (PR AM — `caption_style` argument or auto-derived from backdrop; light backdrops swap to black-on-white box, dark/unset backdrops keep the PR AH white-on-black baseline) |
 | `app/services/character_host_client.py` | real + mock | Phase 1 `/v1/avatars` + Phase 2 `/v1/avatar_videos`; image-source fallback chain; **`active_avatar_id(campaign, settings)` resolves character > selected > host**; **PR AA — uses `campaign.commercial_script` as `script_override` when no explicit override is supplied** |
 | `app/services/avatar_listing_client.py` | real + mock | `GET /v1/avatars` curation; 4 hard-coded mock presets (PR I+) |
 | `app/services/realtime_avatar_client.py` | real + mock | `/v1/realtime_sessions` broker — **PR AE injects campaign-aware `personality` + `startScript` overrides**, defensive 400-fallback retries the bare body, `_redact()` scrubs Bearer / sessionKey / JWT patterns from any logged upstream response. **PR AI** — when `campaign.runway_document_id` is set the body also carries `documentIds=[id]` and the personality is swapped for a leaner `_grounded_personality` (~20 % smaller); two-tier 400-fallback drops `documentIds` first, then drops `personality + startScript` if Runway still rejects. **PR AJ** — the broker's session id is captured by the route layer and persisted as `runway_conversation_id` for transcript retrieval (Runway's `sessionId == conversationId`) |
 | `app/services/transcript_client.py` | real + mock | **PR AJ** — wraps `GET /v1/avatar_conversations/{id}` plus an empty-/missing-/non-2xx tolerant `_normalise_turns` that maps Runway's documented `transcript[]` shape into our `TranscriptTurn` model. Mock mode synthesises a deterministic 3-turn replay (avatar opener → user question → grounded answer) from the saved business / product / audience / hook / commercial_script + attached Character so the replay UX demos without keys |
-| `app/services/color_utils.py` | real | **PR AK** — `normalize_brand_color` accepts `#RRGGBB` / `RRGGBB` / `0xRRGGBB` / `#RGB`, normalises to lowercase `#RRGGBB` for storage, returns `None` on unparseable input. `to_ffmpeg_color` wraps the value as `0xRRGGBB` for ffmpeg's `pad=…:color=…`, falling back to `DEFAULT_REELS_BACKDROP` (`0x0b1220`) when the input is missing or invalid |
+| `app/services/color_utils.py` | real | **PR AK** — `normalize_brand_color` accepts `#RRGGBB` / `RRGGBB` / `0xRRGGBB` / `#RGB`, normalises to lowercase `#RRGGBB` for storage, returns `None` on unparseable input. `to_ffmpeg_color` wraps the value as `0xRRGGBB` for ffmpeg's `pad=…:color=…`, falling back to `DEFAULT_REELS_BACKDROP` (`0x0b1220`) when the input is missing or invalid. **PR AM** — adds `hex_to_rgb`, WCAG `relative_luminance`, `is_light_color` (>= 0.5 luminance threshold), and `caption_style_for_backdrop(value) -> {font_color, box_color, box_alpha, is_light_backdrop}`. The dark default style mirrors PR AH exactly (white text / black@0.6 box) so untouched callers see no rendering change |
 | `app/services/documents_client.py` | real + mock | **PR AI** — thin wrapper around `POST /v1/documents` (`{name, content}` ≤ 40,000 chars, plain text + Markdown), `PATCH /v1/avatars/{id}` (`{documentIds: [...]}` best-effort), and `build_campaign_brief_markdown(campaign, character)` for the standard brand-brief shape. Mock mode returns deterministic `mock_doc_<sha256-of-name+content>` ids so smoke + offline demo flows can flip the grounding badge end-to-end without burning credits |
 | `app/services/audio_client.py` | real + mock | `/v1/voices` text design + `/v1/voice_dubbing`; 29-language `SUPPORTED_DUB_LANGS`; ffmpeg lavfi mock MP3s |
 | `app/services/character_studio_client.py` | real + mock | **PR K** — `PORTRAIT_TEMPLATES` (4 locked: mascot, founder, coach, local_guide); `build_prompt()`; `generate_portrait()` calls `/v1/text_to_image`; `create_avatar()` reads cached portrait → data URI → `POST /v1/avatars` → poll READY |
@@ -199,6 +200,7 @@ the line's own `avatar_id`).
 | PR AJ | Conversation Transcript Retrieval + Replay UX (GET /v1/avatar_conversations/{id} + structured TranscriptTurn persistence + Realtime-tab replay card) | (post-v13) |
 | PR AK | Brand Colour Storage + Reels Styling Polish (compact card-header colour picker + ffmpeg pad colour wired into both reels routes) | (post-v13) |
 | PR AL | Transcript Export / Share (frontend-only Copy Markdown + Download TXT on the PR AJ replay card; navigator.clipboard + Blob/object-URL with safe textarea fallback) | (post-v13) |
+| PR AM | Caption Contrast Polish for Brand-Coloured Reels (WCAG luminance threshold flips drawtext fontcolor + boxcolor + alpha so captions stay readable on light brand backdrops) | (post-v13) |
 
 ## Known limitations (current main)
 

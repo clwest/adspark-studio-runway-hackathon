@@ -1,33 +1,33 @@
 # START NEXT SESSION — AdSpark Studio
 
-**Last touched:** 2026-05-09 (PR AG / PR AH committed as
-`6157512 feat: add captioned reels exports`; PR AI committed as
-`108ca3b feat: add grounded realtime avatar documents`; PR AJ
-committed as `444cb6a feat: add realtime conversation
-transcripts`; PR AK committed as `c59251a feat: add brand color
-reels styling`; PR AL Transcript Export / Share in flight on top
-— SESSION_012 / SESSION_013 / SESSION_014 / SESSION_015 /
-SESSION_016 / SESSION_017 handoffs added).
+**Last touched:** 2026-05-09 (PR AG/AH `6157512`; PR AI
+`108ca3b`; PR AJ `444cb6a`; PR AK `c59251a`; PR AL `8a43af2
+feat: export transcripts as markdown or txt`; PR AM Caption
+Contrast Polish in flight on top — SESSION_012–SESSION_018
+handoffs added).
 
 ## Where things stand
 
-- **Branch:** `main` at `c59251a` (`feat: add brand color reels
-  styling`) on `origin/main`. PR AL patch in flight on top — no
-  new commit / tag yet, both pending explicit user approval.
+- **Branch:** `main` at `8a43af2` (`feat: export transcripts as
+  markdown or txt`) on `origin/main`. PR AM patch in flight on
+  top — no new commit / tag yet, both pending explicit user
+  approval.
 - **Latest tag:** still **`hackathon-submission-v13`** at `ec446e4`
-  (PR AF). PR AG–AK shipped the funnel + polish stack;
-  PR AL lands the transcript portability slice on top of PR AJ.
+  (PR AF). PR AG–AL shipped the funnel + polish stack; PR AM
+  closes the loop on PR AK by making PR AH captions readable on
+  light brand backdrops.
 - **Backend routes:** **64** application + FastAPI built-ins
-  (unchanged from PR AK; PR AL is frontend-only and does not add
-  endpoints).
+  (unchanged from PR AK / PR AL; PR AM is backend-only and does
+  not add endpoints).
 - **Frontend build:** 305.43 KB initial JS / 86.53 KB gzip +
-  561.97 KB lazy `@runwayml/avatars-react` chunk (≈ +4.2 KB
-  initial / +1.3 KB gzip vs PR AK; PR AL added the export
-  utility + two buttons + status banner on the transcript card).
-- **Playwright smoke:** `1 passed (~23 s)` against the mock backend
-  with the new export-button assertions: pre-fetch buttons
-  visible + disabled, post-fetch buttons enabled, click `Copy
-  Markdown` flips the status banner to `Copied`.
+  561.97 KB lazy `@runwayml/avatars-react` chunk (unchanged from
+  PR AL — PR AM is backend-only).
+- **Playwright smoke:** `1 passed (~22.7 s)` against the mock
+  backend; existing assertions cover the captioned reels labels +
+  brand colour control + transcript export. PR AM contrast logic
+  is verified by frame-level pixel sampling rather than UI
+  assertions (the dark / light backdrops produce visibly different
+  caption-box pixels in the cached output).
 - **Repo:** https://github.com/clwest/adspark-studio-runway-hackathon
   (private). Pushes happen on explicit user approval.
 - **Stale local feature branches:** 22 left over from PR A through
@@ -118,7 +118,27 @@ SESSION_016 / SESSION_017 handoffs added).
   `runway_document_status` (`ready` / `failed` / `mock`),
   `runway_document_error`, `runway_document_mock_mode`.
 
-### Distribution layer (PR AG — Vertical / Reels Export · PR AH — Burned-in Captions · PR AK — Brand Colour Polish)
+### Distribution layer (PR AG — Vertical / Reels Export · PR AH — Burned-in Captions · PR AK — Brand Colour Polish · PR AM — Caption Contrast Polish)
+
+- **Contrast-aware captions** for the captioned reels output.
+  PR AM extends `services.color_utils` with WCAG luminance
+  helpers (`hex_to_rgb`, `relative_luminance`,
+  `is_light_color`, `caption_style_for_backdrop`) and threads
+  the resulting `{font_color, box_color, box_alpha}` style dict
+  into `finisher_service.build_reels_export(...)`.
+- **Auto-flip rule:** WCAG luminance < 0.5 → white-on-black box
+  (PR AH baseline preserved); ≥ 0.5 → black text on a 70 %-opaque
+  white box. Threshold lives in `_LIGHT_BACKDROP_THRESHOLD`.
+- **No new routes; no UI change.** Existing brand-colour
+  control (PR AK) drives the styling automatically — the
+  operator just picks a colour and the next reels build adapts.
+- **Visual-verified:** frame-extracted at t=1 s of mock
+  spokesperson reels for `#0b1220` (default), `#ff7a00`
+  (orange — dark), `#ffeb3b` (yellow — light). Caption-box
+  centre averages: dark ≈ `#02060b` (near-black box), yellow ≈
+  `#fdf9c4` (white box averaged with caption-text band).
+
+
 
 - **Brand colour control** on every saved campaign's header
   (between the creative-director breadcrumb and the tab row).
@@ -251,6 +271,8 @@ SESSION_016 / SESSION_017 handoffs added).
    - ✅ ~~Conversation transcript retrieval~~ — shipped in PR AJ.
    - ✅ ~~Brand-colour reels polish~~ — shipped in PR AK.
    - ✅ ~~Transcript export / share~~ — shipped in PR AL.
+   - ✅ ~~Caption text colour follows brand colour~~ — shipped
+     in PR AM.
    - **Avatar RAG / `documentIds`** — attach campaign brief +
      FAQ as a knowledge document so realtime can answer grounded
      questions about the brand (Tier-1 from the avatar deep review).

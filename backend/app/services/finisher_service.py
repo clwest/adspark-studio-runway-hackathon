@@ -51,6 +51,20 @@ def is_ffprobe_available() -> bool:
     return shutil.which("ffprobe") is not None
 
 
+def _caption_style_for_backdrop(backdrop_color: str) -> dict:
+    """PR AM — local indirection so the finisher doesn't need to know
+    about ``services.color_utils`` at module import time. Resolves at
+    call time and degrades gracefully if the import fails (returns the
+    legacy PR AH default style).
+    """
+    try:
+        from .color_utils import caption_style_for_backdrop  # noqa: WPS433
+        return caption_style_for_backdrop(backdrop_color)
+    except Exception:  # pragma: no cover — defensive
+        logger.warning("caption_style_for_backdrop unavailable; using dark default")
+        return {"font_color": "white", "box_color": "black", "box_alpha": 0.6}
+
+
 def _wrap_caption_text(text: str, max_chars: int = 28) -> str:
     """PR AH — collapse whitespace and wrap a caption string into
     short lines that fit a 720-wide vertical frame at fontsize 36.
@@ -656,6 +670,7 @@ class VideoFinisher:
         target_h: int = 1280,
         captions: Optional[list[tuple[float, float, str]]] = None,
         caption_max_chars: int = 28,
+        caption_style: Optional[dict] = None,
         timeout: float = 120.0,
     ) -> CommercialResult:
         """PR AG — pad/letterbox an existing horizontal MP4 into a 720x1280
@@ -680,6 +695,13 @@ class VideoFinisher:
         block sits in the bottom-safe region with a translucent black box
         so the talking head above stays readable. When the system has no
         usable font we silently skip the captions — never blocks the export.
+
+        PR AM — caption styling is contrast-aware. ``caption_style`` is
+        a dict ``{font_color, box_color, box_alpha}``; when omitted the
+        style is auto-derived from ``backdrop_color`` so captions stay
+        readable on light brand backdrops (black text on white box) and
+        on dark / unset backdrops (white text on black box, the original
+        PR AH default).
 
         Never raises — caller inspects the returned CommercialResult.
         """
@@ -711,9 +733,16 @@ class VideoFinisher:
         # never has to escape ' \ : etc inside the user text. Files live
         # in self.dir under a hidden prefix so they don't clutter the
         # finished/ ledger and are wiped via the try/finally below.
+        # PR AM — caption styling is contrast-aware. Caller can pass an
+        # explicit caption_style dict; otherwise we derive it from the
+        # backdrop colour via color_utils.caption_style_for_backdrop.
         caption_files: list[Path] = []
         if captions:
             if self._font:
+                style = caption_style or _caption_style_for_backdrop(backdrop_color)
+                font_color = str(style.get("font_color", "white"))
+                box_color = str(style.get("box_color", "black"))
+                box_alpha = float(style.get("box_alpha", 0.6))
                 font_esc = self._font.replace(":", r"\:")
                 stem = target_path.stem
                 for idx, (start, end, raw_text) in enumerate(captions):
@@ -727,19 +756,20 @@ class VideoFinisher:
                     # Bottom-safe placement: leaves ~110 px of breathing
                     # room beneath the caption block on a 1280-tall frame
                     # (TikTok safe zone for the like / comment column).
-                    # box=1 + boxborderw=18 + black@0.6 keeps the text
-                    # readable over any backdrop and any face above it.
+                    # box=1 + boxborderw=18 keeps text readable; the
+                    # box/text colours flex by backdrop luminance via
+                    # PR AM's caption_style_for_backdrop helper.
                     filter_parts.append(
                         "drawtext="
                         f"fontfile='{font_esc}':"
                         f"textfile='{cf_esc}':"
                         "fontsize=36:"
-                        "fontcolor=white:"
+                        f"fontcolor={font_color}:"
                         "line_spacing=8:"
                         "x=(w-text_w)/2:"
                         "y=h-text_h-110:"
                         "box=1:"
-                        "boxcolor=black@0.6:"
+                        f"boxcolor={box_color}@{box_alpha:.2f}:"
                         "boxborderw=18:"
                         f"enable='between(t\\,{start:.3f}\\,{end:.3f})'"
                     )

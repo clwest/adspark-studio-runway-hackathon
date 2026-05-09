@@ -900,6 +900,37 @@ Output guarantees from PR AG / PR AH are unchanged: 720×1280,
 h264 + AAC, captioned by default. Only the letterbox bars'
 colour changes.
 
+### Contrast-aware captions (PR AM)
+
+PR AM auto-flips the PR AH caption styling so captions stay
+readable on light brand backdrops:
+
+- **Dark / unset backdrop** (WCAG luminance < 0.5) — captions
+  render as **white text on a 60 %-opaque black box**. Same as
+  the PR AH original; untouched callers see no rendering change.
+- **Light backdrop** (luminance ≥ 0.5) — captions flip to
+  **black text on a 70 %-opaque white box**, slightly more
+  opaque so the box edge stays crisp against bright brand bars.
+
+The decision lives in
+`services.color_utils.caption_style_for_backdrop(value)` and is
+exposed as a dict `{font_color, box_color, box_alpha,
+is_light_backdrop}`. Callers can pass an explicit `caption_style`
+into `build_reels_export(...)` to override the auto-derivation;
+the existing reels routes use the auto path.
+
+Threshold: WCAG sRGB relative luminance, channels linearised
+before the photopic-weighted sum. ≥ 0.5 reads as "light"; below
+that stays on the dark default. Reference samples:
+
+| Brand colour | Y | Style |
+|---|---|---|
+| `#0b1220` (default) | 0.006 | dark |
+| `#ff7a00` (PR AK orange) | 0.352 | dark |
+| `#ffeb3b` (yellow) | 0.810 | light |
+| `#7ed4ff` (sky) | 0.587 | light |
+| `#ffffff` (white) | 1.000 | light |
+
 ### Captions (PR AH)
 
 Captions are **on by default**. Both Reels routes burn text into
