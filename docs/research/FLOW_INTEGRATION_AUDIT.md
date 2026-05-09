@@ -855,14 +855,49 @@ of an arbitrary script. Direct TTS (`/v1/text_to_speech`) remains
 gated. The host clip's first 5 s typically covers "Meet {business}.
 {hook}." which lands the brand identity even though the rest of the
 pitch trails off when `-shortest` trims to the 5-second visual cut.
-Two future improvements would close this:
 
-1. **`-stream_loop` the visual** to match the host audio duration
-   so the full pitch lands. Cost: visual repeats; might feel
-   artificial.
-2. **Direct TTS** if Runway opens the `/v1/text_to_speech` schema
+### Next polish (carried out of demo recording — 2026-05-08)
+
+**Loop visual until full host pitch ends** — top priority.
+Today's commercial trims host audio to ~5 s (the visual length).
+Good enough to prove the feature, but the next polish should swap
+the trim for `-stream_loop -1 -i video.mp4` so the visual repeats
+until the host audio finishes (~11 s on real Runway clips). The
+viewer hears the full hook + caption + CTA instead of just the
+opening line. Trade-off: visual loops once or twice; ffmpeg needs
+a re-encode pass since `-stream_loop` doesn't compose with
+`-c:v copy` on every input.
+
+The exact swap, when ready:
+
+```diff
+-  "-i", str(video_path),
+-  "-i", str(host_path),
++  "-stream_loop", "-1",
++  "-i", str(video_path),
++  "-i", str(host_path),
+   "-map", "0:v:0",
+   "-map", "1:a:0",
+-  "-c:v", "copy",
++  "-c:v", "libx264",
++  "-preset", "veryfast",
++  "-crf", "23",
+   "-c:a", "aac",
+   "-b:a", "192k",
+   "-shortest",
+```
+
+The existing libx264 fallback path already handles re-encode
+plumbing, so this is mostly a default-path swap.
+
+### Other future improvements
+
+1. **Direct TTS** if Runway opens the `/v1/text_to_speech` schema
    (would let the user write any script and have the brand voice
    read it over the visual cut).
+2. **Per-campaign duration override** — let the user pick "match
+   visual" / "match host" / "loop visual to host" in the UI before
+   building. ~30 LOC frontend + a `mode` query param backend.
 
 Neither is shipped here. Commercial with Voice today is the
 clearest "final ad" artefact AdSpark can produce without crossing
