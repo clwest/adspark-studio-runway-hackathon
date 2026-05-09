@@ -91,12 +91,17 @@ stitched into a longer (~15 s) silent or voiced cut.
     text-design + `/v1/voice_dubbing` into 29 languages. Sibling
     samples that demonstrate the brand voice; not the ad
     narration.
-16. **Realtime Spokesperson** (PR I + PR AE) — live 5-min WebRTC
-    conversation with the active avatar via `/v1/realtime_sessions`.
-    The broker injects campaign-aware `personality` +
-    `startScript` so the avatar opens with brand context instead of
-    a generic greeting; defensive 400-fallback retries the bare
-    body.
+16. **Realtime Spokesperson** (PR I + PR AE + PR AI) — live 5-min
+    WebRTC conversation with the active avatar via
+    `/v1/realtime_sessions`. The broker injects campaign-aware
+    `personality` + `startScript` so the avatar opens with brand
+    context instead of a generic greeting. **PR AI** — when the
+    operator attaches a grounding document, the broker also passes
+    `documentIds=[id]` and swaps in a slimmer personality cue so
+    the avatar grounds factual answers in the Markdown brand brief
+    (`POST /v1/documents`). Two-tier 400-fallback: drops
+    documentIds first, then drops the personality / startScript
+    overrides; the bare-body path is the original PR-I behaviour.
 
 ## Audio model
 

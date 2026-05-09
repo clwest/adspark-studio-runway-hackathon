@@ -195,6 +195,8 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
   // PR AG — Vertical / Reels export busy flags. One per output kind.
   const [spokespersonReelsBusy, setSpokespersonReelsBusy] = useState(false)
   const [dialogueReelsBusy, setDialogueReelsBusy] = useState(false)
+  // PR AI — Realtime document attach busy flag.
+  const [realtimeDocBusy, setRealtimeDocBusy] = useState(false)
   const [dialogueDrafts, setDialogueDrafts] = useState(() => {
     const out = {}
     for (const l of c.dialogue_lines || []) {
@@ -434,6 +436,23 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
       setLocalError(`dialogue reels: ${e}`)
     } finally {
       setDialogueReelsBusy(false)
+    }
+  }
+
+  // PR AI — attach (or refresh) the Realtime grounding document. Same
+  // setLocalError + onUpdated pattern as every other handler in this
+  // card. Mock mode succeeds with a deterministic id; real mode does
+  // POST /v1/documents + best-effort PATCH /v1/avatars/{id}.
+  const handleAttachRealtimeDocument = async () => {
+    setLocalError('')
+    setRealtimeDocBusy(true)
+    try {
+      const updated = await api.attachRealtimeDocument(c.id)
+      onUpdated?.(updated)
+    } catch (e) {
+      setLocalError(`realtime grounding: ${e}`)
+    } finally {
+      setRealtimeDocBusy(false)
     }
   }
 
@@ -2880,8 +2899,86 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
     </div>
   )
 
+  // PR AI — grounding state derivations. The badge surfaces whether
+  // the realtime broker will pass documentIds (Document-grounded) or
+  // fall back to the inlined personality/startScript only
+  // (Prompt-grounded). The badge + attach control is intentionally
+  // small — no new pages, no new tabs.
+  const grounded =
+    Boolean(c.runway_document_id) &&
+    (c.runway_document_status === 'ready' || c.runway_document_status === 'mock')
+  const groundedMock = grounded && c.runway_document_status === 'mock'
+  const groundingFailed = c.runway_document_status === 'failed'
+
   const realtimeBody = (
     <div className="space-y-2">
+      <div className="rounded-md ring-1 ring-zinc-800 bg-zinc-950/40 p-2.5 space-y-1.5">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[11px] font-semibold text-zinc-200">
+            Realtime grounding
+          </span>
+          <span
+            className={
+              grounded
+                ? `text-[10px] rounded-full px-2 py-0.5 font-mono ${
+                    groundedMock
+                      ? 'bg-amber-500/20 text-amber-200 ring-1 ring-amber-400/40'
+                      : 'bg-emerald-500/25 text-emerald-200 ring-1 ring-emerald-400/40'
+                  }`
+                : 'text-[10px] rounded-full px-2 py-0.5 font-mono bg-zinc-800 text-zinc-300 ring-1 ring-zinc-700'
+            }
+            title={
+              grounded
+                ? `documentIds=[${c.runway_document_id}] passed on session create`
+                : 'No attached document — broker uses personality + startScript only'
+            }
+            data-testid="realtime-grounding"
+          >
+            {grounded
+              ? groundedMock
+                ? 'Document-grounded · mock'
+                : 'Document-grounded'
+              : 'Prompt-grounded'}
+          </span>
+          <button
+            type="button"
+            onClick={handleAttachRealtimeDocument}
+            disabled={realtimeDocBusy}
+            data-testid="attach-realtime-doc"
+            className="text-[10px] rounded-md bg-emerald-500/30 hover:bg-emerald-500/45 text-emerald-100 ring-1 ring-emerald-400/40 px-2 py-0.5 font-semibold disabled:opacity-50"
+            title="Generate a Markdown campaign brief, POST it to /v1/documents, and bind it to the realtime session"
+          >
+            {realtimeDocBusy
+              ? 'Attaching…'
+              : grounded
+              ? 'Refresh grounding doc'
+              : 'Attach grounding doc'}
+          </button>
+        </div>
+        <p className="text-[10px] text-zinc-500 leading-relaxed">
+          {grounded ? (
+            <>
+              The avatar grounds answers in the saved campaign brief
+              document; the inline personality stays lean.
+            </>
+          ) : (
+            <>
+              Without a document the broker still injects business +
+              product + audience + script as personality (PR AE).
+              Attach a doc to lighten that prompt and ground answers
+              in the brief instead.
+            </>
+          )}
+        </p>
+        {groundingFailed && c.runway_document_error && (
+          <p
+            className="text-[10px] text-rose-300"
+            title={c.runway_document_error}
+          >
+            grounding failed: {c.runway_document_error}
+          </p>
+        )}
+      </div>
       {avatarReady ? (
         <RealtimeSpokesperson
           campaign={c}

@@ -479,6 +479,18 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
   //      component renders + suggested prompt chips appear; assert
   //      conditionally so both paths pass.
   await newestCard.getByRole('tab', { name: 'Realtime' }).click()
+  // PR AI — grounding badge always renders on the Realtime tab,
+  // regardless of avatar readiness. New campaigns start
+  // Prompt-grounded; clicking "Attach grounding doc" flips the badge
+  // to Document-grounded. Assert the default state + the attach
+  // button + the explanatory copy.
+  await expect(newestCard.getByText(/^Realtime grounding$/i)).toBeVisible()
+  await expect(
+    newestCard.getByTestId('realtime-grounding'),
+  ).toHaveText(/^Prompt-grounded$/)
+  await expect(
+    newestCard.getByTestId('attach-realtime-doc'),
+  ).toBeVisible()
   const realtimeSection = newestCard.getByText(/^Talk to Brand Spokesperson$/)
   if (await realtimeSection.isVisible().catch(() => false)) {
     await expect(newestCard.getByText(/^Realtime Runway Avatar$/)).toBeVisible()

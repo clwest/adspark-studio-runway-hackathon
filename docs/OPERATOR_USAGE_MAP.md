@@ -494,23 +494,76 @@ A live WebRTC conversation with the campaign's active avatar via
 
 Realtime tab on every saved campaign card.
 
-### What it knows about the campaign (PR AE)
+### What it knows about the campaign (PR AE + PR AI)
 
-The broker injects two override fields into
+The broker injects up to three override fields into
 `POST /v1/realtime_sessions`:
 
 - **`personality`** — composed from business / product / audience
   / tone / character voice + personality / hook / caption / CTA /
   `commercial_script`. Capped at 9,500 chars (Runway limit is
   10,000). Order: business context → character voice → script +
-  concept → behaviour rule.
+  concept → behaviour rule. **PR AI** — when the campaign has a
+  grounding document attached, the broker swaps in a slim
+  ~300-char personality that anchors identity + tone and points
+  at the document for facts.
 - **`startScript`** — first sentence of `commercial_script`, or a
   templated *"Hi, I'm {character}. I'm here to talk about
   {business} and {product}."* fallback. Capped at 280 chars.
+- **`documentIds`** (PR AI) — `[campaign.runway_document_id]` when
+  the operator clicked **Attach grounding doc** on the Realtime
+  tab and the document is `ready` or `mock`. The avatar grounds
+  factual answers in the document instead of hallucinating
+  outside the brief.
 
-Defensive: if Runway returns 400 with the override keys, the
-broker logs the redacted error and retries once with the bare
-`{model, avatar}` body — same as pre-PR-AE behaviour.
+Defensive (two-tier): if Runway returns 400 with documentIds
+present, the broker first retries without `documentIds` (keeps
+personality + startScript). If that still 400s, it falls back to
+the bare `{model, avatar}` body — same as pre-PR-AE behaviour.
+
+### Attaching the grounding doc (PR AI)
+
+The Realtime tab now opens with a **"Realtime grounding"** card
+above the conversation control. Two states:
+
+- **`Prompt-grounded`** (default, grey pill) — the broker injects
+  campaign context inline as personality only. No documentIds on
+  the session body.
+- **`Document-grounded`** (emerald pill) — `runway_document_id`
+  is set; the broker passes documentIds on every session create.
+  In mock mode the pill shows **`Document-grounded · mock`** in
+  amber so the operator can see the grounding hooked end-to-end
+  without thinking the live session is actually grounded.
+
+Click **`Attach grounding doc`** (or **`Refresh grounding doc`**
+when one already exists) to:
+
+1. Build a Markdown brand brief from
+   business / product / audience / tone / selected concept /
+   `commercial_script` + the attached Character (name / template /
+   voice / personality / catchphrases) + a behaviour rule block.
+2. `POST /v1/documents` with `{name, content}`. Mock mode returns
+   a deterministic `mock_doc_<sha256>` id — the same content
+   hashes to the same id across runs, but editing the script
+   produces a fresh id.
+3. Best-effort `PATCH /v1/avatars/{avatar_id}` with
+   `documentIds=[id]` so a brand that hits the avatar without a
+   campaign-scoped session also sees the grounding. Skipped in
+   mock mode + when the active avatar is mock/unset. Failure is
+   logged but never breaks the route — the per-session
+   `documentIds` body is the primary grounding path.
+
+Backend route:
+
+```
+POST /api/campaigns/{id}/realtime-document
+```
+
+Returns the updated `Campaign` with `runway_document_id` /
+`runway_document_status` / `runway_document_error` /
+`runway_document_mock_mode` populated. 502 on real-mode upstream
+failure (caller surfaces the error in the rose-coloured row);
+409 only when the campaign has zero content to ground on.
 
 ### Lifecycle
 
@@ -551,10 +604,12 @@ once the session is live.
 
 - **No transcript retrieval yet.** `GET /v1/avatar_conversations/{id}`
   is documented but unwired. Tier-1 candidate.
-- **No RAG document attachment.** Personality strings carry the
-  campaign brief inline; long catalogues would need
-  `POST /v1/documents` + `PATCH /v1/avatars/{id} {documentIds:
-  [...]}`. Tier-1 candidate.
+- ~~**No RAG document attachment.**~~ **Resolved by PR AI.**
+  `POST /v1/documents` + per-session `documentIds` + best-effort
+  `PATCH /v1/avatars/{id}` are wired through the Realtime tab's
+  Attach grounding doc affordance. Mock mode supported; long
+  catalogues now grounded in the document instead of inflating
+  the personality string.
 
 ---
 
@@ -883,14 +938,20 @@ Scene Ad row.
 ### Path F — Realtime campaign-aware conversation (~3 min live, ~30–60 credits/session)
 
 **Best for:** "talk to the brand spokesperson" demo. Showcases
-PR AE campaign context injection.
+PR AE campaign context injection + PR AI document grounding.
 
 Pre-flight: save a campaign with a Character + Commercial Script.
 Pre-warm the browser mic permission (visit the page once + Allow).
 
 1. Open the saved card → Realtime tab.
-2. Click **Start Conversation**. Broker creates the session with
-   campaign-aware personality + startScript (PR AE).
+2. (Optional, recommended) Click **Attach grounding doc** in the
+   "Realtime grounding" card (PR AI). Badge flips to
+   `Document-grounded`. The avatar will ground answers in the
+   generated Markdown brief instead of relying on the inline
+   personality alone.
+3. Click **Start Conversation**. Broker creates the session with
+   campaign-aware personality + startScript (PR AE) — and
+   `documentIds=[id]` when the badge is green (PR AI).
 3. Avatar opens with the script's first sentence
    (e.g. *"Meet CEO Buzz."*) instead of a generic greeting.
 4. Ask one of the suggested questions: *"What is this product for?"*,

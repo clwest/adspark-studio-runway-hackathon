@@ -1,29 +1,28 @@
 # START NEXT SESSION — AdSpark Studio
 
 **Last touched:** 2026-05-09 (PR AG Vertical / Reels Export +
-PR AH Burned-in Captions implemented on top of the v13 anchors;
-SESSION_012 + SESSION_013 handoffs added).
+PR AH Burned-in Captions committed and pushed as
+`feat: add captioned reels exports`; PR AI Avatar documentIds for
+Grounded Realtime in flight on top — SESSION_012 / SESSION_013 /
+SESSION_014 handoffs added).
 
 ## Where things stand
 
-- **Branch:** `main` (PR AG + PR AH patch in flight on top of
-  `ec446e4`; no commits yet, no tag pushed).
+- **Branch:** `main` at `6157512` (`feat: add captioned reels
+  exports`) on `origin/main`. PR AI patch in flight on top — no
+  new commit / tag yet, both pending explicit user approval.
 - **Latest tag:** still **`hackathon-submission-v13`** at `ec446e4`
-  (PR AF). PR AG + PR AH together ship the next `v14`-eligible
-  feature pair; tag is **not** pushed yet.
-- **Backend routes:** **61** application + FastAPI built-ins
-  (was 57 at v13). PR AG added four new routes
-  (`POST/GET /api/campaigns/{id}/spokesperson-ad/reels` and
-  `POST/GET /api/campaigns/{id}/dialogue-scene/reels`); PR AH
-  layered captions on top of the same routes without adding any
-  new endpoints.
-- **Frontend build:** 293.49 KB initial JS / 83.46 KB gzip + 561.97 KB
-  lazy `@runwayml/avatars-react` chunk (≈ +0.14 KB initial /
-  +0.05 KB gzip vs PR AG; PR AH was a copy-only change).
+  (PR AF). PR AG + PR AH together ship the captioned reels feature
+  pair; PR AI lands the document grounding slice on top.
+- **Backend routes:** **62** application + FastAPI built-ins
+  (was 57 at v13, 61 at PR AG). PR AI adds one new endpoint:
+  `POST /api/campaigns/{id}/realtime-document`.
+- **Frontend build:** 295.83 KB initial JS / 84.01 KB gzip + 561.97 KB
+  lazy `@runwayml/avatars-react` chunk (≈ +2.3 KB initial /
+  +0.5 KB gzip vs PR AH; PR AI added the Realtime grounding card).
 - **Playwright smoke:** `1 passed (~23 s)` against the mock backend
-  with two ledger-row assertions for the captioned Reels exports
-  (`Spokesperson Reels · 720×1280 · Captioned` /
-  `Dialogue Scene Reels · 720×1280 · Captioned`).
+  with the new "Realtime grounding" assertions plus the existing
+  captioned Reels ledger-row assertions.
 - **Repo:** https://github.com/clwest/adspark-studio-runway-hackathon
   (private). Pushes happen on explicit user approval.
 - **Stale local feature branches:** 22 left over from PR A through
@@ -31,6 +30,35 @@ SESSION_012 + SESSION_013 handoffs added).
   (the user can run `git branch -d feature/...` whenever).
 
 ## What's implemented (full feature stack on `main`)
+
+### Conversation layer (PR AI — Avatar documentIds for Grounded Realtime)
+
+- **Realtime grounding card** on every saved campaign's Realtime
+  tab. Default badge: `Prompt-grounded` (broker uses personality
+  + startScript only). One click on **Attach grounding doc** →
+  `POST /v1/documents` with a generated Markdown brand brief →
+  per-session `documentIds=[id]` on every realtime session create.
+- New backend route: `POST /api/campaigns/{id}/realtime-document`.
+  Returns the updated `Campaign` with `runway_document_*` fields
+  populated.
+- New documents client at `app/services/documents_client.py` —
+  `create_document`, best-effort `attach_documents_to_avatar`
+  (`PATCH /v1/avatars/{id}` with `{documentIds: […]}`), and
+  `build_campaign_brief_markdown(campaign, character)` for the
+  shared brief shape.
+- Realtime broker (`realtime_avatar_client.create_session`) now
+  emits `documentIds=[…]` and swaps the personality string for a
+  ~20 % leaner `_grounded_personality` whenever a document is
+  attached. Two-tier 400-fallback: drop `documentIds` first, then
+  drop `personality + startScript` if Runway still rejects.
+- Mock mode: deterministic `mock_doc_<sha256-of-name+content>` ids.
+  Re-attaching with the same content returns the same id; editing
+  the script produces a fresh id. CI / Playwright / offline demos
+  see the badge flip to `Document-grounded · mock` end-to-end
+  without burning credits.
+- Persisted on Campaign: `runway_document_id`,
+  `runway_document_status` (`ready` / `failed` / `mock`),
+  `runway_document_error`, `runway_document_mock_mode`.
 
 ### Distribution layer (PR AG — Vertical / Reels Export · PR AH — Burned-in Captions)
 
@@ -125,10 +153,13 @@ SESSION_012 + SESSION_013 handoffs added).
    this thing" instructions across all twelve surfaces.
 3. **Pick one** of the recommended next phases (in
    `docs/handoffs/SESSION_011_OPERATOR_USAGE_MAP.md` §Next phases —
-   the Vertical / Reels + Captions items are now ✅ landed):
+   the Vertical / Reels + Captions + Avatar RAG items are now ✅
+   landed):
    - ✅ ~~Vertical / Reels export~~ — shipped in PR AG.
    - ✅ ~~Caption overlays~~ — shipped in PR AH (Reels-only;
      horizontal Dialogue Scene Ad captions still optional polish).
+   - ✅ ~~Avatar `documentIds` for grounded realtime~~ — shipped
+     in PR AI.
    - **Avatar RAG / `documentIds`** — attach campaign brief +
      FAQ as a knowledge document so realtime can answer grounded
      questions about the brand (Tier-1 from the avatar deep review).

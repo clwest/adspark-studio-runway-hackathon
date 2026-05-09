@@ -573,6 +573,32 @@ class CampaignStore:
                     return Campaign.model_validate(row)
         return None
 
+    def update_realtime_document_fields(
+        self,
+        campaign_id: str,
+        runway_document_id: Optional[str],
+        runway_document_status: Optional[str],
+        runway_document_error: Optional[str],
+        runway_document_mock_mode: Optional[bool] = None,
+    ) -> Optional[Campaign]:
+        """PR AI — persist Avatar Document fields used by the realtime
+        broker for grounded answers. Pass ``runway_document_id=None`` to
+        clear the binding (e.g. on a re-attach failure or an explicit
+        revoke). Mirrors the per-feature update shape used elsewhere.
+        """
+        with _LOCK:
+            rows = self._read()
+            for row in rows:
+                if row.get("id") == campaign_id:
+                    row["runway_document_id"] = runway_document_id
+                    row["runway_document_status"] = runway_document_status
+                    row["runway_document_error"] = runway_document_error
+                    if runway_document_mock_mode is not None:
+                        row["runway_document_mock_mode"] = runway_document_mock_mode
+                    self._write(rows)
+                    return Campaign.model_validate(row)
+        return None
+
     def update_reels_fields(
         self,
         campaign_id: str,

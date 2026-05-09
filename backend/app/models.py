@@ -231,6 +231,17 @@ class Campaign(CampaignCreate):
         "ok", "failed", "no_source", "unavailable"
     ]] = None
     dialogue_scene_reels_error: Optional[str] = None
+    # PR AI — Avatar documentIds for grounded realtime. ``runway_document_id``
+    # holds the id returned by ``POST /v1/documents`` for the campaign's
+    # generated brand brief; the realtime broker passes it as ``documentIds``
+    # on session create so the live avatar grounds answers in the brief
+    # text instead of relying solely on the inline ``personality`` string.
+    runway_document_id: Optional[str] = None
+    runway_document_status: Optional[Literal[
+        "ready", "failed", "mock"
+    ]] = None
+    runway_document_error: Optional[str] = None
+    runway_document_mock_mode: Optional[bool] = None
 
 
 class CampaignList(BaseModel):

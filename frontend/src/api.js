@@ -198,4 +198,14 @@ export const api = {
       `/api/campaigns/${encodeURIComponent(campaignId)}/dialogue-scene/reels`,
       { method: 'POST' },
     ),
+  // PR AI — Avatar documentIds for grounded realtime. Generates a
+  // Markdown brand brief from the saved campaign + character +
+  // commercial_script, POSTs it to /v1/documents (or returns a mock
+  // id), and persists the document id on the campaign so the
+  // realtime broker can pass documentIds=[id] on session create.
+  attachRealtimeDocument: (campaignId) =>
+    jsonFetch(
+      `/api/campaigns/${encodeURIComponent(campaignId)}/realtime-document`,
+      { method: 'POST' },
+    ),
 }

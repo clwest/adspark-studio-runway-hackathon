@@ -25,6 +25,11 @@ from ..services.character_host_client import (
     path_for as host_path_for,
 )
 from ..services.character_store import CharacterStore
+from ..services.documents_client import (
+    attach_documents_to_avatar as runway_attach_documents,
+    build_campaign_brief_markdown,
+    create_document as runway_create_document,
+)
 from ..services.realtime_avatar_client import (
     RealtimeUnavailableError,
     create_session as realtime_create_session,
@@ -2130,6 +2135,108 @@ def post_attach_character(
         campaign_id, cid if cid else "(detached)",
     )
     return updated
+
+
+# ---- PR AI — Avatar documents for grounded realtime ----------------
+#
+# Generate a Markdown campaign brief, POST it to /v1/documents, and
+# persist the returned id on the campaign so the realtime broker can
+# pass ``documentIds=[...]`` on session create. The same document is
+# also best-effort PATCHed onto the resolved Runway avatar so a brand
+# that hits the avatar without a campaign-scoped session still sees
+# the grounding. Mock mode returns a deterministic id so smoke +
+# offline demo flows can flip the grounding badge on without burning
+# credits.
+
+
+@router.post("/{campaign_id}/realtime-document", response_model=Campaign)
+def post_attach_realtime_document(
+    campaign_id: str,
+    settings: Settings = Depends(get_settings),
+    store: CampaignStore = Depends(_store),
+    char_store: CharacterStore = Depends(_character_store),
+) -> Campaign:
+    """PR AI — create a Runway document from the saved campaign brief
+    and bind it to the realtime grounding flow. Returns the updated
+    Campaign with ``runway_document_*`` fields populated.
+
+    Real mode: ``POST /v1/documents`` with the generated Markdown +
+    best-effort ``PATCH /v1/avatars/{avatar_id}`` with ``documentIds=[...]``.
+    Mock mode: deterministic ``mock_doc_<sha>`` id; the realtime
+    broker still includes it in the session body so the UI can display
+    a "Document-grounded" badge end-to-end without a Runway key.
+    """
+    record = store.get(campaign_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="campaign not found")
+
+    character: Optional[dict] = None
+    if record.character_id:
+        char = char_store.get(record.character_id)
+        if char:
+            character = char.model_dump()
+
+    name, content = build_campaign_brief_markdown(
+        record.model_dump(), character,
+    )
+    if not content:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "campaign has no content to ground on; fill the brief "
+                "and / or save a Commercial Script first."
+            ),
+        )
+
+    result = runway_create_document(name, content, settings)
+    if result.status == "failed" or not result.document_id:
+        store.update_realtime_document_fields(
+            campaign_id,
+            runway_document_id=None,
+            runway_document_status="failed",
+            runway_document_error=result.error,
+            runway_document_mock_mode=result.mock_mode,
+        )
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                f"document create failed: {result.error or 'unknown error'}"
+            ),
+        )
+
+    # Best-effort secondary binding: PATCH the avatar so a session
+    # opened directly against the avatar (no campaign body) still
+    # inherits the document. Skipped in mock mode + when the active
+    # avatar is mock/unset. Failure is logged but never breaks the
+    # primary per-session grounding path the realtime broker uses.
+    avatar_id = host_active_avatar_id(record, settings)
+    avatar_status = host_active_avatar_status(record, settings)
+    if (
+        result.status == "ready"
+        and avatar_id
+        and avatar_status == "ready"
+    ):
+        bound = runway_attach_documents(
+            avatar_id, [result.document_id], settings,
+        )
+        if not bound:
+            logger.warning(
+                "avatar PATCH bind skipped/failed for campaign=%s avatar=%s",
+                campaign_id, avatar_id,
+            )
+
+    updated = store.update_realtime_document_fields(
+        campaign_id,
+        runway_document_id=result.document_id,
+        runway_document_status=result.status,
+        runway_document_error=None,
+        runway_document_mock_mode=result.mock_mode,
+    )
+    logger.info(
+        "campaign %s grounded with document %s (status=%s mock=%s)",
+        campaign_id, result.document_id, result.status, result.mock_mode,
+    )
+    return updated or record
 
 
 # ---- PR I — Realtime Brand Spokesperson session broker -------------

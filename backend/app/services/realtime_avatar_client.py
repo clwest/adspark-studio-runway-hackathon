@@ -157,6 +157,53 @@ def _first_sentence(text: str, limit: int = _START_SCRIPT_MAX) -> str:
     return _truncate_at_sentence(head, limit)
 
 
+def _grounded_personality(
+    campaign: Campaign, settings: Settings,
+) -> str:
+    """PR AI — slim personality string used when an attached
+    ``documentIds`` carries the bulk of the brand brief. Keeps just
+    enough identity + tone so the avatar still opens with the right
+    voice; the document grounds factual answers.
+    """
+    business = _trim(campaign.business)
+    tone = _trim(campaign.tone)
+    character = _attached_character(campaign, settings)
+    char_name = _trim((character or {}).get("name"))
+    char_template = _trim((character or {}).get("template"))
+    char_voice = _trim((character or {}).get("voice_preset"))
+    char_personality = _trim((character or {}).get("personality"))
+
+    parts: list[str] = []
+    if char_name:
+        intro = (
+            f"You are {char_name}"
+            + (f", the brand {char_template}" if char_template else "")
+            + (f" for {business}" if business else "")
+            + "."
+        )
+    elif business:
+        intro = f"You are the brand spokesperson for {business}."
+    else:
+        intro = "You are the brand spokesperson."
+    parts.append(intro)
+
+    if tone:
+        parts.append(f"Tone: {tone}.")
+    if char_voice:
+        parts.append(f"Speak in your {char_voice} voice.")
+    if char_personality:
+        parts.append(f"Personality cue: {char_personality}")
+
+    parts.append(
+        "An attached campaign brief document carries the product, "
+        "audience, hook, caption, CTA, and saved commercial script. "
+        "Ground every answer in that document. Stay concise, warm, "
+        "and brand-honest. Redirect politely if asked something the "
+        "document does not cover."
+    )
+    return _truncate_at_sentence(" ".join(parts).strip(), _PERSONALITY_MAX)
+
+
 def _build_session_overrides(
     campaign: Campaign, settings: Settings,
 ) -> dict[str, str]:
@@ -286,15 +333,49 @@ def create_session(campaign: Campaign, settings: Settings) -> RealtimeSession:
         "avatar": {"type": "custom", "avatarId": avatar_id},
     }
     overrides = _build_session_overrides(campaign, settings)
+
+    # PR AI — when a document is attached, prefer it for grounded
+    # answers and shrink the inlined personality to a lean cue. The
+    # document carries the brand brief; the personality stays just
+    # long enough to anchor identity + tone.
+    document_ids: list[str] = []
+    grounded = False
+    if campaign.runway_document_id and (campaign.runway_document_status or "") in {"ready", "mock"}:
+        document_ids = [campaign.runway_document_id]
+        grounded = True
+        if "personality" in overrides:
+            overrides["personality"] = _grounded_personality(campaign, settings)
+    if document_ids:
+        overrides = {**overrides, "documentIds": document_ids}
+
     body = {**base_body, **overrides}
+    if grounded:
+        logger.info(
+            "realtime session grounded with document %s",
+            campaign.runway_document_id,
+        )
     create_url = f"{settings.runway_api_base}/v1/realtime_sessions"
 
     with httpx.Client(timeout=20.0) as client:
         resp = client.post(create_url, headers=_runway_headers(settings), json=body)
-        # PR AE — defensive fallback. If Runway rejects the override
-        # fields with a 400, retry once with the bare body so the
-        # session still starts (just without campaign awareness). The
-        # retry path mirrors the pre-PR-AE behaviour exactly.
+        # PR AE / PR AI — defensive fallbacks. We tier the retries so
+        # a transient 400 doesn't immediately drop campaign context:
+        # 1. If the body included documentIds (PR AI grounding) and
+        #    Runway rejects it, retry without documentIds but keep the
+        #    personality + startScript overrides so the avatar still
+        #    sees brand context.
+        # 2. If that retry still 400s (or we never had documentIds),
+        #    retry with the bare body — same fallback PR AE shipped.
+        if resp.status_code == 400 and document_ids:
+            logger.warning(
+                "realtime session 400 with documentIds (%s); "
+                "retrying with personality only",
+                _redact(resp.text),
+            )
+            no_docs = {k: v for k, v in body.items() if k != "documentIds"}
+            resp = client.post(
+                create_url, headers=_runway_headers(settings), json=no_docs,
+            )
         if resp.status_code == 400 and overrides:
             logger.warning(
                 "realtime session 400 with overrides (%s); "
