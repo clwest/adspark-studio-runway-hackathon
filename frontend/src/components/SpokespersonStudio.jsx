@@ -218,6 +218,23 @@ export default function SpokespersonStudio({
     return updated
   }
 
+  // PR BO — Voiced Cinematic submit handler. Mirrors the PR BN
+  // shape: ffmpeg-only mux of the silent cinematic visual cut +
+  // the avatar host clip's audio (PR S/X). Updates the campaigns
+  // slice in place + bubbles onCharactersChanged. No Runway
+  // calls.
+  const handleBuildVoicedCinematic = async (campaignId) => {
+    if (!campaignId) {
+      throw new Error('campaign id required')
+    }
+    const updated = await api.buildCommercialWithVoice(campaignId)
+    setCampaigns((cs) =>
+      cs.map((x) => (x.id === campaignId ? updated : x)),
+    )
+    onCharactersChanged?.()
+    return updated
+  }
+
   // PR BH — mode-first creation handlers.
   const handleOpenCreateModal = () => {
     setModeModalOpen(true)
@@ -396,6 +413,10 @@ export default function SpokespersonStudio({
               ? campaignsByCharacter[activeCharacterId] || []
               : []
           }
+          // PR BO — wire the Voiced Cinematic button. Same shape
+          // as PR BN's onBuildReels; no Runway calls — ffmpeg
+          // mux of cached visual + host clip audio.
+          onBuildVoicedCinematic={handleBuildVoicedCinematic}
         />
       )}
       {/* PR BL — Dialogue Scene lane scaffold. Mirrors PR BI / PR BK

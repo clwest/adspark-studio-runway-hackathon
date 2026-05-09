@@ -1171,16 +1171,47 @@ test('AdSpark Studio UX v2 SpokespersonStudio scaffold', async ({ page }) => {
   await expect(
     cinematicLane.getByTestId('cinematic-lane-step-render'),
   ).toBeVisible()
-  for (const [tid, target] of [
-    ['cinematic-lane-video', 'cinematic-video'],
-    ['cinematic-lane-voiced', 'voiced-cinematic'],
-    ['cinematic-lane-storyboard', 'storyboard'],
-  ]) {
-    const btn = cinematicLane.getByTestId(tid)
-    await expect(btn).toBeVisible()
-    await expect(btn).toBeDisabled()
-    await expect(btn).toHaveAttribute('data-render-target', target)
+  // PR BO — Voiced Cinematic is wired; the other two stay
+  // disabled placeholders. Source-readiness disjunction
+  // mirrors PR BN's pattern.
+  const cineVideoBtn = cinematicLane.getByTestId('cinematic-lane-video')
+  const cineVoicedBtn = cinematicLane.getByTestId('cinematic-lane-voiced')
+  const cineStoryBtn = cinematicLane.getByTestId('cinematic-lane-storyboard')
+  await expect(cineVideoBtn).toBeVisible()
+  await expect(cineVoicedBtn).toBeVisible()
+  await expect(cineStoryBtn).toBeVisible()
+  await expect(cineVideoBtn).toBeDisabled()
+  await expect(cineStoryBtn).toBeDisabled()
+  await expect(cineVideoBtn).toHaveAttribute(
+    'data-render-target',
+    'cinematic-video',
+  )
+  await expect(cineVoicedBtn).toHaveAttribute(
+    'data-render-target',
+    'voiced-cinematic',
+  )
+  await expect(cineStoryBtn).toHaveAttribute(
+    'data-render-target',
+    'storyboard',
+  )
+  // Voiced disjunction: enabled iff data-source-ready="true".
+  // Smoke's v2 case never sets activeCharacterId so the lane
+  // sees no linkedCampaigns → button stays disabled with
+  // data-source-ready="false". Stays resilient to fixtures
+  // that change later.
+  const cineVoicedReady = await cineVoicedBtn.getAttribute(
+    'data-source-ready',
+  )
+  expect(['true', 'false']).toContain(cineVoicedReady)
+  if (cineVoicedReady === 'true') {
+    await expect(cineVoicedBtn).toBeEnabled()
+    await expect(cineVoicedBtn).toHaveText(
+      /(Build|Rebuild) Voiced Cinematic/i,
+    )
+  } else {
+    await expect(cineVoicedBtn).toBeDisabled()
   }
+  await expect(cineVoicedBtn).toHaveAttribute('data-busy', 'false')
 
   // PR BL — re-open the modal and pick Dialogue Scene. The
   // cinematic lane should unmount and DialogueLane should mount

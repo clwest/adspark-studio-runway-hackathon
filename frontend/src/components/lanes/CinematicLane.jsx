@@ -1,3 +1,5 @@
+import { useState } from 'react'
+
 import { formatHistoryTimestamp } from '../../uiHelpers.js'
 
 /**
@@ -30,6 +32,11 @@ import { formatHistoryTimestamp } from '../../uiHelpers.js'
 export default function CinematicLane({
   activeSpokesperson = null,
   linkedCampaigns = [],
+  // PR BO — Voiced Cinematic build handler. Resolves with the
+  // updated Campaign on success; throws with a friendly error
+  // on failure (typically a 409 from the backend route when no
+  // silent cinematic visual or no host clip exists yet).
+  onBuildVoicedCinematic = null,
 }) {
   const campaigns = Array.isArray(linkedCampaigns) ? linkedCampaigns : []
   const sorted = [...campaigns].sort((a, b) => {
@@ -45,6 +52,64 @@ export default function CinematicLane({
     focusedScript.length > 220
       ? focusedScript.slice(0, 220) + '…'
       : focusedScript
+
+  // PR BO — Voiced Cinematic gating mirrors v1 CampaignGallery's
+  // `commercialBuildable` exactly:
+  //   isCached         = focused.cached_video_url set
+  //   hostReadyForCommercial =
+  //       focused.host_status === 'ok' && focused.host_video_url
+  //   hasUsableAvatar  = character_id || selected_avatar_id ||
+  //                      (host_avatar_id with status ready/mock)
+  //   buildable        = isCached && (hostReady || hasUsableAvatar)
+  const voicedIsCached = Boolean(focused?.cached_video_url)
+  const voicedHostReady = Boolean(
+    focused?.host_video_url && focused?.host_status === 'ok',
+  )
+  const voicedHasUsableAvatar = Boolean(
+    focused?.character_id ||
+      focused?.selected_avatar_id ||
+      (focused?.host_avatar_id &&
+        ['ready', 'mock'].includes(focused?.host_avatar_status || '')),
+  )
+  const voicedBuildable =
+    voicedIsCached && (voicedHostReady || voicedHasUsableAvatar)
+  const voicedCached =
+    focused?.voiced_commercial_status === 'ok' &&
+    Boolean(focused?.voiced_commercial_url)
+  const voicedFailed =
+    focused?.voiced_commercial_status === 'failed' &&
+    Boolean(focused?.voiced_commercial_error)
+  const [voicedBusy, setVoicedBusy] = useState(false)
+  const [voicedError, setVoicedError] = useState('')
+  const voicedLabel = voicedBusy
+    ? 'Building Voiced Cinematic…'
+    : voicedCached
+    ? 'Rebuild Voiced Cinematic'
+    : 'Build Voiced Cinematic'
+  const voicedCanFire = Boolean(
+    onBuildVoicedCinematic && hasCampaign && voicedBuildable && !voicedBusy,
+  )
+  const voicedDisabledReason = !hasCampaign
+    ? 'Pick a linked campaign first.'
+    : !voicedIsCached
+    ? 'Generate the silent cinematic visual cut first (cached_video_url required).'
+    : !voicedHostReady && !voicedHasUsableAvatar
+    ? 'A host clip OR a usable avatar is required (host_status=ok, OR character_id / selected_avatar_id / host_avatar_id ready).'
+    : !onBuildVoicedCinematic
+    ? 'Wire the v2 onBuildVoicedCinematic handler before this button can fire.'
+    : ''
+  const handleBuildVoiced = async () => {
+    if (!voicedCanFire) return
+    setVoicedError('')
+    setVoicedBusy(true)
+    try {
+      await onBuildVoicedCinematic(focused.id)
+    } catch (e) {
+      setVoicedError(`${e?.message || e}`)
+    } finally {
+      setVoicedBusy(false)
+    }
+  }
 
   return (
     <section
@@ -198,18 +263,42 @@ export default function CinematicLane({
                 {focused?.cached_video_url ? 'cached' : 'placeholder'}
               </span>
             </button>
+            {/* PR BO — Voiced Cinematic button is now wired.
+                Enabled only when the focused campaign has the
+                silent cinematic cut cached AND either a host
+                clip or a usable avatar (mirrors v1's
+                commercialBuildable). Fuchsia chrome to mirror
+                the lane's mode-pill colour vocabulary. */}
             <button
               type="button"
-              disabled
+              onClick={handleBuildVoiced}
+              disabled={!voicedCanFire}
               data-testid="cinematic-lane-voiced"
               data-render-target="voiced-cinematic"
               data-has-output={focused?.voiced_commercial_url ? 'true' : 'false'}
-              title="Render wiring lands with the cinematic lane builder. Use the classic gallery to render today."
-              className="w-full flex items-center justify-between gap-2 text-[11px] rounded ring-1 ring-zinc-700 bg-zinc-800/40 text-zinc-300 px-2 py-1 font-mono cursor-not-allowed disabled:opacity-80"
+              data-source-ready={voicedBuildable ? 'true' : 'false'}
+              data-busy={voicedBusy ? 'true' : 'false'}
+              title={
+                voicedCanFire
+                  ? 'POST /api/campaigns/{id}/commercial-with-voice — local ffmpeg mux of cached visual + host clip audio. No Runway calls.'
+                  : voicedDisabledReason
+              }
+              className={
+                'w-full flex items-center justify-between gap-2 text-[11px] rounded px-2 py-1 font-mono transition-colors ' +
+                (voicedCanFire
+                  ? 'ring-1 ring-fuchsia-400/40 bg-fuchsia-500/30 hover:bg-fuchsia-500/45 text-fuchsia-100'
+                  : 'ring-1 ring-zinc-700 bg-zinc-800/40 text-zinc-300 cursor-not-allowed disabled:opacity-80')
+              }
             >
-              <span className="truncate">Voiced Cinematic</span>
-              <span className="text-[9px] text-zinc-500">
-                {focused?.voiced_commercial_url ? 'cached' : 'placeholder'}
+              <span className="truncate">{voicedLabel}</span>
+              <span className="text-[9px] text-zinc-200/70">
+                {voicedBusy
+                  ? 'building…'
+                  : voicedCached
+                  ? 'cached'
+                  : voicedBuildable
+                  ? 'ready'
+                  : 'no source'}
               </span>
             </button>
             <button
@@ -227,6 +316,49 @@ export default function CinematicLane({
               </span>
             </button>
           </div>
+          {/* PR BO — Voiced Cinematic status row. Renders one of:
+              - rose error from the click handler
+              - zinc "posting to /commercial-with-voice…" while busy
+              - rose persisted-failure copy when backend recorded one
+              - emerald download link when voiced commercial is cached */}
+          {voicedError && (
+            <p
+              data-testid="cinematic-lane-voiced-status"
+              className="text-[10px] text-rose-300 leading-snug"
+              title={voicedError}
+            >
+              {voicedError}
+            </p>
+          )}
+          {!voicedError && voicedBusy && (
+            <p
+              data-testid="cinematic-lane-voiced-status"
+              className="text-[10px] text-zinc-500 leading-snug"
+            >
+              posting to /commercial-with-voice…
+            </p>
+          )}
+          {!voicedError && !voicedBusy && voicedFailed && (
+            <p
+              data-testid="cinematic-lane-voiced-status"
+              className="text-[10px] text-rose-300 leading-snug"
+              title={focused.voiced_commercial_error}
+            >
+              Voiced cinematic failed: {focused.voiced_commercial_error}
+            </p>
+          )}
+          {!voicedError && !voicedBusy && voicedCached && (
+            <a
+              href={focused.voiced_commercial_url}
+              target="_blank"
+              rel="noreferrer"
+              download
+              data-testid="cinematic-lane-voiced-link"
+              className="text-[10px] text-spark hover:underline font-mono"
+            >
+              download voiced cinematic ↗
+            </a>
+          )}
           {focused?.realtime_transcript_fetched_at && (
             <p className="text-[9px] text-zinc-600 leading-snug">
               last touched{' '}
