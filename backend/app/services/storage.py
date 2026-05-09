@@ -573,6 +573,62 @@ class CampaignStore:
                     return Campaign.model_validate(row)
         return None
 
+    def update_runway_conversation_id(
+        self,
+        campaign_id: str,
+        conversation_id: Optional[str],
+    ) -> Optional[Campaign]:
+        """PR AJ — capture the conversation id Runway returns from
+        ``POST /v1/realtime_sessions``. Stored as a plain string; the
+        transcript fetch route reads it later. Pass ``None`` to clear.
+        """
+        with _LOCK:
+            rows = self._read()
+            for row in rows:
+                if row.get("id") == campaign_id:
+                    row["runway_conversation_id"] = conversation_id
+                    self._write(rows)
+                    return Campaign.model_validate(row)
+        return None
+
+    def update_realtime_transcript_fields(
+        self,
+        campaign_id: str,
+        runway_conversation_id: Optional[str],
+        realtime_transcript_status: Optional[str],
+        realtime_transcript_error: Optional[str],
+        realtime_transcript_fetched_at: Optional[datetime],
+        realtime_transcript_turns: "Optional[list[dict]]",
+        realtime_transcript_mock_mode: Optional[bool] = None,
+    ) -> Optional[Campaign]:
+        """PR AJ — persist the transcript + retrieval metadata the
+        replay UX renders. Mirrors the per-feature update shape used
+        across the store. Pass ``realtime_transcript_turns=None`` to
+        leave existing turns untouched (e.g. on a soft-fail refresh)
+        or ``[]`` to explicitly clear them.
+        """
+        with _LOCK:
+            rows = self._read()
+            for row in rows:
+                if row.get("id") == campaign_id:
+                    if runway_conversation_id is not None:
+                        row["runway_conversation_id"] = runway_conversation_id
+                    row["realtime_transcript_status"] = realtime_transcript_status
+                    row["realtime_transcript_error"] = realtime_transcript_error
+                    if realtime_transcript_fetched_at is not None:
+                        row["realtime_transcript_fetched_at"] = (
+                            realtime_transcript_fetched_at.isoformat()
+                            if hasattr(realtime_transcript_fetched_at, "isoformat")
+                            else str(realtime_transcript_fetched_at)
+                        )
+                    if realtime_transcript_turns is not None:
+                        row["realtime_transcript_turns"] = realtime_transcript_turns
+                    if realtime_transcript_mock_mode is not None:
+                        row["realtime_transcript_mock_mode"] = realtime_transcript_mock_mode
+                    self._write(rows)
+                    return Campaign.model_validate(row)
+        return None
+
     def update_realtime_document_fields(
         self,
         campaign_id: str,

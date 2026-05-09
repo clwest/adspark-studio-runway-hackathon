@@ -565,6 +565,59 @@ Returns the updated `Campaign` with `runway_document_id` /
 failure (caller surfaces the error in the rose-coloured row);
 409 only when the campaign has zero content to ground on.
 
+### Replaying a conversation (PR AJ)
+
+Below the grounding card sits the **"Conversation transcript"**
+card — the replay surface for completed realtime sessions. State
+machine:
+
+- **`No transcript yet`** (default, grey pill) — campaign has no
+  cached transcript yet. Click **`Fetch transcript`**.
+- **`No session yet`** (after a real-mode fetch with no recorded
+  session) — operator hasn't run a live realtime session for this
+  campaign. Start one in the conversation control below.
+- **`Replay ready · N turns`** (emerald) — turns are cached and
+  rendered as a colour-coded list (avatar = violet, visitor = sky,
+  system = grey). Scrollable up to 11rem.
+- **`Replay ready · mock · N turns`** (amber) — same, but the
+  source is the deterministic mock 3-turn replay so judges +
+  operators don't mistake it for a real recording.
+- **`Empty`** — Runway has the conversation id but no recorded
+  turns yet (still processing). Refresh in a few seconds.
+
+Backend route:
+
+```
+POST /api/campaigns/{id}/realtime-transcript
+{
+  "conversation_id": "..."   // optional override for replaying a
+                              //   session created elsewhere
+}
+```
+
+Where the conversation id comes from: Runway's `sessionId`
+returned by `POST /v1/realtime_sessions` doubles as the
+`conversationId`. AdSpark captures it server-side immediately
+after the broker succeeds (see
+`POST /api/campaigns/{id}/spokesperson-session` in PR AJ).
+
+Mock mode: short-circuits to a deterministic 3-turn replay built
+from `business / product / audience / hook / commercial_script /`
+the attached Character. The conversation id is a stable
+`mock_conv_<sha-of-campaign-id>` so re-fetches return the same
+handle and the cached turns survive a page reload.
+
+Returns the updated `Campaign` with `runway_conversation_id`,
+`realtime_transcript_status` (`ok` / `failed` / `mock` / `empty`
+/ `no_session`), `realtime_transcript_error`,
+`realtime_transcript_fetched_at`, `realtime_transcript_turns[]`,
+and `realtime_transcript_mock_mode` populated.
+
+Real-mode failure modes:
+- **409** — no recorded session for this campaign yet (and no
+  override on the body).
+- **502** — Runway returned an error fetching the transcript.
+
 ### Lifecycle
 
 ```
@@ -602,8 +655,11 @@ once the session is live.
 
 ### Known limitations
 
-- **No transcript retrieval yet.** `GET /v1/avatar_conversations/{id}`
-  is documented but unwired. Tier-1 candidate.
+- ~~**No transcript retrieval yet.**~~ **Resolved by PR AJ.** The
+  Realtime tab now ships a "Conversation transcript" card that
+  hits `POST /api/campaigns/{id}/realtime-transcript`, which
+  proxies `GET /v1/avatar_conversations/{id}` and persists the
+  turns. Mock mode renders a deterministic 3-turn replay.
 - ~~**No RAG document attachment.**~~ **Resolved by PR AI.**
   `POST /v1/documents` + per-session `documentIds` + best-effort
   `PATCH /v1/avatars/{id}` are wired through the Realtime tab's
@@ -951,13 +1007,20 @@ Pre-warm the browser mic permission (visit the page once + Allow).
    personality alone.
 3. Click **Start Conversation**. Broker creates the session with
    campaign-aware personality + startScript (PR AE) — and
-   `documentIds=[id]` when the badge is green (PR AI).
+   `documentIds=[id]` when the badge is green (PR AI). The
+   session id (which doubles as the conversation id) is captured
+   server-side so step 6 below works automatically (PR AJ).
 3. Avatar opens with the script's first sentence
    (e.g. *"Meet CEO Buzz."*) instead of a generic greeting.
 4. Ask one of the suggested questions: *"What is this product for?"*,
    *"Who is the audience?"*, *"Make this pitch funnier."*
 5. Avatar answers in tone using the brand context.
 6. End Conversation cleanly within the 5-min cap.
+7. (PR AJ) Click **`Fetch transcript`** in the Conversation
+   transcript card. AdSpark hits
+   `GET /v1/avatar_conversations/{sessionId}` and renders the
+   recorded turns inline. **`Refresh transcript`** repulls
+   in case the recording is still processing.
 
 **Spend:** Realtime sessions are billed per minute of avatar
 runtime. Budget ~30–60 credits per 5-min session.

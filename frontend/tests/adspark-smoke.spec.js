@@ -491,6 +491,28 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
   await expect(
     newestCard.getByTestId('attach-realtime-doc'),
   ).toBeVisible()
+
+  // PR AJ — Conversation transcript / replay card. Default state for
+  // a fresh campaign with no session yet shows "No transcript yet"
+  // (the smoke campaign has never run a realtime session, real or
+  // mock). Click Fetch transcript to exercise the mock path; the
+  // backend short-circuits to a deterministic 3-turn replay.
+  await expect(newestCard.getByText(/^Conversation transcript$/i)).toBeVisible()
+  await expect(
+    newestCard.getByTestId('transcript-state'),
+  ).toHaveText(/No transcript yet/i)
+  await expect(
+    newestCard.getByTestId('fetch-transcript'),
+  ).toBeVisible()
+  await newestCard.getByTestId('fetch-transcript').click()
+  // Mock-mode response is synchronous; allow a small window for the
+  // re-render to land. Replay state should flip to mock + show 3 turns.
+  await expect(
+    newestCard.getByTestId('transcript-state'),
+  ).toHaveText(/Replay ready · mock · 3 turns/i, { timeout: 5_000 })
+  await expect(
+    newestCard.getByTestId('transcript-turns'),
+  ).toBeVisible()
   const realtimeSection = newestCard.getByText(/^Talk to Brand Spokesperson$/)
   if (await realtimeSection.isVisible().catch(() => false)) {
     await expect(newestCard.getByText(/^Realtime Runway Avatar$/)).toBeVisible()

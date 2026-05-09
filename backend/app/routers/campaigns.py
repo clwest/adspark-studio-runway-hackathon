@@ -35,6 +35,10 @@ from ..services.realtime_avatar_client import (
     create_session as realtime_create_session,
     delete_session as realtime_delete_session,
 )
+from ..services.transcript_client import (
+    TranscriptResult,
+    fetch_transcript as runway_fetch_transcript,
+)
 from ..services.finisher_service import (
     FORMAT_DIMS,
     LANDSCAPE,
@@ -2292,12 +2296,157 @@ def post_spokesperson_session(
         "realtime session ok campaign=%s session=%s avatar=%s",
         campaign_id, session.session_id, session.avatar_id,
     )
+    # PR AJ — Runway's session id doubles as the conversation id for
+    # transcript / recording retrieval (deep review §7). Capture it
+    # now so a follow-up POST /realtime-transcript can pull the
+    # transcript without an extra parameter from the operator.
+    if session.session_id:
+        try:
+            store.update_runway_conversation_id(campaign_id, session.session_id)
+        except Exception:  # pragma: no cover — defensive: persistence
+            # is a side effect; never let it break the live broker.
+            logger.exception(
+                "could not persist conversation id for campaign=%s session=%s",
+                campaign_id, session.session_id,
+            )
     return {
         "session_id": session.session_id,
         "session_key": session.session_key,
         "expires_at": session.expires_at,
         "avatar_id": session.avatar_id,
     }
+
+
+# ---- PR AJ — Conversation Transcript Retrieval --------------------
+#
+# Runway's realtime ``sessionId`` doubles as the conversation id (deep
+# review §7). After a session ends, AdSpark fetches the transcript via
+# ``GET /v1/avatar_conversations/{id}`` and persists the structured
+# turns so the Realtime tab can render a replay UX. Mock mode returns
+# a deterministic 3-turn conversation derived from the saved campaign
+# brief so the replay flow is demoable / testable without keys.
+
+
+class TranscriptFetchBody(BaseModel):
+    """Optional override so an operator can replay a conversation that
+    wasn't created from this AdSpark instance (e.g. someone shared a
+    sessionId with them out of band).
+    """
+
+    conversation_id: Optional[str] = Field(
+        default=None,
+        max_length=128,
+        description=(
+            "Optional Runway sessionId / conversationId to fetch instead "
+            "of the one persisted on the campaign."
+        ),
+    )
+
+
+@router.post("/{campaign_id}/realtime-transcript", response_model=Campaign)
+def post_fetch_realtime_transcript(
+    campaign_id: str,
+    body: Optional[TranscriptFetchBody] = None,
+    settings: Settings = Depends(get_settings),
+    store: CampaignStore = Depends(_store),
+    char_store: CharacterStore = Depends(_character_store),
+) -> Campaign:
+    """PR AJ — fetch the transcript for the most recent realtime
+    session on this campaign and persist it for replay. Returns the
+    updated Campaign with ``realtime_transcript_*`` fields populated.
+
+    Real mode: requires a persisted ``runway_conversation_id`` (or an
+    explicit ``conversation_id`` override on the body); 409 otherwise.
+    Mock mode: short-circuits to a deterministic 3-turn replay built
+    from the campaign brief; the conversation id is a stable
+    ``mock_conv_<sha-of-campaign-id>`` so re-fetches return the same
+    handle and the replay UX stays predictable.
+    """
+    record = store.get(campaign_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="campaign not found")
+
+    override = (body.conversation_id or "").strip() if body else ""
+    has_id_real_mode = bool(record.runway_conversation_id) or bool(override)
+    if not settings.runway_mock and not has_id_real_mode:
+        # Don't waste a Runway round-trip; the operator hasn't run a
+        # session yet. Persist the no_session state so the UI can
+        # render the explanatory copy without a second call.
+        store.update_realtime_transcript_fields(
+            campaign_id,
+            runway_conversation_id=None,
+            realtime_transcript_status="no_session",
+            realtime_transcript_error=(
+                "no realtime session has been created for this campaign yet"
+            ),
+            realtime_transcript_fetched_at=None,
+            realtime_transcript_turns=None,  # leave any cached turns alone
+            realtime_transcript_mock_mode=False,
+        )
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "no realtime session for this campaign yet — start a "
+                "conversation first, or pass conversation_id in the body."
+            ),
+        )
+
+    character: Optional[dict] = None
+    if record.character_id:
+        char = char_store.get(record.character_id)
+        if char:
+            character = char.model_dump()
+
+    result: TranscriptResult = runway_fetch_transcript(
+        record,
+        settings,
+        character=character,
+        conversation_id_override=override or None,
+    )
+
+    persisted_id = result.conversation_id or record.runway_conversation_id
+    turns_serialised = (
+        [t.model_dump() for t in result.turns] if result.turns else []
+    )
+
+    if result.status in {"failed", "empty", "no_session"}:
+        logger.warning(
+            "transcript fetch %s campaign=%s err=%s",
+            result.status, campaign_id, result.error,
+        )
+        # Preserve any previously-fetched turns when the new fetch
+        # comes back empty / failed; only clear them on an explicit
+        # successful re-fetch (which we handle in the ok branch).
+        updated = store.update_realtime_transcript_fields(
+            campaign_id,
+            runway_conversation_id=persisted_id,
+            realtime_transcript_status=result.status,
+            realtime_transcript_error=result.error,
+            realtime_transcript_fetched_at=result.fetched_at,
+            realtime_transcript_turns=None,
+            realtime_transcript_mock_mode=result.mock_mode,
+        )
+        if result.status == "failed":
+            raise HTTPException(
+                status_code=502,
+                detail=f"transcript fetch failed: {result.error}",
+            )
+        return updated or record
+
+    updated = store.update_realtime_transcript_fields(
+        campaign_id,
+        runway_conversation_id=persisted_id,
+        realtime_transcript_status=result.status,
+        realtime_transcript_error=None,
+        realtime_transcript_fetched_at=result.fetched_at,
+        realtime_transcript_turns=turns_serialised,
+        realtime_transcript_mock_mode=result.mock_mode,
+    )
+    logger.info(
+        "transcript fetched campaign=%s conversation=%s turns=%d mock=%s",
+        campaign_id, persisted_id, len(turns_serialised), result.mock_mode,
+    )
+    return updated or record
 
 
 @router.delete("/{campaign_id}/spokesperson-session/{session_id}")

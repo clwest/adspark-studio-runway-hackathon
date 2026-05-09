@@ -123,6 +123,20 @@ class DialogueLine(BaseModel):
     mock_mode: Optional[bool] = None
 
 
+class TranscriptTurn(BaseModel):
+    """PR AJ — one turn of a recorded realtime conversation. Mirrors
+    Runway's documented ``transcript[]`` shape from
+    ``GET /v1/avatar_conversations/{id}`` while staying tolerant of
+    the field-name variance the deep review notes
+    (``role``/``speaker``, ``text``/``content``, ``timestamp``/``at``).
+    """
+
+    role: Literal["avatar", "user", "system"] = "system"
+    speaker: Optional[str] = None
+    text: str
+    timestamp: Optional[str] = None
+
+
 class StoryboardShot(BaseModel):
     id: str  # "shot-1" / "shot-2" / "shot-3"
     label: str  # human-readable beat label ("Hook" / "Action" / "Payoff")
@@ -242,6 +256,20 @@ class Campaign(CampaignCreate):
     ]] = None
     runway_document_error: Optional[str] = None
     runway_document_mock_mode: Optional[bool] = None
+    # PR AJ — Conversation Transcript Retrieval. The realtime
+    # session's id doubles as the conversation id (Runway docs
+    # ``characters/conversations/``); we capture it after a
+    # successful session create so a follow-up fetch can pull the
+    # transcript + recording. Mock mode uses a deterministic
+    # ``mock_conv_<sha>`` so the replay UX still demos without keys.
+    runway_conversation_id: Optional[str] = None
+    realtime_transcript_status: Optional[Literal[
+        "ok", "failed", "mock", "empty", "no_session"
+    ]] = None
+    realtime_transcript_error: Optional[str] = None
+    realtime_transcript_fetched_at: Optional[datetime] = None
+    realtime_transcript_turns: list["TranscriptTurn"] = []
+    realtime_transcript_mock_mode: Optional[bool] = None
 
 
 class CampaignList(BaseModel):

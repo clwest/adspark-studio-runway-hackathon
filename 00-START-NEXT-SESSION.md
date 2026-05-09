@@ -1,28 +1,36 @@
 # START NEXT SESSION — AdSpark Studio
 
-**Last touched:** 2026-05-09 (PR AG Vertical / Reels Export +
-PR AH Burned-in Captions committed and pushed as
-`feat: add captioned reels exports`; PR AI Avatar documentIds for
-Grounded Realtime in flight on top — SESSION_012 / SESSION_013 /
-SESSION_014 handoffs added).
+**Last touched:** 2026-05-09 (PR AG / PR AH committed as
+`6157512 feat: add captioned reels exports`; PR AI committed as
+`108ca3b feat: add grounded realtime avatar documents`; PR AJ
+Conversation Transcript Retrieval + Replay UX in flight on top —
+SESSION_012 / SESSION_013 / SESSION_014 / SESSION_015 handoffs
+added).
 
 ## Where things stand
 
-- **Branch:** `main` at `6157512` (`feat: add captioned reels
-  exports`) on `origin/main`. PR AI patch in flight on top — no
-  new commit / tag yet, both pending explicit user approval.
+- **Branch:** `main` at `108ca3b` (`feat: add grounded realtime
+  avatar documents`) on `origin/main`. PR AJ patch in flight on
+  top — no new commit / tag yet, both pending explicit user
+  approval.
 - **Latest tag:** still **`hackathon-submission-v13`** at `ec446e4`
-  (PR AF). PR AG + PR AH together ship the captioned reels feature
-  pair; PR AI lands the document grounding slice on top.
-- **Backend routes:** **62** application + FastAPI built-ins
-  (was 57 at v13, 61 at PR AG). PR AI adds one new endpoint:
-  `POST /api/campaigns/{id}/realtime-document`.
-- **Frontend build:** 295.83 KB initial JS / 84.01 KB gzip + 561.97 KB
-  lazy `@runwayml/avatars-react` chunk (≈ +2.3 KB initial /
-  +0.5 KB gzip vs PR AH; PR AI added the Realtime grounding card).
+  (PR AF). PR AG + PR AH ship captioned reels; PR AI lands the
+  document grounding slice; PR AJ closes the realtime story with
+  transcript retrieval + replay.
+- **Backend routes:** **63** application + FastAPI built-ins
+  (was 57 at v13, 61 at PR AG, 62 at PR AI). PR AJ adds one new
+  endpoint: `POST /api/campaigns/{id}/realtime-transcript`. The
+  existing spokesperson-session route also gained a side-effect
+  to capture the session id (Runway's session id doubles as the
+  conversation id).
+- **Frontend build:** 299.67 KB initial JS / 84.87 KB gzip + 561.97 KB
+  lazy `@runwayml/avatars-react` chunk (≈ +3.8 KB initial /
+  +0.9 KB gzip vs PR AI; PR AJ added the Conversation transcript
+  card on the Realtime tab).
 - **Playwright smoke:** `1 passed (~23 s)` against the mock backend
-  with the new "Realtime grounding" assertions plus the existing
-  captioned Reels ledger-row assertions.
+  with the new transcript-card assertions: default `No transcript yet`
+  → click `Fetch transcript` → state flips to
+  `Replay ready · mock · 3 turns` and the turn list renders.
 - **Repo:** https://github.com/clwest/adspark-studio-runway-hackathon
   (private). Pushes happen on explicit user approval.
 - **Stale local feature branches:** 22 left over from PR A through
@@ -30,6 +38,36 @@ SESSION_014 handoffs added).
   (the user can run `git branch -d feature/...` whenever).
 
 ## What's implemented (full feature stack on `main`)
+
+### Conversation layer (PR AI — Avatar documentIds for Grounded Realtime · PR AJ — Transcript Retrieval + Replay UX)
+
+- **Conversation transcript card** on every saved campaign's
+  Realtime tab (PR AJ). Default state: `No transcript yet`. One
+  click on **Fetch transcript** → either a real
+  `GET /v1/avatar_conversations/{conversationId}` (when a session
+  has run) or a deterministic 3-turn mock replay (otherwise).
+  Turns render colour-coded by role (avatar / visitor / system),
+  scrollable.
+- New backend route: `POST /api/campaigns/{id}/realtime-transcript`.
+  Optional `conversation_id` body override lets an operator replay
+  a session created elsewhere.
+- New transcript client at `app/services/transcript_client.py` —
+  `fetch_transcript(campaign, settings, …)` with mock / real / 404 /
+  empty / failed branches and a tolerant `_normalise_turns` that
+  accepts Runway's documented `transcript[]` shape variations.
+- Realtime broker side-effect: the session id is captured into
+  `campaign.runway_conversation_id` as soon as
+  `realtime_create_session` returns (Runway's `sessionId` doubles
+  as `conversationId` per the deep review).
+- Mock mode: `mock_conv_<sha-of-campaign-id>` ids; turns are
+  rendered from the saved business / product / audience / hook /
+  commercial_script + attached Character so they look plausible
+  even in an offline demo.
+- Persisted on Campaign: `runway_conversation_id`,
+  `realtime_transcript_status` (`ok` / `failed` / `mock` / `empty` /
+  `no_session`), `realtime_transcript_error`,
+  `realtime_transcript_fetched_at`, `realtime_transcript_turns[]`,
+  `realtime_transcript_mock_mode`.
 
 ### Conversation layer (PR AI — Avatar documentIds for Grounded Realtime)
 
@@ -153,13 +191,13 @@ SESSION_014 handoffs added).
    this thing" instructions across all twelve surfaces.
 3. **Pick one** of the recommended next phases (in
    `docs/handoffs/SESSION_011_OPERATOR_USAGE_MAP.md` §Next phases —
-   the Vertical / Reels + Captions + Avatar RAG items are now ✅
-   landed):
+   the four Tier-1 items are all now ✅ landed):
    - ✅ ~~Vertical / Reels export~~ — shipped in PR AG.
    - ✅ ~~Caption overlays~~ — shipped in PR AH (Reels-only;
      horizontal Dialogue Scene Ad captions still optional polish).
    - ✅ ~~Avatar `documentIds` for grounded realtime~~ — shipped
      in PR AI.
+   - ✅ ~~Conversation transcript retrieval~~ — shipped in PR AJ.
    - **Avatar RAG / `documentIds`** — attach campaign brief +
      FAQ as a knowledge document so realtime can answer grounded
      questions about the brand (Tier-1 from the avatar deep review).

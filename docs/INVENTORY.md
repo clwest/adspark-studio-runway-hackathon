@@ -1,11 +1,11 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after PR AI (Avatar documentIds for Grounded
-Realtime) on top of the PR AG / PR AH / SESSION 011 anchors.
-Backend route count is **62** application routes — PR AI adds
-one new endpoint (`POST /api/campaigns/{id}/realtime-document`)
-on top of the 61 routes from PR AG.
+context-kit refresh after PR AJ (Conversation Transcript Retrieval
++ Replay UX) on top of the PR AG / PR AH / PR AI / SESSION 011
+anchors. Backend route count is **63** application routes — PR AJ
+adds one new endpoint (`POST /api/campaigns/{id}/realtime-transcript`)
+on top of the 62 routes from PR AI.
 
 ## Backend (`backend/`)
 
@@ -20,14 +20,15 @@ on top of the 61 routes from PR AG.
 | `app/services/finisher_service.py` | real | Local ffmpeg Campaign Pack + **Voiced Cinematic Ad mux** (PR S/X `-stream_loop -1 -shortest`) + **Storyboard concat** (PR Z `concat=n=N:v=1:a=0`) + **Voiced Storyboard** (PR Z) + **Dialogue Scene concat** (PR AF `concat=n=N:v=1:a=1` audio-preserved) + **Reels export** (PR AG `scale=720:1280:force_original_aspect_ratio=decrease,pad=…` letterbox; synthesises a silent AAC track when the source has no audio so output stays h264 + AAC) + **Burned-in captions** (PR AH chained `drawtext=…enable='between(t,start,end)'` per segment, textwrap word-wrap, bottom-safe placement, `probe_duration` ffprobe helper) |
 | `app/services/character_host_client.py` | real + mock | Phase 1 `/v1/avatars` + Phase 2 `/v1/avatar_videos`; image-source fallback chain; **`active_avatar_id(campaign, settings)` resolves character > selected > host**; **PR AA — uses `campaign.commercial_script` as `script_override` when no explicit override is supplied** |
 | `app/services/avatar_listing_client.py` | real + mock | `GET /v1/avatars` curation; 4 hard-coded mock presets (PR I+) |
-| `app/services/realtime_avatar_client.py` | real + mock | `/v1/realtime_sessions` broker — **PR AE injects campaign-aware `personality` + `startScript` overrides**, defensive 400-fallback retries the bare body, `_redact()` scrubs Bearer / sessionKey / JWT patterns from any logged upstream response. **PR AI** — when `campaign.runway_document_id` is set the body also carries `documentIds=[id]` and the personality is swapped for a leaner `_grounded_personality` (~20 % smaller); two-tier 400-fallback drops `documentIds` first, then drops `personality + startScript` if Runway still rejects |
+| `app/services/realtime_avatar_client.py` | real + mock | `/v1/realtime_sessions` broker — **PR AE injects campaign-aware `personality` + `startScript` overrides**, defensive 400-fallback retries the bare body, `_redact()` scrubs Bearer / sessionKey / JWT patterns from any logged upstream response. **PR AI** — when `campaign.runway_document_id` is set the body also carries `documentIds=[id]` and the personality is swapped for a leaner `_grounded_personality` (~20 % smaller); two-tier 400-fallback drops `documentIds` first, then drops `personality + startScript` if Runway still rejects. **PR AJ** — the broker's session id is captured by the route layer and persisted as `runway_conversation_id` for transcript retrieval (Runway's `sessionId == conversationId`) |
+| `app/services/transcript_client.py` | real + mock | **PR AJ** — wraps `GET /v1/avatar_conversations/{id}` plus an empty-/missing-/non-2xx tolerant `_normalise_turns` that maps Runway's documented `transcript[]` shape into our `TranscriptTurn` model. Mock mode synthesises a deterministic 3-turn replay (avatar opener → user question → grounded answer) from the saved business / product / audience / hook / commercial_script + attached Character so the replay UX demos without keys |
 | `app/services/documents_client.py` | real + mock | **PR AI** — thin wrapper around `POST /v1/documents` (`{name, content}` ≤ 40,000 chars, plain text + Markdown), `PATCH /v1/avatars/{id}` (`{documentIds: [...]}` best-effort), and `build_campaign_brief_markdown(campaign, character)` for the standard brand-brief shape. Mock mode returns deterministic `mock_doc_<sha256-of-name+content>` ids so smoke + offline demo flows can flip the grounding badge end-to-end without burning credits |
 | `app/services/audio_client.py` | real + mock | `/v1/voices` text design + `/v1/voice_dubbing`; 29-language `SUPPORTED_DUB_LANGS`; ffmpeg lavfi mock MP3s |
 | `app/services/character_studio_client.py` | real + mock | **PR K** — `PORTRAIT_TEMPLATES` (4 locked: mascot, founder, coach, local_guide); `build_prompt()`; `generate_portrait()` calls `/v1/text_to_image`; `create_avatar()` reads cached portrait → data URI → `POST /v1/avatars` → poll READY |
 | `app/services/character_store.py` | real | **PR K** — JSON-file Character store at `backend/data/characters.json`; threading.Lock; atomic writes |
 | `app/services/storyboard_service.py` | real + mock | **PR Z + PR AC** — script-aware `_split_script_beats` planner + per-shot `image_to_video` generation + ffmpeg lavfi mock; `_shot_prompt` weaves narrative cues from `campaign.commercial_script` |
 | `app/services/dialogue_service.py` | real + mock | **PR AF** — `plan_lines` builds Hook/Beat/Closer with primary + secondary speaker selection from ready characters; `generate_line` wraps `avatar_videos` (real) + ffmpeg lavfi (mock) targeted at the line's speaker avatar |
-| `app/services/storage.py` | real | JSON-file campaign store; threading.Lock; per-feature update helpers (cache / finish / host avatar / host video / brand voice / dub / selected avatar / **character attachment** / **commercial_script** / **storyboard plan + per-shot + stitch + voiced** / **dialogue plan + per-line + stitch** / **reels (PR AG, kind=spokesperson|dialogue_scene)** / **realtime document (PR AI)**) |
+| `app/services/storage.py` | real | JSON-file campaign store; threading.Lock; per-feature update helpers (cache / finish / host avatar / host video / brand voice / dub / selected avatar / **character attachment** / **commercial_script** / **storyboard plan + per-shot + stitch + voiced** / **dialogue plan + per-line + stitch** / **reels (PR AG, kind=spokesperson|dialogue_scene)** / **realtime document (PR AI)** / **runway_conversation_id + transcript turns (PR AJ)**) |
 | `app/routers/concepts.py` | real | `POST /api/concepts` |
 | `app/routers/runway.py` | real | All `/api/runway/*` routes including `provider-status`, `organization`, `avatars` (list), `image`, `generate`, `task`, `upload-image` |
 | `app/routers/campaigns.py` | real | All `/api/campaigns/*` routes (50+ now — see endpoint list below) |
@@ -76,7 +77,7 @@ on top of the 61 routes from PR AG.
 *optional* PR-F knobs — defaults are `vincent` and a curated
 Unsplash portrait URL.
 
-## Endpoints (62 application + FastAPI built-ins)
+## Endpoints (63 application + FastAPI built-ins)
 
 ```
 GET    /health
@@ -128,7 +129,8 @@ POST   /api/campaigns/{id}/brand-voice                     (PR H)
 POST   /api/campaigns/{id}/dub                             (PR H)
 GET    /api/campaigns/{id}/audio/{kind}
 POST   /api/campaigns/{id}/realtime-document               (PR AI — Avatar documentIds for grounded realtime)
-POST   /api/campaigns/{id}/spokesperson-session            (PR I + PR AE + PR AI — campaign context injection + documentIds when grounded)
+POST   /api/campaigns/{id}/realtime-transcript             (PR AJ — fetch + persist conversation transcript)
+POST   /api/campaigns/{id}/spokesperson-session            (PR I + PR AE + PR AI + PR AJ — campaign context injection + documentIds when grounded + captures session id as conversation id)
 DELETE /api/campaigns/{id}/spokesperson-session/{session_id}
 GET    /api/characters
 POST   /api/characters
@@ -191,6 +193,7 @@ the line's own `avatar_id`).
 | PR AG | Vertical / Reels Export Pipeline (Spokesperson + Dialogue → 720×1280 letterbox) | (post-v13) |
 | PR AH | Burned-in Captions for Vertical Reels (drawtext from saved scripts; per-line timing for dialogue) | (post-v13) |
 | PR AI | Avatar documentIds for Grounded Realtime (POST /v1/documents + per-session documentIds + best-effort PATCH /v1/avatars/{id}) | (post-v13) |
+| PR AJ | Conversation Transcript Retrieval + Replay UX (GET /v1/avatar_conversations/{id} + structured TranscriptTurn persistence + Realtime-tab replay card) | (post-v13) |
 
 ## Known limitations (current main)
 
@@ -218,6 +221,13 @@ the line's own `avatar_id`).
 - **No conversation transcript retrieval.** PR AE gives the avatar
   brand context; we don't yet wire `GET /v1/avatar_conversations/{id}`
   for a "replay your chat" UX.
+- ~~**No conversation transcript retrieval.**~~ **Resolved by
+  PR AJ.** `POST /api/campaigns/{id}/realtime-transcript` fetches
+  `GET /v1/avatar_conversations/{id}` (Runway's session id doubles
+  as the conversation id; the route layer captures it from the
+  broker on success) and persists structured `TranscriptTurn[]`
+  for the Realtime tab's replay card. Mock mode renders a
+  deterministic 3-turn replay so the UX demos without keys.
 - ~~**No avatar-side RAG documents.**~~ **Resolved by PR AI.**
   `POST /api/campaigns/{id}/realtime-document` POSTs a generated
   Markdown brand brief to `/v1/documents`, persists the returned id

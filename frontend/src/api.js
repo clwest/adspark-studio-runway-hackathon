@@ -208,4 +208,18 @@ export const api = {
       `/api/campaigns/${encodeURIComponent(campaignId)}/realtime-document`,
       { method: 'POST' },
     ),
+  // PR AJ — Conversation Transcript Retrieval. After a realtime
+  // session, fetch the recorded transcript via Runway's
+  // GET /v1/avatar_conversations/{id} (the session id doubles as
+  // the conversation id). Mock mode returns a deterministic
+  // 3-turn replay derived from the saved campaign brief so the
+  // replay UX demos without keys.
+  fetchRealtimeTranscript: (campaignId, body) =>
+    jsonFetch(
+      `/api/campaigns/${encodeURIComponent(campaignId)}/realtime-transcript`,
+      {
+        method: 'POST',
+        body: JSON.stringify(body || {}),
+      },
+    ),
 }

@@ -197,6 +197,8 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
   const [dialogueReelsBusy, setDialogueReelsBusy] = useState(false)
   // PR AI — Realtime document attach busy flag.
   const [realtimeDocBusy, setRealtimeDocBusy] = useState(false)
+  // PR AJ — Transcript fetch busy flag.
+  const [transcriptBusy, setTranscriptBusy] = useState(false)
   const [dialogueDrafts, setDialogueDrafts] = useState(() => {
     const out = {}
     for (const l of c.dialogue_lines || []) {
@@ -453,6 +455,23 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
       setLocalError(`realtime grounding: ${e}`)
     } finally {
       setRealtimeDocBusy(false)
+    }
+  }
+
+  // PR AJ — fetch the realtime conversation transcript. Mock mode
+  // synthesises a deterministic 3-turn replay from the campaign
+  // brief; real mode hits Runway's GET /v1/avatar_conversations/{id}
+  // using the session id captured when the broker last ran.
+  const handleFetchTranscript = async () => {
+    setLocalError('')
+    setTranscriptBusy(true)
+    try {
+      const updated = await api.fetchRealtimeTranscript(c.id)
+      onUpdated?.(updated)
+    } catch (e) {
+      setLocalError(`transcript: ${e}`)
+    } finally {
+      setTranscriptBusy(false)
     }
   }
 
@@ -2909,6 +2928,18 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
     (c.runway_document_status === 'ready' || c.runway_document_status === 'mock')
   const groundedMock = grounded && c.runway_document_status === 'mock'
   const groundingFailed = c.runway_document_status === 'failed'
+  // PR AJ — transcript replay state. ``transcriptTurns`` is the
+  // structured per-speaker history persisted on the campaign;
+  // ``transcriptStatus`` drives the UI state machine.
+  const transcriptStatus = c.realtime_transcript_status || null
+  const transcriptTurns = Array.isArray(c.realtime_transcript_turns)
+    ? c.realtime_transcript_turns
+    : []
+  const transcriptHasTurns = transcriptTurns.length > 0
+  const transcriptIsMock = c.realtime_transcript_mock_mode === true
+  const transcriptFailed = transcriptStatus === 'failed'
+  const transcriptEmpty = transcriptStatus === 'empty'
+  const transcriptNoSession = transcriptStatus === 'no_session'
 
   const realtimeBody = (
     <div className="space-y-2">
@@ -2979,6 +3010,134 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
           </p>
         )}
       </div>
+
+      {/* PR AJ — Conversation transcript / replay. Sits below the
+          grounding card so the operator reads the realtime story top
+          to bottom: who's grounding it, then what was said. Compact:
+          one fetch button, one turn-list, gracefully renders empty /
+          no-session / failed states without redesigning anything. */}
+      <div
+        className="rounded-md ring-1 ring-zinc-800 bg-zinc-950/40 p-2.5 space-y-1.5"
+        data-testid="transcript-card"
+      >
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[11px] font-semibold text-zinc-200">
+            Conversation transcript
+          </span>
+          {transcriptHasTurns && (
+            <span
+              className={
+                transcriptIsMock
+                  ? 'text-[10px] rounded-full px-2 py-0.5 font-mono bg-amber-500/20 text-amber-200 ring-1 ring-amber-400/40'
+                  : 'text-[10px] rounded-full px-2 py-0.5 font-mono bg-emerald-500/25 text-emerald-200 ring-1 ring-emerald-400/40'
+              }
+              data-testid="transcript-state"
+              title={
+                c.runway_conversation_id
+                  ? `conversationId=${c.runway_conversation_id}`
+                  : 'transcript on file'
+              }
+            >
+              {transcriptIsMock
+                ? `Replay ready · mock · ${transcriptTurns.length} turns`
+                : `Replay ready · ${transcriptTurns.length} turns`}
+            </span>
+          )}
+          {!transcriptHasTurns && transcriptNoSession && (
+            <span
+              className="text-[10px] rounded-full px-2 py-0.5 font-mono bg-zinc-800 text-zinc-300 ring-1 ring-zinc-700"
+              data-testid="transcript-state"
+            >
+              No session yet
+            </span>
+          )}
+          {!transcriptHasTurns && !transcriptNoSession && (
+            <span
+              className="text-[10px] rounded-full px-2 py-0.5 font-mono bg-zinc-800 text-zinc-300 ring-1 ring-zinc-700"
+              data-testid="transcript-state"
+            >
+              No transcript yet
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={handleFetchTranscript}
+            disabled={transcriptBusy}
+            data-testid="fetch-transcript"
+            className="text-[10px] rounded-md bg-sky-500/30 hover:bg-sky-500/45 text-sky-100 ring-1 ring-sky-400/40 px-2 py-0.5 font-semibold disabled:opacity-50"
+            title="GET /v1/avatar_conversations/{conversationId} — replay the spokesperson session"
+          >
+            {transcriptBusy
+              ? 'Fetching…'
+              : transcriptHasTurns
+              ? 'Refresh transcript'
+              : 'Fetch transcript'}
+          </button>
+        </div>
+        {transcriptHasTurns ? (
+          <ol
+            className="space-y-1 max-h-44 overflow-y-auto pr-1"
+            data-testid="transcript-turns"
+          >
+            {transcriptTurns.map((turn, idx) => {
+              const isAvatar = turn.role === 'avatar'
+              const isUser = turn.role === 'user'
+              const speaker =
+                turn.speaker ||
+                (isAvatar ? 'Avatar' : isUser ? 'Visitor' : 'System')
+              return (
+                <li
+                  key={idx}
+                  className={
+                    'text-[11px] leading-snug rounded-md px-2 py-1 ring-1 ' +
+                    (isAvatar
+                      ? 'bg-violet-500/10 ring-violet-500/30 text-violet-100'
+                      : isUser
+                      ? 'bg-sky-500/10 ring-sky-500/30 text-sky-100'
+                      : 'bg-zinc-800/40 ring-zinc-700 text-zinc-300')
+                  }
+                >
+                  <div className="text-[9px] uppercase tracking-wide text-zinc-500 font-mono">
+                    {speaker}
+                  </div>
+                  <div>{turn.text}</div>
+                </li>
+              )
+            })}
+          </ol>
+        ) : transcriptNoSession ? (
+          <p className="text-[10px] text-zinc-500 leading-relaxed">
+            No realtime session has been recorded for this campaign yet.
+            Start a conversation below; AdSpark captures the session id
+            so this card can fetch the transcript afterwards.
+          </p>
+        ) : transcriptEmpty ? (
+          <p className="text-[10px] text-amber-300 leading-relaxed">
+            Runway has no recorded turns for this conversation yet
+            (it may still be processing). Try refresh in a few seconds.
+          </p>
+        ) : transcriptFailed && c.realtime_transcript_error ? (
+          <p
+            className="text-[10px] text-rose-300"
+            title={c.realtime_transcript_error}
+          >
+            transcript fetch failed: {c.realtime_transcript_error}
+          </p>
+        ) : (
+          <p className="text-[10px] text-zinc-500 leading-relaxed">
+            Click <span className="text-zinc-300">Fetch transcript</span>{' '}
+            to pull the recorded session for replay. In mock mode AdSpark
+            renders a deterministic 3-turn preview drawn from the saved
+            campaign brief so the UX is demoable without a Runway key.
+          </p>
+        )}
+        {c.realtime_transcript_fetched_at && transcriptHasTurns && (
+          <p className="text-[10px] text-zinc-600 font-mono">
+            fetched {String(c.realtime_transcript_fetched_at).slice(0, 19)}Z
+          </p>
+        )}
+      </div>
+
       {avatarReady ? (
         <RealtimeSpokesperson
           campaign={c}
