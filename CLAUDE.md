@@ -18,9 +18,21 @@ If anything in the conversation contradicts the inventory, the
 
 ## Hard rules
 
-- **No real Runway calls without explicit per-task approval.** Mock
-  mode (`RUNWAY_API_KEY= OPENAI_API_KEY= IMAGE_GEN_PROVIDER=mock
-  uvicorn …`) is the default for any automated work.
+- **Real-mode is the default for manual / in-browser testing.**
+  When the operator wants to test the UI, boot via
+  `bash scripts/start-local-real.sh` so `RUNWAY_API_KEY` from
+  `.env` is honoured and clicking "Generate" buttons actually
+  fires real Runway. Mock mode is **only** for Playwright smoke,
+  CI, and explicit dry-runs — booted via
+  `bash scripts/start-local-mock.sh` (PR BJ / SESSION_041).
+  Do **not** start servers with
+  `RUNWAY_API_KEY= OPENAI_API_KEY= IMAGE_GEN_PROVIDER=mock` by
+  habit — that pattern was the historical default before
+  PR BJ and is now reserved for the explicit mock script.
+- **No automated real-mode generation runs.** Real Runway calls
+  during slice work require explicit per-task approval (the
+  user kicks them off; we don't fire them as part of routine
+  verification). Smoke + drift + build never need real keys.
 - **No pushes to `main` without explicit user approval.** No
   `--force` ever.
 - **No tagging without explicit user approval.** Tags are pushed
@@ -75,14 +87,19 @@ cd frontend && npm run build
 For UI / behavioural changes:
 
 ```bash
-# Mock-mode Playwright smoke (1 passed in ~22s baseline)
-pkill -f uvicorn; pkill -f vite; sleep 1
-(cd backend && source .venv/bin/activate && \
-  RUNWAY_API_KEY= OPENAI_API_KEY= IMAGE_GEN_PROVIDER=mock \
-  uvicorn app.main:app --port 8000 &)
-(cd frontend && npm run dev &)
-sleep 5
+# Mock-mode Playwright smoke (1 passed in ~22s baseline).
+# PR BJ — explicit mock-mode boot, never touches real keys.
+bash scripts/start-local-mock.sh
+sleep 1   # script already sleeps 4s; extra safety for the test runner
 (cd frontend && npm run test:e2e)
+```
+
+For manual / in-browser testing (the default after PR BJ):
+
+```bash
+# Real-mode boot — sources .env, no overrides.
+# Health JSON afterwards confirms runway_mock=false.
+bash scripts/start-local-real.sh
 ```
 
 Hygiene scan before any commit:

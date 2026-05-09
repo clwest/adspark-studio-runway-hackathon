@@ -1,25 +1,23 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after PR BI (Spokesperson Lane Scaffold) on
-top of the PR AG–BH / SESSION 011 anchors. Backend route count
-is **68** application routes — PR BI is the sixth gated v2
-slice from the spokesperson-first redesign and the first
-**lane** in the trio (BI Spokesperson · BJ Cinematic · BK
-Dialogue). A new `frontend/src/components/lanes/SpokespersonLane.jsx`
-mounts below the selected-mode pill in SpokespersonStudio when
-`localStorage.adspark.activeMode === "spokesperson"`. Renders a
-compact 3-step scaffold (Brief / Script / Render) with disabled
-placeholder render buttons (PR BJ wires actual generation) and
-a friendly empty state when no spokesperson is set active /
-linked campaigns is empty. Other modes (cinematic / dialogue)
-keep the original PR BH placeholder banner until their lanes
-ship. Backend untouched. Default v1 load unchanged. **Real-mode
-credit-burn session preserved on disk:** Brewster / CEO Buzz
-spokesperson MP4 (1088×704, 18.4 s, 6.1 MB), captioned reels
-(720×1280), voiced cinematic mux (1280×720), real Runway
-grounding doc — all gitignored, served from cached files
-regardless of mock/real flags.
+context-kit refresh after PR BJ (Local Real-Mode Runtime Guard)
+on top of the PR AG–BI / SESSION 011 anchors. Backend route
+count is **68** application routes — PR BJ is a runtime + docs
+slice that flips the local-testing default from mock-mode to
+real-mode. New `scripts/start-local-real.sh` (sources `.env`,
+no overrides) is the canonical entry point for manual /
+in-browser testing; `scripts/start-local-mock.sh` is the
+explicit mock-mode boot reserved for Playwright smoke + CI +
+dry-runs. CLAUDE.md hard rules + 00-START-NEXT-SESSION "Run it"
+section rewritten to match. Frontend / backend code untouched —
+PR BI's lane scaffold remains the head of the v2 redesign track
+and the next implementation slice is PR BK Cinematic Ad lane
+scaffold. **Real-mode credit-burn session preserved on disk:**
+Brewster / CEO Buzz spokesperson MP4 (1088×704, 18.4 s, 6.1 MB),
+captioned reels (720×1280), voiced cinematic mux (1280×720),
+real Runway grounding doc — all gitignored, served from cached
+files regardless of mock/real flags.
 
 ## Backend (`backend/`)
 
@@ -246,7 +244,8 @@ the line's own `avatar_id`).
 | PR BF | Spokesperson Knowledge Tab Wiring (gated v2 slice tracked in SESSION_037; SpokespersonStudio now fetches `GET /api/campaigns` alongside characters and forwards per-character `linkedCampaigns` to each card; SpokespersonCard's Knowledge tab renders summary line + per-campaign rows with grounding labels (Prompt-grounded / Document-grounded / Document-grounded · mock / Failed), transcript counts, and last-fetched relative time; falls back to a friendly "No linked campaigns yet" state otherwise; backend untouched) | (post-v13) |
 | PR BG | Spokesperson Appearances Tab Wiring (gated v2 slice tracked in SESSION_038; SpokespersonCard's Appearances tab lists each linked campaign with inferred mode badge — Cinematic / Spokesperson Ad / Dialogue Scene / Storyboard / Realtime / Mixed / Draft — based on populated output URLs / lists; last-touched relative time computed across transcript-history fetches + script edits + created_at; compact 5-label output-summary chip row per appearance; disabled "Open in gallery" affordance pending PR BJ–BL lane routing; empty state when no linked campaigns; backend untouched) | (post-v13) |
 | PR BH | Mode-First Campaign Creation Modal (gated v2 slice tracked in SESSION_039; first slice that visibly diverges from v1 beyond Stage 1; new `CampaignModeModal.jsx` with three intent cards — 🎬 Cinematic Ad / 🎙️ Spokesperson Ad / 🎭 Dialogue Scene; "+ New Campaign" button in SpokespersonStudio header opens the modal; selection persists to `localStorage.adspark.activeMode` via `setActiveMode` and surfaces a "Selected mode" pill + "Mode selected. Lane-specific builder lands next." banner with dismiss link; backend untouched — Campaign payload doesn't accept a `metadata` field today; lane builders consume the persisted mode in PR BJ–BL) | (post-v13) |
-| PR BI | Spokesperson Lane Scaffold (gated v2 slice tracked in SESSION_040; first lane in the trio — Cinematic / Dialogue lanes ship in PR BJ–BK; new `frontend/src/components/lanes/SpokespersonLane.jsx` with 3-step Brief / Script / Render layout; mounts in SpokespersonStudio below the pill when `activeMode === "spokesperson"`; render buttons are disabled placeholders pending PR BJ wiring; receives active spokesperson + linked campaigns; friendly empty-state hint when neither set; backend untouched — uses existing campaign data already indexed in PR BF) | (post-v13) |
+| PR BI | Spokesperson Lane Scaffold (gated v2 slice tracked in SESSION_040; first lane in the trio — Cinematic / Dialogue lanes ship in PR BK / PR BL; new `frontend/src/components/lanes/SpokespersonLane.jsx` with 3-step Brief / Script / Render layout; mounts in SpokespersonStudio below the pill when `activeMode === "spokesperson"`; render buttons are disabled placeholders pending later wiring; receives active spokesperson + linked campaigns; friendly empty-state hint when neither set; backend untouched — uses existing campaign data already indexed in PR BF) | (post-v13) |
+| PR BJ | Local Real-Mode Runtime Guard (runtime + docs slice tracked in SESSION_041; flips local-testing default from mock-mode to real-mode; new `scripts/start-local-real.sh` sources `.env` without overrides for manual / in-browser testing, `scripts/start-local-mock.sh` is the explicit mock-mode boot for Playwright smoke + CI, `scripts/stop-local.sh` kills both servers; CLAUDE.md hard-rules section rewritten — `RUNWAY_API_KEY= OPENAI_API_KEY= IMAGE_GEN_PROVIDER=mock` inline overrides are now an anti-pattern; no frontend/backend code changes; frontend bundle unchanged) | (post-v13) |
 
 ## Known limitations (current main)
 

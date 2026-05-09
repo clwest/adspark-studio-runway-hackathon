@@ -8,45 +8,49 @@ PR AT `632b696`; PR AU `485310a`; PR AV `b9b7fee`; PR AW
 `555ebf9`; PR AX `9d86f2e`; PR AY `0a93c79`; PR AZ `2c16d30`;
 PR BA `9d0a99d`; PR BB `8702660`; PR BC `9eae15f`; PR BD
 `0171078`; PR BE `e2ed1ee`; PR BF `d897437`; PR BG
-`af48e28`; SESSION REAL-API `4a68278`; PR BH `600eec9 feat:
-mode-first campaign creation modal (gated v2)`; PR BI
-Spokesperson Lane Scaffold in flight on top —
-SESSION_012–SESSION_040 handoffs added).
+`af48e28`; SESSION REAL-API `4a68278`; PR BH `600eec9`; PR BI
+`42a8054 feat: spokesperson ad lane scaffold (gated v2)`;
+PR BJ Local Real-Mode Runtime Guard in flight on top —
+SESSION_012–SESSION_041 handoffs added).
 
 ## Where things stand
 
-- **Branch:** `main` at `600eec9` (`feat: mode-first campaign
-  creation modal (gated v2)`) on `origin/main`. PR BI patch
-  in flight on top — no new commit / tag yet, both pending
+- **Branch:** `main` at `42a8054` (`feat: spokesperson ad lane
+  scaffold (gated v2)`) on `origin/main`. PR BJ patch in
+  flight on top — no new commit / tag yet, both pending
   explicit user approval.
 - **Latest tag:** still **`hackathon-submission-v13`** at `ec446e4`
-  (PR AF). PR AG–BH shipped the full voice arc + audit trails
+  (PR AF). PR AG–BI shipped the full voice arc + audit trails
   + UX v2 foundation + SpokespersonStudio + Knowledge +
-  Appearances + mode-first modal. SESSION REAL-API confirmed
-  real-mode Runway pipeline on CEO Buzz / Brewster (5 calls,
-  zero failures). PR BI scaffolds the first lane —
-  SpokespersonLane mounts when `activeMode === "spokesperson"`
-  with a 3-step Brief/Script/Render preview. Render buttons
-  are disabled placeholders; PR BJ wires actual generation.
-  **Default load remains v1**; v2 reachable via footer toggle
-  or `?ux=v2`.
+  Appearances + mode-first modal + Spokesperson lane scaffold.
+  SESSION REAL-API confirmed real-mode Runway pipeline on CEO
+  Buzz / Brewster (5 calls, zero failures). PR BJ flips the
+  local-testing default — `scripts/start-local-real.sh` is now
+  the canonical entry point for manual / in-browser testing
+  (sources `.env`, no overrides), and
+  `scripts/start-local-mock.sh` is the explicit mock-mode boot
+  for Playwright + CI. **Default load remains v1**; v2
+  reachable via footer toggle or `?ux=v2`.
 - **Backend routes:** **68** application + FastAPI built-ins
-  (unchanged from PR BH; PR BI is frontend-only and reuses
-  campaign data already fetched in PR BF).
+  (unchanged from PR BI; PR BJ is runtime + docs only and
+  changes no application code).
 - **Frontend build:** 362.78 KB initial JS / 99.99 KB gzip +
-  561.97 KB lazy `@runwayml/avatars-react` chunk (+6.67 KB
-  initial / +1.65 KB gzip vs PR BH — lane scaffold + 3 step
-  cards + 2 disabled render buttons + footer hint).
+  561.97 KB lazy `@runwayml/avatars-react` chunk (unchanged
+  from PR BI — no JS changed in this slice).
 - **Playwright smoke:** `2 passed (~22.2 s)` against the mock
-  backend. v1 test ~20.8 s unchanged. v2 test ~767 ms now
-  asserts the lane mounts after the modal selects
-  Spokesperson, all 3 step testids visible, both render
-  buttons disabled with `data-render-target` attributes;
-  pill copy flipped to "Spokesperson Ad lane open."; lane
-  unmounts on dismiss alongside the pill.
-- **Targeted probes:** none new. v2 smoke covers the lane
-  mount/unmount + step layout end-to-end. PR BD's 8/8
-  `uxFlag.js` precedence scenarios still pass.
+  backend booted via `bash scripts/start-local-mock.sh`. v1
+  test ~20.9 s unchanged. v2 test ~751 ms unchanged. The
+  smoke command sequence is now:
+  ```bash
+  bash scripts/start-local-mock.sh
+  (cd frontend && npm run test:e2e)
+  ```
+- **Local manual testing:** `bash scripts/start-local-real.sh`.
+  Sources `.env`, no overrides. Health probe afterwards reads
+  `runway_mock=false` + `image_gen_mock=false`. Real Runway
+  flows live (clicks burn credits).
+- **Targeted probes:** none new. PR BD's 8/8 `uxFlag.js`
+  precedence scenarios still pass.
 - **Repo:** https://github.com/clwest/adspark-studio-runway-hackathon
   (private). Pushes happen on explicit user approval.
 - **Stale local feature branches:** 22 left over from PR A through
@@ -621,50 +625,59 @@ SESSION_012–SESSION_040 handoffs added).
 
 ## Run it
 
-```bash
-# Terminal 1 — backend (real Runway, mock OpenAI per .env)
-cd backend && source .venv/bin/activate
-uvicorn app.main:app --reload --port 8000
-
-# Terminal 2 — frontend
-cd frontend && npm install && npm run dev
-```
-
-Open `http://localhost:5173`. Mode banner readiness chip should read
-`demo ready · concepts mocked` (emerald) with `Image Gen (Runway):
-real`, `Video Gen (Runway): real`, and `cap: 200,000` chips visible.
-Stage 1 is Spokesperson, Stage 4 is the saved-campaign gallery, and
-every saved card has the "Pick your ad mode" picker on Overview +
-Visuals / Character / Voice / **Dialogue** / Realtime / Exports tabs.
-
-### Force fully mocked mode (CI / safe dry-runs)
+**Real-mode (default for manual / in-browser testing — PR BJ):**
 
 ```bash
-RUNWAY_API_KEY= OPENAI_API_KEY= IMAGE_GEN_PROVIDER=mock \
-  uvicorn app.main:app --port 8000
+# One command boots both backend (real Runway via .env) + vite,
+# then prints /health + pids so you can confirm at a glance.
+bash scripts/start-local-real.sh
 ```
+
+This sources `.env` without clobbering keys, so the health probe
+afterwards reads `runway_mock=false` and `image_gen_mock=false`
+when `RUNWAY_API_KEY` is set. Open `http://localhost:5173`. Mode
+banner reads `demo ready · concepts mocked` (emerald) with
+`Image Gen (Runway): real`, `Video Gen (Runway): real`, and
+`cap: 200,000` chips visible. Stage 1 is Spokesperson, Stage 4 is
+the saved-campaign gallery, every saved card has the "Pick your
+ad mode" picker on Overview + Visuals / Character / Voice /
+**Dialogue** / Realtime / Exports tabs (PR BD–BI v2 surfaces
+toggle on via the footer link or `?ux=v2`).
+
+⚠️ Real mode means clicking Generate / Render / Attach / Start
+Conversation buttons fires real Runway and burns credits. Use
+mock mode for safe dry-runs.
+
+**Mock mode (CI / Playwright smoke / safe dry-runs — PR BJ):**
+
+```bash
+bash scripts/start-local-mock.sh
+```
+
+Forces `RUNWAY_API_KEY=` + `OPENAI_API_KEY=` +
+`IMAGE_GEN_PROVIDER=mock` for the spawned process tree only;
+the on-disk `.env` is untouched. Health probe afterwards reads
+`runway_mock=true` + `image_gen_mock=true`.
+
+**Stop both servers:**
+
+```bash
+bash scripts/stop-local.sh
+```
+
+(Or `pkill -f 'uvicorn app.main:app|vite'`.)
 
 ## Run the smoke
 
 ```bash
-# Terminal 1 — fully mocked backend
-cd backend && source .venv/bin/activate
-RUNWAY_API_KEY= OPENAI_API_KEY= IMAGE_GEN_PROVIDER=mock \
-  uvicorn app.main:app --port 8000
-
-# Terminal 2 — frontend dev server
-cd frontend && npm run dev
-
-# Terminal 3 — Playwright smoke
-cd frontend && npm run test:e2e
+bash scripts/start-local-mock.sh        # explicit mock-mode boot
+(cd frontend && npm run test:e2e)
 ```
 
-`1 passed (~23 s)` against the mock backend. Asserts the full PR A–AF
-flow including Stage-3 Commercial Script + breadcrumb, Storyboard
-subsection + Plan button, Ad Mode picker (3 cards), Spokesperson
-Ad flow, Dialogue tab + Plan button, and every Exports ledger row
-(Visual ad, Voiced Commercial, Storyboard Commercial, Voiced
-Storyboard, **Dialogue Scene Ad**, Spokesperson Ad).
+`2 passed (~22 s)` against the mock backend (PR BD/BE/BF/BG/BH/BI):
+the v1 mock-mode end-to-end flow (~21 s) plus the v2
+SpokespersonStudio scaffold + mode-first modal + Spokesperson
+lane (~700 ms).
 
 ## What NOT to build next unless explicitly approved
 
