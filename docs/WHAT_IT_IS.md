@@ -111,7 +111,11 @@ stitched into a longer (~15 s) silent or voiced cut.
     fetches `GET /v1/avatar_conversations/{id}` to populate the
     Realtime tab's replay card with structured per-turn transcript
     history. Mock mode renders a deterministic 3-turn replay for
-    offline demos.
+    offline demos. **PR AL** — frontend-only Copy Markdown +
+    Download TXT affordances on the replay card make those turns
+    portable (operators can drop the Markdown into Notion / Slack
+    or hand the TXT to a customer-success workflow without an
+    extra round-trip).
 
 ## Audio model
 

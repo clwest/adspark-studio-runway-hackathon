@@ -519,6 +519,21 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
   await expect(
     newestCard.getByTestId('fetch-transcript'),
   ).toBeVisible()
+  // PR AL — Export buttons are visible but disabled before any
+  // transcript has been fetched. Confirm the surface exists up-front.
+  await expect(
+    newestCard.getByTestId('transcript-copy-markdown'),
+  ).toBeVisible()
+  await expect(
+    newestCard.getByTestId('transcript-copy-markdown'),
+  ).toBeDisabled()
+  await expect(
+    newestCard.getByTestId('transcript-download-txt'),
+  ).toBeVisible()
+  await expect(
+    newestCard.getByTestId('transcript-download-txt'),
+  ).toBeDisabled()
+
   await newestCard.getByTestId('fetch-transcript').click()
   // Mock-mode response is synchronous; allow a small window for the
   // re-render to land. Replay state should flip to mock + show 3 turns.
@@ -528,6 +543,23 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
   await expect(
     newestCard.getByTestId('transcript-turns'),
   ).toBeVisible()
+  // PR AL — once turns are cached, both export buttons unlock.
+  // Click Copy Markdown and confirm the status banner flips. The
+  // status auto-clears after 2.5 s, so the assertion uses a short
+  // timeout to catch it while it's live.
+  await expect(
+    newestCard.getByTestId('transcript-copy-markdown'),
+  ).toBeEnabled()
+  await expect(
+    newestCard.getByTestId('transcript-download-txt'),
+  ).toBeEnabled()
+  // Grant clipboard permission so navigator.clipboard.writeText
+  // resolves rather than throwing in the headless browser.
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
+  await newestCard.getByTestId('transcript-copy-markdown').click()
+  await expect(
+    newestCard.getByTestId('transcript-export-status'),
+  ).toContainText(/Copied|Clipboard unavailable/i, { timeout: 2_000 })
   const realtimeSection = newestCard.getByText(/^Talk to Brand Spokesperson$/)
   if (await realtimeSection.isVisible().catch(() => false)) {
     await expect(newestCard.getByText(/^Realtime Runway Avatar$/)).toBeVisible()

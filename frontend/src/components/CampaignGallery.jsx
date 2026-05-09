@@ -5,6 +5,13 @@ import { describeVoicePreset } from '../voicePresets'
 import AvatarPicker from './AvatarPicker.jsx'
 import CharacterCard from './CharacterCard.jsx'
 import RealtimeSpokesperson from './RealtimeSpokesperson.jsx'
+import {
+  buildTranscriptMarkdown,
+  buildTranscriptText,
+  copyToClipboard,
+  downloadTextFile,
+  transcriptFilename,
+} from '../transcriptExport.js'
 
 const PACK_FORMATS = [
   { key: 'landscape', label: 'Landscape', dims: '1280×720', hint: 'YouTube / web' },
@@ -199,6 +206,15 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
   const [realtimeDocBusy, setRealtimeDocBusy] = useState(false)
   // PR AJ — Transcript fetch busy flag.
   const [transcriptBusy, setTranscriptBusy] = useState(false)
+  // PR AL — Transcript export status. ``kind`` distinguishes copy vs
+  // download so the same banner can render context-specific copy
+  // (e.g. "Copied" vs "Download ready"). Auto-clears after 2.5 s so
+  // the card doesn't carry a stale banner forever.
+  const [transcriptExport, setTranscriptExport] = useState({
+    kind: null,    // 'copy' | 'download' | null
+    status: null,  // 'ok' | 'failed' | null
+    message: '',
+  })
   // PR AK — Brand colour control. Local draft mirrors the saved
   // value so a quick swatch swap doesn't fire an API call until the
   // user finishes choosing (commit-on-blur / change).
@@ -481,6 +497,44 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
     } finally {
       setTranscriptBusy(false)
     }
+  }
+
+  // PR AL — auto-clear the transcript export banner after a beat so
+  // the card never carries a stale "Copied" indicator.
+  useEffect(() => {
+    if (!transcriptExport.kind) return undefined
+    const t = setTimeout(
+      () => setTranscriptExport({ kind: null, status: null, message: '' }),
+      2_500,
+    )
+    return () => clearTimeout(t)
+  }, [transcriptExport.kind, transcriptExport.status, transcriptExport.message])
+
+  // PR AL — Copy Markdown to clipboard. Falls back to a textarea
+  // selection trick when navigator.clipboard isn't available; surfaces
+  // a friendly failure when even that fallback errors.
+  const handleCopyTranscriptMarkdown = async () => {
+    const md = buildTranscriptMarkdown(c, transcriptTurns)
+    const ok = await copyToClipboard(md)
+    setTranscriptExport({
+      kind: 'copy',
+      status: ok ? 'ok' : 'failed',
+      message: ok
+        ? 'Copied as Markdown'
+        : 'Clipboard unavailable — try Download TXT',
+    })
+  }
+
+  // PR AL — Download the transcript as a .txt file via Blob + object
+  // URL. ``downloadTextFile`` cleans up the URL automatically.
+  const handleDownloadTranscriptText = () => {
+    const txt = buildTranscriptText(c, transcriptTurns)
+    const ok = downloadTextFile(transcriptFilename(c, 'txt'), txt)
+    setTranscriptExport({
+      kind: 'download',
+      status: ok ? 'ok' : 'failed',
+      message: ok ? 'Download ready' : 'Browser blocked the download',
+    })
   }
 
   // PR AK — Brand colour. Persists immediately on commit (change /
@@ -3112,7 +3166,45 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
               ? 'Refresh transcript'
               : 'Fetch transcript'}
           </button>
+          {/* PR AL — Export / share affordances. Buttons are visible
+              but disabled until turns exist so the operator can see
+              the surface up front; clicking either one writes a tiny
+              status banner that auto-clears after 2.5 s. */}
+          <button
+            type="button"
+            onClick={handleCopyTranscriptMarkdown}
+            disabled={!transcriptHasTurns}
+            data-testid="transcript-copy-markdown"
+            className="text-[10px] rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-100 ring-1 ring-zinc-700 px-2 py-0.5 font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Copy a readable Markdown version of the transcript"
+          >
+            Copy Markdown
+          </button>
+          <button
+            type="button"
+            onClick={handleDownloadTranscriptText}
+            disabled={!transcriptHasTurns}
+            data-testid="transcript-download-txt"
+            className="text-[10px] rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-100 ring-1 ring-zinc-700 px-2 py-0.5 font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Download the transcript as a plain .txt file"
+          >
+            Download TXT
+          </button>
         </div>
+        {transcriptExport.kind && transcriptExport.message && (
+          <p
+            data-testid="transcript-export-status"
+            className={
+              transcriptExport.status === 'ok'
+                ? 'text-[10px] text-emerald-300'
+                : 'text-[10px] text-rose-300'
+            }
+            role="status"
+            aria-live="polite"
+          >
+            {transcriptExport.message}
+          </p>
+        )}
         {transcriptHasTurns ? (
           <ol
             className="space-y-1 max-h-44 overflow-y-auto pr-1"

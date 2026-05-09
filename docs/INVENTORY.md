@@ -1,12 +1,11 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after PR AK (Brand Colour Storage + Reels
-Styling Polish) on top of the PR AG / PR AH / PR AI / PR AJ /
-SESSION 011 anchors. Backend route count is **64** application
-routes — PR AK adds one new endpoint (`POST
-/api/campaigns/{id}/brand-color`) on top of the 63 routes from
-PR AJ.
+context-kit refresh after PR AL (Transcript Export / Share) on
+top of the PR AG / PR AH / PR AI / PR AJ / PR AK / SESSION 011
+anchors. Backend route count is **64** application routes — PR AL
+is a frontend-only slice and adds no new endpoints (operates on
+the transcript turns already persisted by PR AJ).
 
 ## Backend (`backend/`)
 
@@ -66,7 +65,8 @@ PR AJ.
 | `src/components/CharacterStudio.jsx` | real | **PR K + V + AA** — top-level studio panel with editable Portrait Prompt textarea + voice preset dropdown with **PR AA description chip** + create form + character library |
 | `src/components/CharacterCard.jsx` | real | Single tile component reused in studio library and per-campaign attach picker |
 | `src/components/ModeBanner.jsx` | real | Readiness chip, per-provider pills, optional credits/cap chip |
-| `tests/adspark-smoke.spec.js` | real | Playwright single-shot mock-mode end-to-end; covers PR A through PR AF (Stage-3 Commercial Script + breadcrumb, Storyboard subsection, Ad Mode picker w/ 3 cards, Spokesperson Ad rename, **new Dialogue tab + Plan button**, all Exports rows) |
+| `tests/adspark-smoke.spec.js` | real | Playwright single-shot mock-mode end-to-end; covers PR A through PR AL (Stage-3 Commercial Script + breadcrumb, Storyboard subsection, Ad Mode picker w/ 3 cards, Spokesperson Ad rename, Dialogue tab + Plan button, all Exports rows + the captioned reels labels, Realtime grounding card + Conversation transcript card with **export button assertions: copy-markdown, download-txt, post-fetch enable + status banner**, brand colour control) |
+| `src/transcriptExport.js` | real | **PR AL** — pure helpers `buildTranscriptMarkdown`, `buildTranscriptText`, `transcriptFilename`, `copyToClipboard`, `downloadTextFile`. No backend round-trip — operates on the turns persisted by PR AJ on the Campaign payload. Markdown output uses bold-speaker syntax + the campaign / conversation-id / fetched-at preamble; text output is plain ASCII with `Speaker:` prefixes |
 
 ## Key-dependent behavior
 
@@ -198,6 +198,7 @@ the line's own `avatar_id`).
 | PR AI | Avatar documentIds for Grounded Realtime (POST /v1/documents + per-session documentIds + best-effort PATCH /v1/avatars/{id}) | (post-v13) |
 | PR AJ | Conversation Transcript Retrieval + Replay UX (GET /v1/avatar_conversations/{id} + structured TranscriptTurn persistence + Realtime-tab replay card) | (post-v13) |
 | PR AK | Brand Colour Storage + Reels Styling Polish (compact card-header colour picker + ffmpeg pad colour wired into both reels routes) | (post-v13) |
+| PR AL | Transcript Export / Share (frontend-only Copy Markdown + Download TXT on the PR AJ replay card; navigator.clipboard + Blob/object-URL with safe textarea fallback) | (post-v13) |
 
 ## Known limitations (current main)
 

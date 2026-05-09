@@ -4,30 +4,30 @@
 `6157512 feat: add captioned reels exports`; PR AI committed as
 `108ca3b feat: add grounded realtime avatar documents`; PR AJ
 committed as `444cb6a feat: add realtime conversation
-transcripts`; PR AK Brand Colour Storage + Reels Styling Polish
-in flight on top — SESSION_012 / SESSION_013 / SESSION_014 /
-SESSION_015 / SESSION_016 handoffs added).
+transcripts`; PR AK committed as `c59251a feat: add brand color
+reels styling`; PR AL Transcript Export / Share in flight on top
+— SESSION_012 / SESSION_013 / SESSION_014 / SESSION_015 /
+SESSION_016 / SESSION_017 handoffs added).
 
 ## Where things stand
 
-- **Branch:** `main` at `444cb6a` (`feat: add realtime conversation
-  transcripts`) on `origin/main`. PR AK patch in flight on top —
-  no new commit / tag yet, both pending explicit user approval.
+- **Branch:** `main` at `c59251a` (`feat: add brand color reels
+  styling`) on `origin/main`. PR AL patch in flight on top — no
+  new commit / tag yet, both pending explicit user approval.
 - **Latest tag:** still **`hackathon-submission-v13`** at `ec446e4`
-  (PR AF). PR AG + PR AH ship captioned reels; PR AI lands the
-  document grounding slice; PR AJ closes the realtime story with
-  transcript retrieval + replay; PR AK polishes the reels output
-  with brand-themed letterbox backdrops.
+  (PR AF). PR AG–AK shipped the funnel + polish stack;
+  PR AL lands the transcript portability slice on top of PR AJ.
 - **Backend routes:** **64** application + FastAPI built-ins
-  (was 57 at v13, 61 at PR AG, 62 at PR AI, 63 at PR AJ).
-  PR AK adds one new endpoint: `POST /api/campaigns/{id}/brand-color`.
-- **Frontend build:** 301.21 KB initial JS / 85.28 KB gzip + 561.97 KB
-  lazy `@runwayml/avatars-react` chunk (≈ +1.5 KB initial /
-  +0.4 KB gzip vs PR AJ; PR AK added the compact Brand colour
-  control on the saved-card header).
+  (unchanged from PR AK; PR AL is frontend-only and does not add
+  endpoints).
+- **Frontend build:** 305.43 KB initial JS / 86.53 KB gzip +
+  561.97 KB lazy `@runwayml/avatars-react` chunk (≈ +4.2 KB
+  initial / +1.3 KB gzip vs PR AK; PR AL added the export
+  utility + two buttons + status banner on the transcript card).
 - **Playwright smoke:** `1 passed (~23 s)` against the mock backend
-  with the new brand-colour-control assertions plus the existing
-  transcript / grounding / captioned-reels assertions.
+  with the new export-button assertions: pre-fetch buttons
+  visible + disabled, post-fetch buttons enabled, click `Copy
+  Markdown` flips the status banner to `Copied`.
 - **Repo:** https://github.com/clwest/adspark-studio-runway-hackathon
   (private). Pushes happen on explicit user approval.
 - **Stale local feature branches:** 22 left over from PR A through
@@ -35,6 +35,29 @@ SESSION_015 / SESSION_016 handoffs added).
   (the user can run `git branch -d feature/...` whenever).
 
 ## What's implemented (full feature stack on `main`)
+
+### Conversation layer (PR AI — Avatar documentIds for Grounded Realtime · PR AJ — Transcript Retrieval + Replay UX · PR AL — Transcript Export / Share)
+
+- **Copy Markdown** + **Download TXT** buttons on the
+  Conversation transcript card (PR AL). Visible up-front but
+  disabled until turns exist; both unlock the moment a transcript
+  is fetched.
+- Frontend-only — no new backend endpoints. New helpers in
+  `frontend/src/transcriptExport.js`: `buildTranscriptMarkdown`,
+  `buildTranscriptText`, `copyToClipboard` (with hidden-textarea
+  fallback), `downloadTextFile` (Blob + object URL), and
+  `transcriptFilename` for the auto-named download.
+- Status banner under the controls reads
+  `Copied as Markdown` / `Download ready` (emerald) on success
+  or a friendly fallback (`Clipboard unavailable — try Download
+  TXT` / `Browser blocked the download`, rose) on failure.
+  Auto-clears after 2.5 s.
+- Markdown shape: `# Conversation Transcript` →
+  `Campaign:` / `Conversation ID:` / `Fetched:` /
+  `Mock mode: yes` (when applicable) → `## Transcript` →
+  `**Speaker:** message` blocks per turn.
+- TXT shape: plain `Speaker: message` lines under a small
+  `Conversation Transcript` header.
 
 ### Conversation layer (PR AI — Avatar documentIds for Grounded Realtime · PR AJ — Transcript Retrieval + Replay UX)
 
@@ -227,6 +250,7 @@ SESSION_015 / SESSION_016 handoffs added).
      in PR AI.
    - ✅ ~~Conversation transcript retrieval~~ — shipped in PR AJ.
    - ✅ ~~Brand-colour reels polish~~ — shipped in PR AK.
+   - ✅ ~~Transcript export / share~~ — shipped in PR AL.
    - **Avatar RAG / `documentIds`** — attach campaign brief +
      FAQ as a knowledge document so realtime can answer grounded
      questions about the brand (Tier-1 from the avatar deep review).

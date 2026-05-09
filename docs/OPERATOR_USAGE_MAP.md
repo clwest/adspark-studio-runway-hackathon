@@ -618,6 +618,31 @@ Real-mode failure modes:
   override on the body).
 - **502** — Runway returned an error fetching the transcript.
 
+#### Exporting a transcript (PR AL)
+
+Two compact buttons sit next to **`Fetch transcript`** and unlock
+the moment turns exist on the campaign record:
+
+- **`Copy Markdown`** — copies a readable Markdown dump to the
+  clipboard via `navigator.clipboard.writeText` with a
+  hidden-textarea fallback for older browsers / restricted
+  contexts. Header includes `Campaign`, `Conversation ID`,
+  `Fetched`, optional `Mock mode: yes`, then a `## Transcript`
+  section with `**Speaker:** message` blocks per turn.
+- **`Download TXT`** — saves a plain-text version using `Blob` +
+  `URL.createObjectURL` + a transient `<a download>` click. The
+  filename comes from `transcriptFilename(campaign, 'txt')`
+  (e.g. `adspark-transcript-ceo-buzz-8ea08b2f.txt`).
+
+A small status banner under the controls reads `Copied as
+Markdown` / `Download ready` (emerald) on success or
+`Clipboard unavailable — try Download TXT` /
+`Browser blocked the download` (rose) on failure. The banner
+auto-clears after 2.5 s.
+
+Frontend-only — no new backend route. The export operates on
+the turns already persisted by PR AJ.
+
 ### Lifecycle
 
 ```
@@ -1056,6 +1081,9 @@ Pre-warm the browser mic permission (visit the page once + Allow).
    `GET /v1/avatar_conversations/{sessionId}` and renders the
    recorded turns inline. **`Refresh transcript`** repulls
    in case the recording is still processing.
+8. (PR AL) **`Copy Markdown`** dumps a readable Markdown version
+   to the clipboard, or **`Download TXT`** saves a plain-text
+   copy. Both buttons unlock the moment turns are cached.
 
 **Spend:** Realtime sessions are billed per minute of avatar
 runtime. Budget ~30–60 credits per 5-min session.
