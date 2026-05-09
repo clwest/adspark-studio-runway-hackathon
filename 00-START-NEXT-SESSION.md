@@ -10,16 +10,16 @@ PR BA `9d0a99d`; PR BB `8702660`; PR BC `9eae15f`; PR BD
 `0171078`; PR BE `e2ed1ee`; PR BF `d897437`; PR BG
 `af48e28`; SESSION REAL-API `4a68278`; PR BH `600eec9`; PR BI
 `42a8054`; PR BJ `c04aced`; PR BK `7185554`; PR BL `8967061`;
-PR BM `669a584`; PR BN `13bc608`; PR BO `5e7400f feat: wire
-v2 cinematic lane voiced cinematic action (PR BO)`; PR BP
-Wire V2 Real Runway Generation Buttons in flight on top —
-SESSION_012–SESSION_047 handoffs added).
+PR BM `669a584`; PR BN `13bc608`; PR BO `5e7400f`; PR BP
+`18a296b feat: wire v2 real runway generation buttons (PR BP)`;
+PR BQ V2 Lane Inline Brief Editing in flight on top —
+SESSION_012–SESSION_048 handoffs added).
 
 ## Where things stand
 
-- **Branch:** `main` at `5e7400f` (`feat: wire v2 cinematic
-  lane voiced cinematic action (PR BO)`) on `origin/main`.
-  PR BP patch in flight on top — no new commit / tag yet,
+- **Branch:** `main` at `18a296b` (`feat: wire v2 real
+  runway generation buttons (PR BP)`) on `origin/main`.
+  PR BQ patch in flight on top — no new commit / tag yet,
   both pending explicit user approval.
 - **Latest tag:** still **`hackathon-submission-v13`** at `ec446e4`
   (PR AF). PR AG–BI shipped the full voice arc + audit trails
@@ -35,21 +35,21 @@ SESSION_012–SESSION_047 handoffs added).
   buttons. Spokesperson lane unmounts when the operator
   switches modes. **Default load remains v1**; v2 reachable
   via footer toggle or `?ux=v2`.
-- **Backend routes:** **68** application + FastAPI built-ins
-  (unchanged from PR BO; PR BP is frontend-only and reuses
-  five existing routes).
-- **Frontend build:** 390.35 KB initial JS / 104.67 KB gzip +
-  561.97 KB lazy `@runwayml/avatars-react` chunk (+8.13 KB
-  initial / +1.61 KB gzip vs PR BO — five wired buttons +
-  busy/error/link UI per lane).
-- **Playwright smoke:** `3 passed (~23.5 s)` against the mock
+- **Backend routes:** **69** application + FastAPI built-ins
+  (one justified addition vs PR BP — `POST /api/campaigns/{id}/brief`
+  for the inline brief editor).
+- **Frontend build:** 392.65 KB initial JS / 105.55 KB gzip +
+  561.97 KB lazy `@runwayml/avatars-react` chunk (+2.30 KB
+  initial / +0.88 KB gzip vs PR BP — LaneBriefEditor + the
+  per-lane mounts).
+- **Playwright smoke:** `3 passed (~25.5 s)` against the mock
   backend booted via `bash scripts/start-local-mock.sh`. v1
-  test ~20.8 s unchanged. v2 test ~1.3 s now asserts every
-  newly-wired button carries `data-source-ready` ∈ {true,
-  false} + `data-busy="false"` + the appropriate
-  `data-render-target`; Horizontal also carries
-  `data-burns-credits="true"`; resilient disjunctions across
-  all wired buttons. Toggle round-trip ~794 ms unchanged.
+  test ~22.8 s unchanged. v2 test ~1.3 s now also asserts a
+  per-lane disjunction on the LaneBriefEditor: when a focused
+  campaign exists in the lane, the editor's testids render;
+  when not, the empty-state copy "Create or select a
+  campaign to edit the brief." is asserted. Toggle round-trip
+  ~790 ms unchanged.
   ```bash
   bash scripts/start-local-mock.sh
   (cd frontend && npm run test:e2e)
@@ -74,7 +74,7 @@ SESSION_012–SESSION_047 handoffs added).
 
 ## What's implemented (full feature stack on `main`)
 
-### UX redesign foundation (PR BD — UX v2 Flag + Shared Helpers · PR BE — SpokespersonStudio Scaffold · PR BF — Knowledge Tab Wiring · PR BG — Appearances Tab Wiring · PR BH — Mode-First Creation Modal · PR BI — Spokesperson Lane Scaffold · PR BK — Cinematic Lane Scaffold · PR BL — Dialogue Lane Scaffold · PR BM — Lane Regression Pass · PR BN — Spokesperson Reels Action Wired · PR BO — Cinematic Voiced Action Wired · PR BP — All Remaining v2 Lane Actions Wired)
+### UX redesign foundation (PR BD — UX v2 Flag + Shared Helpers · PR BE — SpokespersonStudio Scaffold · PR BF — Knowledge Tab Wiring · PR BG — Appearances Tab Wiring · PR BH — Mode-First Creation Modal · PR BI — Spokesperson Lane Scaffold · PR BK — Cinematic Lane Scaffold · PR BL — Dialogue Lane Scaffold · PR BM — Lane Regression Pass · PR BN — Spokesperson Reels Action Wired · PR BO — Cinematic Voiced Action Wired · PR BP — All Remaining v2 Lane Actions Wired · PR BQ — V2 Lane Inline Brief Editing)
 
 - **UX v2 feature flag** at `frontend/src/uxFlag.js`. Resolves
   precedence URL `?ux=v2|v1` > localStorage `adspark.ux` >
@@ -195,6 +195,20 @@ SESSION_012–SESSION_047 handoffs added).
   `spokesperson-lane-reels-status`,
   `spokesperson-lane-reels-link`. Reels button new attrs:
   `data-source-ready`, `data-busy`.
+- **V2 Lane Inline Brief Editing** (PR BQ) — operators can
+  now edit business / product / audience / tone directly
+  inside the v2 lane Step 1. New backend route
+  `POST /api/campaigns/{id}/brief` (route count 68 → **69**)
+  patches the four fields without touching generated media
+  or firing Runway. New reusable
+  `frontend/src/components/lanes/LaneBriefEditor.jsx` with
+  Save / Cancel + busy/error/success states. Mounted in
+  Step 1 of all three lanes (SpokespersonLane / CinematicLane
+  / DialogueLane). When no focused campaign, lane shows
+  "Create or select a campaign to edit the brief." copy.
+  data-testid: `lane-brief-editor`, `lane-brief-business`,
+  `lane-brief-product`, `lane-brief-audience`, `lane-brief-tone`,
+  `lane-brief-save`, `lane-brief-cancel`, `lane-brief-status`.
 - **All remaining v2 lane actions wired** (PR BP) — five
   more buttons across all three lanes:
   - **Spokesperson Lane Horizontal** → real `avatar_videos`

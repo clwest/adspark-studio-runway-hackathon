@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
 import { formatHistoryTimestamp } from '../../uiHelpers.js'
+import LaneBriefEditor from './LaneBriefEditor.jsx'
 
 /**
  * PR BL — Dialogue Scene lane scaffold (gated v2).
@@ -33,6 +34,8 @@ export default function DialogueLane({
   onPlanDialogue = null,
   onStitchDialogue = null,
   onBuildDialogueReels = null,
+  // PR BQ — Inline brief editor save handler.
+  onUpdateBrief = null,
 }) {
   const campaigns = Array.isArray(linkedCampaigns) ? linkedCampaigns : []
   const sorted = [...campaigns].sort((a, b) => {
@@ -235,33 +238,14 @@ export default function DialogueLane({
             )}
           </div>
           {hasCampaign ? (
-            <>
-              <div className="text-xs text-zinc-200 font-semibold leading-snug">
-                {focused.business || 'Untitled campaign'}
-              </div>
-              {focused.product && (
-                <div className="text-[10px] text-zinc-400 leading-snug">
-                  {focused.product.length > 60
-                    ? focused.product.slice(0, 60) + '…'
-                    : focused.product}
-                </div>
-              )}
-              <p className="text-[10px] text-zinc-500 leading-snug pt-1">
-                Brief reused from campaign form; lane builder
-                follow-up slice adds inline editing.
-              </p>
-            </>
+            <LaneBriefEditor
+              campaign={focused}
+              onSave={onUpdateBrief}
+            />
           ) : (
-            <>
-              <p className="text-[11px] text-zinc-400 leading-snug">
-                No linked campaign yet.
-              </p>
-              <p className="text-[10px] text-zinc-500 leading-snug">
-                Brief capture reuses the existing campaign form.
-                Until the lane builder ships, plan dialogue from
-                the classic UX Dialogue tab.
-              </p>
-            </>
+            <p className="text-[11px] text-zinc-400 leading-snug">
+              Create or select a campaign to edit the brief.
+            </p>
           )}
         </div>
 

@@ -1,10 +1,15 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after PR BP (Wire V2 Real Runway Generation
-Buttons) on top of the PR AG–BO / SESSION 011 anchors. Backend
-route count is **68** application routes — PR BP brings the v2
-lane wiring count from 2 → 7 of 8 distinct lane actions:
+context-kit refresh after PR BQ (V2 Lane Inline Brief Editing)
+on top of the PR AG–BP / SESSION 011 anchors. Backend route
+count moves to **69** application routes (one justified
+addition, `POST /api/campaigns/{id}/brief`, for the inline
+brief editor). PR BQ adds the reusable `LaneBriefEditor`
+component mounted in Step 1 of all three v2 lanes —
+operators can now edit `business / product / audience /
+tone` directly inside the lane without round-tripping back
+to the classic UX. The action count from PR BP is unchanged:
 **Spokesperson Lane** Horizontal (real `avatar_videos`, burns
 credits) + Captioned Reels (PR BN); **Cinematic Lane** Voiced
 Cinematic (PR BO) + Storyboard Commercial (`stitchStoryboard`,
@@ -101,7 +106,7 @@ files regardless of mock/real flags.
 *optional* PR-F knobs — defaults are `vincent` and a curated
 Unsplash portrait URL.
 
-## Endpoints (68 application + FastAPI built-ins)
+## Endpoints (69 application + FastAPI built-ins)
 
 ```
 GET    /health
@@ -138,6 +143,7 @@ POST   /api/campaigns/{id}/dialogue/stitch                  (PR AF)
 GET    /api/campaigns/{id}/dialogue-scene                   (PR AF)
 GET    /api/campaigns/{id}/dialogue/line/{line_id}          (PR AF)
 POST   /api/campaigns/{id}/script                           (PR AA — Commercial Script)
+POST   /api/campaigns/{id}/brief                            (PR BQ — inline brief editor: business/product/audience/tone)
 POST   /api/campaigns/{id}/avatar                          (PR F — custom create)
 POST   /api/campaigns/{id}/brand-color                     (PR AK — set/clear brand colour for reels backdrop)
 POST   /api/campaigns/{id}/select-avatar                   (PR I+ — picker)
@@ -255,6 +261,7 @@ the line's own `avatar_id`).
 | PR BN | Wire V2 Spokesperson Lane Reels Action (gated v2 slice tracked in SESSION_045; first v2 lane action that fires real production behaviour — `POST /api/campaigns/{id}/spokesperson-ad/reels` — via `api.buildSpokespersonReels`; lane gates the button on `host_status === "ok"` AND `host_video_url` set; busy / error / success states surface inline with violet chrome to match v1 vocabulary; download link to cached reels when `spokesperson_reels_url` is set; no Runway calls — ffmpeg-only; Horizontal button stays disabled placeholder; Cinematic + Dialogue lanes untouched) | (post-v13) |
 | PR BO | Wire V2 Cinematic Lane Voiced Cinematic Action (gated v2 slice tracked in SESSION_046; second wired v2 lane action — `POST /api/campaigns/{id}/commercial-with-voice` — via `api.buildCommercialWithVoice`; CinematicLane gates the button on `cached_video_url` set AND (`host_video_url` + `host_status === "ok"` OR a usable avatar exists), mirrors v1 `commercialBuildable` exactly; busy / error / success states surface inline with fuchsia chrome; download link to cached voiced commercial when `voiced_commercial_url` is set; no Runway calls — ffmpeg-only; Cinematic Video + Storyboard buttons stay disabled placeholders; Spokesperson + Dialogue lanes untouched beyond PR BN) | (post-v13) |
 | PR BP | Wire V2 Real Runway Generation Buttons (gated v2 slice tracked in SESSION_047; wires 5 additional lane actions — Spokesperson Horizontal (real `avatar_videos`, burns credits, rose chrome + warning copy), Cinematic Storyboard Commercial (`stitchStoryboard`, ffmpeg-only, amber chrome), Dialogue Plan / Stitch / Captioned Reels (`planDialogue` + `stitchDialogue` + `buildDialogueSceneReels`, all ffmpeg or template-driven, sky chrome). Cinematic Video stays placeholder. Each new button carries `data-source-ready` + `data-busy` attrs; Horizontal also carries `data-burns-credits="true"`. Real-mode validation: one fresh real `avatar_videos` task `cf7e6067-…` on CEO Buzz / Brewster confirms the Horizontal wiring end-to-end — 1088×704, 18.25 s, 6.3 MB) | (post-v13) |
+| PR BQ | V2 Lane Inline Brief Editing (gated v2 slice tracked in SESSION_048; new `POST /api/campaigns/{id}/brief` route patches `business / product / audience / tone` on the saved Campaign — only justified backend addition, route count 68 → **69**; new reusable `frontend/src/components/lanes/LaneBriefEditor.jsx` renders four editable form fields + Save / Cancel + busy/error/success states; mounted in Step 1 of all three lanes (SpokespersonLane / CinematicLane / DialogueLane); when no focused campaign, lane shows "Create or select a campaign to edit the brief." copy; SpokespersonStudio adds `handleUpdateBrief` that swaps the campaign in the local slice + bubbles `onCharactersChanged`; no Runway calls; no v1 changes; no generated media touched) | (post-v13) |
 
 ## Known limitations (current main)
 

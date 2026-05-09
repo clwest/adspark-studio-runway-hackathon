@@ -1526,6 +1526,62 @@ class CommercialScriptBody(BaseModel):
     )
 
 
+class BriefUpdateBody(BaseModel):
+    """PR BQ — request body for the inline brief editor in the v2
+    lane Step 1. Each field is optional so the operator can clear or
+    update a single value without echoing the rest. ``business`` is
+    required-on-create at the campaign level, but the editor still
+    treats it as patch-shaped — the v2 UI always sends a non-empty
+    value. Empty strings on optional fields intentionally clear them.
+    """
+
+    business: Optional[str] = Field(default=None, max_length=200)
+    product: Optional[str] = Field(default=None, max_length=300)
+    audience: Optional[str] = Field(default=None, max_length=300)
+    tone: Optional[str] = Field(default=None, max_length=200)
+
+
+@router.post("/{campaign_id}/brief", response_model=Campaign)
+def post_brief(
+    campaign_id: str,
+    body: BriefUpdateBody,
+    store: CampaignStore = Depends(_store),
+) -> Campaign:
+    """PR BQ — patch the editable brief fields on a saved campaign.
+
+    Every field is optional and uses three-way semantics: ``None`` =
+    leave alone, ``""`` = clear, anything else = set. The 4 fields
+    business / product / audience / tone are the v2 lane's Step 1
+    inputs. This route does NOT touch generated media or fire any
+    Runway calls; it's pure storage mutation.
+
+    Failure modes:
+    - 404 — campaign not found.
+    - 422 — pydantic validation (max_length per field).
+    """
+    record = store.get(campaign_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="campaign not found")
+    updated = store.update_brief_fields(
+        campaign_id,
+        business=body.business,
+        product=body.product,
+        audience=body.audience,
+        tone=body.tone,
+    )
+    if not updated:
+        raise HTTPException(status_code=404, detail="campaign not found")
+    logger.info(
+        "campaign %s brief updated business=%s product=%s audience=%s tone=%s",
+        campaign_id,
+        body.business is not None,
+        body.product is not None,
+        body.audience is not None,
+        body.tone is not None,
+    )
+    return updated
+
+
 @router.post("/{campaign_id}/script", response_model=Campaign)
 def post_commercial_script(
     campaign_id: str,

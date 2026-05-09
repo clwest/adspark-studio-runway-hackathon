@@ -143,6 +143,17 @@ export const api = {
       `/api/campaigns/${encodeURIComponent(campaignId)}/script`,
       { method: 'POST', body: JSON.stringify({ script }) },
     ),
+  // PR BQ — Inline brief editor for the v2 lane Step 1. Patches
+  // business / product / audience / tone on a saved campaign
+  // without touching any of the generated media or firing Runway.
+  // Each field is optional; pass null to leave alone, empty string
+  // to clear, or a non-empty string to set. Returns the updated
+  // Campaign.
+  updateCampaignBrief: (campaignId, body) =>
+    jsonFetch(
+      `/api/campaigns/${encodeURIComponent(campaignId)}/brief`,
+      { method: 'POST', body: JSON.stringify(body || {}) },
+    ),
   // PR AB — Spokesperson Ad alias. Same artefact + persisted fields
   // as presentCampaign / host-video; the alias exists so the API
   // vocabulary matches the user-facing "talking spokesperson ad"

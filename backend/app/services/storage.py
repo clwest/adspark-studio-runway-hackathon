@@ -547,6 +547,43 @@ class CampaignStore:
                     return Campaign.model_validate(row)
         return None
 
+    def update_brief_fields(
+        self,
+        campaign_id: str,
+        *,
+        business: Optional[str] = None,
+        product: Optional[str] = None,
+        audience: Optional[str] = None,
+        tone: Optional[str] = None,
+    ) -> Optional[Campaign]:
+        """PR BQ — patch the editable brief fields on a saved Campaign
+        record from the v2 lane inline editor.
+
+        Each kwarg is "leave the existing value alone" when ``None`` and
+        "overwrite with this value" when a string (including the empty
+        string — the operator can intentionally clear product / audience
+        / tone). The required ``business`` field is treated the same way
+        on the wire: callers that omit it pass ``None``; the v2 editor
+        always sends a non-empty value because the field is required.
+        Mirrors the field-update shape used by ``update_brand_color`` /
+        ``update_commercial_script`` so storage stays consistent.
+        """
+        with _LOCK:
+            rows = self._read()
+            for row in rows:
+                if row.get("id") == campaign_id:
+                    if business is not None:
+                        row["business"] = (business or "").strip()
+                    if product is not None:
+                        row["product"] = (product or "").strip()
+                    if audience is not None:
+                        row["audience"] = (audience or "").strip()
+                    if tone is not None:
+                        row["tone"] = (tone or "").strip()
+                    self._write(rows)
+                    return Campaign.model_validate(row)
+        return None
+
     def update_commercial_script(
         self,
         campaign_id: str,

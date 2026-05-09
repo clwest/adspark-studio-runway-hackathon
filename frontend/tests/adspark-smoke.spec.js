@@ -1107,6 +1107,26 @@ test('AdSpark Studio UX v2 SpokespersonStudio scaffold', async ({ page }) => {
   await expect(lane.getByTestId('spokesperson-lane-step-brief')).toBeVisible()
   await expect(lane.getByTestId('spokesperson-lane-step-script')).toBeVisible()
   await expect(lane.getByTestId('spokesperson-lane-step-render')).toBeVisible()
+  // PR BQ — Step 1 renders LaneBriefEditor when a focused
+  // campaign exists, otherwise empty-state copy. Smoke's v2
+  // case never sets activeCharacterId so linkedCampaigns is
+  // empty → empty-state copy shows.
+  const spokesBriefStep = lane.getByTestId('spokesperson-lane-step-brief')
+  const spokesEditor = spokesBriefStep.getByTestId('lane-brief-editor')
+  const spokesEditorCount = await spokesEditor.count()
+  if (spokesEditorCount > 0) {
+    await expect(spokesEditor).toBeVisible()
+    await expect(
+      spokesBriefStep.getByTestId('lane-brief-business'),
+    ).toBeVisible()
+    await expect(
+      spokesBriefStep.getByTestId('lane-brief-save'),
+    ).toBeVisible()
+  } else {
+    await expect(spokesBriefStep).toContainText(
+      /Create or select a campaign to edit the brief/i,
+    )
+  }
   // PR BP — both Spokesperson lane buttons are now wired with
   // resilient gating disjunctions. Horizontal burns Runway
   // credits; Reels is ffmpeg-only. Both honour
@@ -1176,6 +1196,17 @@ test('AdSpark Studio UX v2 SpokespersonStudio scaffold', async ({ page }) => {
   await expect(
     cinematicLane.getByTestId('cinematic-lane-step-render'),
   ).toBeVisible()
+  // PR BQ — Cinematic Step 1 LaneBriefEditor disjunction.
+  const cineBriefStep = cinematicLane.getByTestId('cinematic-lane-step-brief')
+  const cineEditor = cineBriefStep.getByTestId('lane-brief-editor')
+  const cineEditorCount = await cineEditor.count()
+  if (cineEditorCount > 0) {
+    await expect(cineEditor).toBeVisible()
+  } else {
+    await expect(cineBriefStep).toContainText(
+      /Create or select a campaign to edit the brief/i,
+    )
+  }
   // PR BO/BP — Voiced + Storyboard buttons are wired. Cinematic
   // Video stays a disabled placeholder (would require async
   // image_to_video polling, deferred). Source-readiness
@@ -1259,6 +1290,17 @@ test('AdSpark Studio UX v2 SpokespersonStudio scaffold', async ({ page }) => {
   await expect(
     dialogueLane.getByTestId('dialogue-lane-step-lines'),
   ).toBeVisible()
+  // PR BQ — Dialogue Step 1 LaneBriefEditor disjunction.
+  const dlgBriefStep = dialogueLane.getByTestId('dialogue-lane-step-brief')
+  const dlgEditor = dlgBriefStep.getByTestId('lane-brief-editor')
+  const dlgEditorCount = await dlgEditor.count()
+  if (dlgEditorCount > 0) {
+    await expect(dlgEditor).toBeVisible()
+  } else {
+    await expect(dlgBriefStep).toContainText(
+      /Create or select a campaign to edit the brief/i,
+    )
+  }
   // PR BP — all 3 dialogue buttons are now wired with their
   // own source-ready / busy attrs. Smoke's v2 case has no
   // active spokesperson so source-ready is always false →

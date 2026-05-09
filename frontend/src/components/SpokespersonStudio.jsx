@@ -317,6 +317,23 @@ export default function SpokespersonStudio({
     return updated
   }
 
+  // PR BQ — Inline brief save. Patches business / product /
+  // audience / tone via the new /brief route; updates the local
+  // campaigns slice + bubbles onCharactersChanged so the v1
+  // gallery refreshes alongside if open. No Runway calls; pure
+  // storage mutation.
+  const handleUpdateBrief = async (campaignId, body) => {
+    if (!campaignId) {
+      throw new Error('campaign id required')
+    }
+    const updated = await api.updateCampaignBrief(campaignId, body)
+    setCampaigns((cs) =>
+      cs.map((x) => (x.id === campaignId ? updated : x)),
+    )
+    onCharactersChanged?.()
+    return updated
+  }
+
   // PR BH — mode-first creation handlers.
   const handleOpenCreateModal = () => {
     setModeModalOpen(true)
@@ -482,6 +499,8 @@ export default function SpokespersonStudio({
           // Runway avatar_videos route. Lane shows a credit-burn
           // warning + "Generate Real Spokesperson Ad" copy.
           onGenerateSpokesperson={handleGenerateSpokespersonAd}
+          // PR BQ — wire Step 1 inline brief editor.
+          onUpdateBrief={handleUpdateBrief}
         />
       )}
       {/* PR BK — Cinematic Ad lane scaffold. Same shape as the
@@ -507,6 +526,8 @@ export default function SpokespersonStudio({
           // concat of cached per-shot MP4s; lane gates on every
           // shot status='ok'.
           onStitchStoryboard={handleStitchStoryboard}
+          // PR BQ — wire Step 1 inline brief editor.
+          onUpdateBrief={handleUpdateBrief}
         />
       )}
       {/* PR BL — Dialogue Scene lane scaffold. Mirrors PR BI / PR BK
@@ -531,6 +552,8 @@ export default function SpokespersonStudio({
           onPlanDialogue={handlePlanDialogue}
           onStitchDialogue={handleStitchDialogue}
           onBuildDialogueReels={handleBuildDialogueReels}
+          // PR BQ — wire Step 1 inline brief editor.
+          onUpdateBrief={handleUpdateBrief}
         />
       )}
 

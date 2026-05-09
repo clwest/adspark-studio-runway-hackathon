@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
 import { formatHistoryTimestamp } from '../../uiHelpers.js'
+import LaneBriefEditor from './LaneBriefEditor.jsx'
 
 /**
  * PR BI — Spokesperson Ad lane scaffold (gated v2).
@@ -36,6 +37,10 @@ export default function SpokespersonLane({
   // existing /spokesperson-ad route. The lane shows credit-burn
   // warning copy on the button.
   onGenerateSpokesperson = null,
+  // PR BQ — Inline brief editor save handler. POSTs to the new
+  // /brief route; no Runway calls. Step 1 mounts <LaneBriefEditor>
+  // when the focused campaign exists.
+  onUpdateBrief = null,
 }) {
   const campaigns = Array.isArray(linkedCampaigns) ? linkedCampaigns : []
   // Pick the most recently-touched campaign as the lane's "focused"
@@ -205,33 +210,17 @@ export default function SpokespersonLane({
             )}
           </div>
           {hasCampaign ? (
-            <>
-              <div className="text-xs text-zinc-200 font-semibold leading-snug">
-                {focused.business || 'Untitled campaign'}
-              </div>
-              {focused.product && (
-                <div className="text-[10px] text-zinc-400 leading-snug">
-                  {focused.product.length > 60
-                    ? focused.product.slice(0, 60) + '…'
-                    : focused.product}
-                </div>
-              )}
-              <p className="text-[10px] text-zinc-500 leading-snug pt-1">
-                Brief capture will reuse the existing campaign form;
-                editing rolls into PR BJ.
-              </p>
-            </>
+            // PR BQ — inline brief editor (4 fields + save / cancel).
+            // Lives directly inside Step 1 so the operator never
+            // round-trips back to the classic UX for brief edits.
+            <LaneBriefEditor
+              campaign={focused}
+              onSave={onUpdateBrief}
+            />
           ) : (
-            <>
-              <p className="text-[11px] text-zinc-400 leading-snug">
-                No linked campaign yet.
-              </p>
-              <p className="text-[10px] text-zinc-500 leading-snug">
-                Brief capture will reuse the existing campaign form.
-                Until PR BJ ships, create or open a saved campaign in
-                the classic UX.
-              </p>
-            </>
+            <p className="text-[11px] text-zinc-400 leading-snug">
+              Create or select a campaign to edit the brief.
+            </p>
           )}
         </div>
 
