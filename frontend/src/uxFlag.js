@@ -115,3 +115,77 @@ export function setUxMode(mode) {
 // flag without redefining the constant.
 export const UX_MODES = Object.freeze({ V1: 'v1', V2: 'v2' })
 export const UX_STORAGE_KEY = STORAGE_KEY
+
+
+// ---- PR BH — campaign-mode persistence ---------------------------
+//
+// The v2 SpokespersonStudio's "+ New Campaign" affordance opens a
+// mode-first modal (Cinematic / Spokesperson / Dialogue). Selecting
+// a mode persists it here so the upcoming lane components (PR BJ–BL)
+// can route on it. Backend is untouched in PR BH — when those lane
+// components ship they'll either thread the mode into the existing
+// `POST /api/campaigns` payload or graduate this to a real schema
+// field. Until then we keep it client-side and surface a pill so
+// the operator's choice isn't invisible.
+
+const ACTIVE_MODE_STORAGE_KEY = 'adspark.activeMode'
+
+const VALID_CAMPAIGN_MODES = new Set(['cinematic', 'spokesperson', 'dialogue'])
+
+/**
+ * Resolve the currently selected campaign mode (v2 only). Returns
+ * one of `"cinematic" | "spokesperson" | "dialogue"` or `null` when
+ * nothing has been chosen yet. Invalid persisted values are ignored.
+ */
+export function getActiveMode() {
+  const ls = safeLocalStorage()
+  if (!ls) return null
+  let raw
+  try {
+    raw = ls.getItem(ACTIVE_MODE_STORAGE_KEY)
+  } catch {
+    return null
+  }
+  if (!raw) return null
+  const trimmed = String(raw).toLowerCase().trim()
+  return VALID_CAMPAIGN_MODES.has(trimmed) ? trimmed : null
+}
+
+/**
+ * Persist the active campaign mode to localStorage. Caller is
+ * responsible for triggering a re-render. Invalid inputs are ignored
+ * so a stray call can never poison the store.
+ */
+export function setActiveMode(mode) {
+  const ls = safeLocalStorage()
+  if (!ls) return
+  const normalised = String(mode || '').toLowerCase().trim()
+  if (!VALID_CAMPAIGN_MODES.has(normalised)) return
+  try {
+    ls.setItem(ACTIVE_MODE_STORAGE_KEY, normalised)
+  } catch {
+    // Quota / private mode — fail silently like the rest of this module.
+  }
+}
+
+/**
+ * Clear the active campaign mode. Used when the operator dismisses
+ * the placeholder banner or when a future lane component finishes
+ * routing the choice.
+ */
+export function clearActiveMode() {
+  const ls = safeLocalStorage()
+  if (!ls) return
+  try {
+    ls.removeItem(ACTIVE_MODE_STORAGE_KEY)
+  } catch {
+    // see above
+  }
+}
+
+export const CAMPAIGN_MODES = Object.freeze({
+  CINEMATIC: 'cinematic',
+  SPOKESPERSON: 'spokesperson',
+  DIALOGUE: 'dialogue',
+})
+export const ACTIVE_MODE_KEY = ACTIVE_MODE_STORAGE_KEY

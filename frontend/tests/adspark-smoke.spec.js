@@ -894,6 +894,18 @@ test('AdSpark Studio UX v2 SpokespersonStudio scaffold', async ({ page }) => {
   await expect(uxToggle).toHaveAttribute('data-ux-mode', 'v2')
   await expect(uxToggle).toHaveText(/Use classic UX/i)
 
+  // PR BH — v2 surface should clear any leftover activeMode from a
+  // previous run so the smoke starts in a known empty-pill state.
+  // We clear AFTER goto so localStorage is on the right origin,
+  // then reload so SpokespersonStudio's initial useState reads the
+  // cleared value.
+  await page.evaluate(() => {
+    try {
+      window.localStorage.removeItem('adspark.activeMode')
+    } catch {}
+  })
+  await page.reload()
+
   // Stage 1 panel must be the v2 SpokespersonStudio scaffold,
   // NOT the legacy CharacterStudio. The studio heading carries
   // the "Spokesperson Studio" copy + the "preview UX" badge.
@@ -1025,6 +1037,57 @@ test('AdSpark Studio UX v2 SpokespersonStudio scaffold', async ({ page }) => {
       )
     }
   }
+
+  // PR BH — Mode-first creation modal. The "+ New Campaign" button
+  // lives in the SpokespersonStudio header; clicking it opens the
+  // modal with 3 mode cards. Selecting Spokesperson Ad persists
+  // the mode + closes the modal + flips a "Selected mode" pill
+  // into the section.
+  const newCampaignButton = page.getByTestId('spokesperson-new-campaign')
+  await expect(newCampaignButton).toBeVisible()
+  await expect(newCampaignButton).toHaveText(/^\+ New Campaign$/)
+  // Pill must NOT exist yet — we cleared activeMode at the start of
+  // the v2 case + reloaded.
+  await expect(
+    page.getByTestId('spokesperson-active-mode'),
+  ).toHaveCount(0)
+  await newCampaignButton.click()
+  // Modal renders with three labelled mode cards.
+  const modal = page.getByTestId('campaign-mode-modal')
+  await expect(modal).toBeVisible()
+  await expect(
+    modal.getByTestId('campaign-mode-card-cinematic'),
+  ).toContainText(/Cinematic Ad/i)
+  await expect(
+    modal.getByTestId('campaign-mode-card-spokesperson'),
+  ).toContainText(/Spokesperson Ad/i)
+  await expect(
+    modal.getByTestId('campaign-mode-card-dialogue'),
+  ).toContainText(/Dialogue Scene/i)
+  // Pick Spokesperson Ad → modal closes → pill appears with the
+  // matching mode label + the "Mode selected." copy.
+  await modal.getByTestId('campaign-mode-card-spokesperson').click()
+  await expect(modal).toHaveCount(0)
+  const activeModePill = page.getByTestId('spokesperson-active-mode')
+  await expect(activeModePill).toBeVisible()
+  await expect(activeModePill).toHaveAttribute('data-mode', 'spokesperson')
+  await expect(activeModePill).toContainText(/Spokesperson Ad/i)
+  await expect(activeModePill).toContainText(/Mode selected/i)
+  // localStorage carries the persisted choice so a future session
+  // surfaces the same pill on first paint.
+  const persisted = await page.evaluate(() =>
+    window.localStorage.getItem('adspark.activeMode'),
+  )
+  expect(persisted).toBe('spokesperson')
+  // Dismiss link clears the pill + the localStorage entry.
+  await page.getByTestId('spokesperson-active-mode-dismiss').click()
+  await expect(
+    page.getByTestId('spokesperson-active-mode'),
+  ).toHaveCount(0)
+  const cleared = await page.evaluate(() =>
+    window.localStorage.getItem('adspark.activeMode'),
+  )
+  expect(cleared).toBeNull()
 
   // Console / page errors stay clean on the v2 path too.
   const realConsoleErrors = consoleErrors.filter(

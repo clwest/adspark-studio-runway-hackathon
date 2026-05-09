@@ -7,42 +7,48 @@ PR AM `3e12d27`; PR AN `f255c22`; PR AO `5bca7c4`; PR AP
 PR AT `632b696`; PR AU `485310a`; PR AV `b9b7fee`; PR AW
 `555ebf9`; PR AX `9d86f2e`; PR AY `0a93c79`; PR AZ `2c16d30`;
 PR BA `9d0a99d`; PR BB `8702660`; PR BC `9eae15f`; PR BD
-`0171078`; PR BE `e2ed1ee`; PR BF `d897437 feat: spokesperson
-knowledge tab wiring`; PR BG Spokesperson Appearances Tab
-Wiring in flight on top — SESSION_012–SESSION_038 handoffs
+`0171078`; PR BE `e2ed1ee`; PR BF `d897437`; PR BG
+`af48e28`; SESSION REAL-API `4a68278 docs: real-mode runway
+credit burn session log`; PR BH Mode-First Campaign Creation
+Modal in flight on top — SESSION_012–SESSION_039 handoffs
 added).
 
 ## Where things stand
 
-- **Branch:** `main` at `d897437` (`feat: spokesperson
-  knowledge tab wiring`) on `origin/main`. PR BG patch in
+- **Branch:** `main` at `4a68278` (`docs: real-mode runway
+  credit burn session log`) on `origin/main`. PR BH patch in
   flight on top — no new commit / tag yet, both pending
   explicit user approval.
 - **Latest tag:** still **`hackathon-submission-v13`** at `ec446e4`
-  (PR AF). PR AG–BF shipped the full voice arc + audit trails
-  + UX v2 foundation + SpokespersonStudio + Knowledge tab.
-  PR BG wires the Appearances tab — each spokesperson now
-  lists every campaign they appear in with inferred mode
-  badge + last-touched + output summary. v2 SpokespersonCard's
-  first pass is complete (Identity + Knowledge + Appearances
-  all show real data). **Default load remains v1**; v2
-  reachable via footer toggle or `?ux=v2`.
+  (PR AF). PR AG–BG shipped the full voice arc + audit trails
+  + UX v2 foundation + SpokespersonStudio + Knowledge +
+  Appearances tabs. SESSION REAL-API confirmed real-mode
+  Runway pipeline end-to-end on CEO Buzz / Brewster (5 real
+  API calls, zero failures, four demo-worthy assets). PR BH
+  ships the mode-first creation modal — first v2 slice that
+  visibly diverges from v1 beyond Stage 1. **Default load
+  remains v1**; v2 reachable via footer toggle or `?ux=v2`.
 - **Backend routes:** **68** application + FastAPI built-ins
-  (unchanged from PR BF; PR BG is frontend-only and reuses the
-  same campaign data already fetched in PR BF).
-- **Frontend build:** 350.15 KB initial JS / 97.06 KB gzip +
-  561.97 KB lazy `@runwayml/avatars-react` chunk (+4.25 KB
-  initial / +0.86 KB gzip vs PR BF — Appearances rows + 3
-  helpers + mode pill class map).
-- **Playwright smoke:** `2 passed (~23.2 s)` against the mock
-  backend. v1 test ~22.0 s unchanged; v2 test ~517 ms covers
-  Identity + Knowledge disjunction (PR BF) + Appearances
-  disjunction (PR BG — rows OR empty state, mode badge text
-  matches one of the seven literal strings, "Open in gallery"
-  affordance is disabled).
-- **Targeted probes:** none new. v2 smoke covers the
-  Appearances tab end-to-end against fixture state. PR BD's
-  8/8 `uxFlag.js` precedence scenarios still pass.
+  (unchanged from PR BG; PR BH is frontend-only — the existing
+  Campaign payload doesn't accept `metadata`, so PR BH
+  persists the chosen mode to `localStorage.adspark.activeMode`
+  for now and surfaces a pill).
+- **Frontend build:** 356.11 KB initial JS / 98.34 KB gzip +
+  561.97 KB lazy `@runwayml/avatars-react` chunk (+5.96 KB
+  initial / +1.28 KB gzip vs PR BG — new modal component +
+  three mode-persistence helpers in uxFlag.js + a header
+  button + a selected-mode pill).
+- **Playwright smoke:** `2 passed (~31.5 s)` against the mock
+  backend. v1 test ~30.2 s (unchanged behaviour but slightly
+  slower run — likely Playwright runtime variance). v2 test
+  ~682 ms now also covers: + New Campaign button visibility,
+  modal open with three labelled mode cards, selecting
+  Spokesperson Ad closes modal + flips the active-mode pill,
+  localStorage round-trip, dismiss link clears pill +
+  localStorage.
+- **Targeted probes:** none new. v2 smoke covers the modal
+  flow end-to-end. PR BD's 8/8 `uxFlag.js` precedence
+  scenarios still pass.
 - **Repo:** https://github.com/clwest/adspark-studio-runway-hackathon
   (private). Pushes happen on explicit user approval.
 - **Stale local feature branches:** 22 left over from PR A through
@@ -51,7 +57,7 @@ added).
 
 ## What's implemented (full feature stack on `main`)
 
-### UX redesign foundation (PR BD — UX v2 Flag + Shared Helpers · PR BE — SpokespersonStudio Scaffold · PR BF — Knowledge Tab Wiring · PR BG — Appearances Tab Wiring)
+### UX redesign foundation (PR BD — UX v2 Flag + Shared Helpers · PR BE — SpokespersonStudio Scaffold · PR BF — Knowledge Tab Wiring · PR BG — Appearances Tab Wiring · PR BH — Mode-First Creation Modal)
 
 - **UX v2 feature flag** at `frontend/src/uxFlag.js`. Resolves
   precedence URL `?ux=v2|v1` > localStorage `adspark.ux` >
@@ -115,6 +121,23 @@ added).
   `MODE_PILL_CLASSES` colour map. data-testid:
   `spokesperson-appearance-row`, `spokesperson-appearance-empty`,
   `spokesperson-appearance-mode`, `spokesperson-appearance-open`.
+- **Mode-first campaign creation modal** (PR BH) — first v2
+  slice that visibly diverges from v1 beyond Stage 1. New
+  `+ New Campaign` button in the SpokespersonStudio header
+  opens a `CampaignModeModal` with three intent cards
+  (🎬 Cinematic Ad / 🎙️ Spokesperson Ad / 🎭 Dialogue Scene).
+  Selecting a mode persists it via `setActiveMode()` to
+  `localStorage.adspark.activeMode` and surfaces a "Selected
+  mode" pill + "Mode selected. Lane-specific builder lands
+  next." banner; `dismiss` link clears it. Backdrop click +
+  Escape key + close button all dismiss without persisting.
+  Backend untouched — Campaign payload doesn't accept a
+  `metadata` field today; lane builders consume the persisted
+  mode in PR BJ–BL. data-testid: `spokesperson-new-campaign`,
+  `spokesperson-active-mode`, `spokesperson-active-mode-dismiss`,
+  `campaign-mode-modal`, `campaign-mode-modal-backdrop`,
+  `campaign-mode-modal-close`, `campaign-mode-modal-cards`,
+  `campaign-mode-card-{cinematic,spokesperson,dialogue}`.
 - **Default behaviour unchanged.** v13 demos still load into
   the legacy 4-stage flow + 7-tab CampaignGallery + Character
   Studio panel. v2 path is gated; nothing visible changes

@@ -2,7 +2,32 @@ import { useEffect, useState } from 'react'
 
 import { api } from '../api'
 import { friendlyError } from '../errors'
+import {
+  CAMPAIGN_MODES,
+  clearActiveMode,
+  getActiveMode,
+  setActiveMode,
+} from '../uxFlag.js'
+import CampaignModeModal from './CampaignModeModal.jsx'
 import SpokespersonCard from './SpokespersonCard.jsx'
+
+// PR BH — operator-friendly labels per campaign mode. Backend has
+// no schema for these yet; selection lives in localStorage until
+// PR BJ–BL ship the lane-specific builders.
+const MODE_LABELS = {
+  [CAMPAIGN_MODES.CINEMATIC]: 'Cinematic Ad',
+  [CAMPAIGN_MODES.SPOKESPERSON]: 'Spokesperson Ad',
+  [CAMPAIGN_MODES.DIALOGUE]: 'Dialogue Scene',
+}
+
+const MODE_PILL_CLASSES_V2 = {
+  [CAMPAIGN_MODES.CINEMATIC]:
+    'bg-fuchsia-500/20 text-fuchsia-200 ring-1 ring-fuchsia-400/40',
+  [CAMPAIGN_MODES.SPOKESPERSON]:
+    'bg-emerald-500/20 text-emerald-200 ring-1 ring-emerald-400/40',
+  [CAMPAIGN_MODES.DIALOGUE]:
+    'bg-sky-500/20 text-sky-200 ring-1 ring-sky-400/40',
+}
 
 /**
  * PR BE — SpokespersonStudio (gated v2 surface).
@@ -33,6 +58,13 @@ export default function SpokespersonStudio({
   const [loading, setLoading] = useState(true)
   const [errMsg, setErrMsg] = useState('')
   const [busyByChar, setBusyByChar] = useState({})
+  // PR BH — mode-first creation modal state. Modal opens on
+  // "+ New Campaign" click; selecting a mode persists it via
+  // setActiveMode (localStorage) and closes the modal. The
+  // resulting selection drives a "Selected mode" pill + a
+  // placeholder banner explaining lane components ship next.
+  const [modeModalOpen, setModeModalOpen] = useState(false)
+  const [activeMode, setActiveModeState] = useState(() => getActiveMode())
 
   // PR BF — fetch campaigns alongside characters so the Knowledge
   // tab on each SpokespersonCard can render grounding + transcript
@@ -165,6 +197,23 @@ export default function SpokespersonStudio({
     }
   }
 
+  // PR BH — mode-first creation handlers.
+  const handleOpenCreateModal = () => {
+    setModeModalOpen(true)
+  }
+  const handleCloseCreateModal = () => {
+    setModeModalOpen(false)
+  }
+  const handleSelectMode = (mode) => {
+    setActiveMode(mode)          // localStorage persistence
+    setActiveModeState(mode)     // local re-render trigger
+    setModeModalOpen(false)
+  }
+  const handleDismissActiveMode = () => {
+    clearActiveMode()
+    setActiveModeState(null)
+  }
+
   const handleDelete = async (c) => {
     if (
       !confirm(
@@ -217,7 +266,56 @@ export default function SpokespersonStudio({
             campaigns get attached on top.
           </p>
         </div>
+        {/* PR BH — mode-first creation entry point. Visible only on
+            the v2 path (this whole component is v2-gated). The
+            modal persists the choice to localStorage; the placeholder
+            banner below the header explains the legacy creation flow
+            still owns the actual brief / generation steps until lane
+            builders ship in PR BJ–BL. */}
+        <button
+          type="button"
+          onClick={handleOpenCreateModal}
+          data-testid="spokesperson-new-campaign"
+          className="rounded-md bg-pink-500/80 hover:bg-pink-500 text-zinc-100 text-xs px-3 py-1.5 font-semibold transition-colors"
+        >
+          + New Campaign
+        </button>
       </div>
+
+      {/* Selected mode pill + dismiss link. Renders only after the
+          operator has chosen a mode in the modal. */}
+      {activeMode && (
+        <div
+          data-testid="spokesperson-active-mode"
+          data-mode={activeMode}
+          className="rounded-lg ring-1 ring-pink-400/30 bg-pink-500/5 p-2.5 flex items-center justify-between gap-2 flex-wrap"
+        >
+          <div className="flex items-center gap-2 flex-wrap">
+            <span
+              className={`text-[11px] rounded-full px-2 py-0.5 font-mono ${
+                MODE_PILL_CLASSES_V2[activeMode] ||
+                'bg-zinc-800 text-zinc-300 ring-1 ring-zinc-700'
+              }`}
+              title={`localStorage.adspark.activeMode = "${activeMode}"`}
+            >
+              {MODE_LABELS[activeMode] || activeMode}
+            </span>
+            <span className="text-[11px] text-zinc-300">
+              <span className="font-semibold">Mode selected.</span>{' '}
+              Lane-specific builder lands next (PR BJ–BL).
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={handleDismissActiveMode}
+            data-testid="spokesperson-active-mode-dismiss"
+            className="text-[10px] text-zinc-500 hover:text-pink-300 underline-offset-2 hover:underline"
+            title="Clear the locally-stored campaign mode."
+          >
+            dismiss
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <SpokespersonLibrarySkeleton />
@@ -287,6 +385,15 @@ export default function SpokespersonStudio({
           {errMsg}
         </p>
       )}
+
+      {/* PR BH — mode-first creation modal. Mounted at the section
+          level so backdrop clicks can dismiss without affecting the
+          rest of the page; never renders when isOpen=false. */}
+      <CampaignModeModal
+        isOpen={modeModalOpen}
+        onSelect={handleSelectMode}
+        onClose={handleCloseCreateModal}
+      />
     </section>
   )
 }
