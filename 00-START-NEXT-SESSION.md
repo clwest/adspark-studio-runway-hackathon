@@ -5,34 +5,31 @@
 PR AM `3e12d27`; PR AN `f255c22`; PR AO `5bca7c4`; PR AP
 `3c6483e`; PR AQ `ec35c0e`; PR AR `5aa5579`; PR AS `2321fd7`;
 PR AT `632b696`; PR AU `485310a`; PR AV `b9b7fee`; PR AW
-`555ebf9 feat: surface voice verification freshness label`;
-PR AX Refresh Missing Cloned Voice Preview in flight on top —
-SESSION_012–SESSION_029 handoffs added).
+`555ebf9`; PR AX `9d86f2e feat: refresh missing cloned voice
+preview`; PR AY Live Mic Level Meter in flight on top —
+SESSION_012–SESSION_030 handoffs added).
 
 ## Where things stand
 
-- **Branch:** `main` at `555ebf9` (`feat: surface voice
-  verification freshness label`) on `origin/main`. PR AX patch
-  in flight on top — no new commit / tag yet, both pending
-  explicit user approval.
+- **Branch:** `main` at `9d86f2e` (`feat: refresh missing cloned
+  voice preview`) on `origin/main`. PR AY patch in flight on
+  top — no new commit / tag yet, both pending explicit user
+  approval.
 - **Latest tag:** still **`hackathon-submission-v13`** at `ec446e4`
-  (PR AF). PR AG–AW shipped the full clone → apply → preview
-  → verify → drift detect → drift repair → read-only refresh
-  → freshness label loop; PR AX wires the dormant
-  `fetch_voice_preview` helper from PR AR to an operator-facing
-  button so a missing cloned-voice preview can be re-fetched
-  without re-uploading audio.
+  (PR AF). PR AG–AX shipped the full voice arc; PR AY adds
+  the small live-feedback affordance operators ask about
+  most: a tiny mic level meter so they can tell the browser
+  is actually receiving audio before spending a clone.
 - **Backend routes:** **68** application + FastAPI built-ins
-  (was 67 at PR AW). PR AX adds one new endpoint:
-  `POST /api/characters/{id}/refresh-voice-preview`.
-- **Frontend build:** 324.18 KB initial JS / 90.85 KB gzip +
-  561.97 KB lazy `@runwayml/avatars-react` chunk (≈ +1.7 KB
-  initial / +0.4 KB gzip vs PR AW — PR AX added the refresh-
-  preview button + busy/error/note state + handler wiring).
-- **Playwright smoke:** `1 passed (~21.7 s)` against the mock
-  backend; PR AX extends the resilient assertion so the
-  refresh-preview-button count is bounded by the voice
-  section count.
+  (unchanged from PR AX; PR AY is frontend-only).
+- **Frontend build:** 326.27 KB initial JS / 91.61 KB gzip +
+  561.97 KB lazy `@runwayml/avatars-react` chunk (≈ +2.1 KB
+  initial / +0.8 KB gzip vs PR AX — PR AY added AnalyserNode
+  setup + RAF loop + bar element).
+- **Playwright smoke:** `1 passed (~21.4 s)` against the mock
+  backend; PR AY adds two negative assertions confirming the
+  meter wrapper + inner bar testids are absent in idle state
+  (the conditional render guard never regresses).
 - **Repo:** https://github.com/clwest/adspark-studio-runway-hackathon
   (private). Pushes happen on explicit user approval.
 - **Stale local feature branches:** 22 left over from PR A through
@@ -156,6 +153,18 @@ SESSION_012–SESSION_029 handoffs added).
   `avatar_voice_verified_at` byte-identical. data-testid:
   `custom-voice-refresh-preview`,
   `custom-voice-refresh-preview-status`.
+- **Live mic level meter** (PR AY) — frontend-only horizontal
+  bar that renders inline next to the Stop button while
+  recording is active. AnalyserNode (fftSize=256) hooked into
+  the existing PR AO MediaStream; RAF loop mutates the bar's
+  `style.width` directly so React doesn't re-render on every
+  tick. Full lifecycle teardown (cancel RAF + disconnect
+  source + disconnect analyser + close AudioContext + reset
+  bar to 0%) on stop / discard / clone success / unmount /
+  error. Graceful "Mic level unavailable" fallback when
+  `AudioContext` setup fails — recording itself keeps working.
+  data-testid: `custom-voice-mic-level`,
+  `custom-voice-mic-level-bar`.
 - New backend route: `POST /api/characters/{id}/clone-voice`
   (multipart form with `audio` + optional `name`). The route
   validates mime + size (cap 15 MB locally; Runway docs say

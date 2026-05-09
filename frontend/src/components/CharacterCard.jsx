@@ -11,6 +11,17 @@ function _detectRecordingSupport() {
 }
 const RECORDING_SUPPORTED = _detectRecordingSupport()
 
+// PR AY — Web Audio API support detection. Computed once at module
+// load; the live mic level meter falls back to a single helper line
+// when the surface is missing (older browsers, locked-down WebViews,
+// etc). Recording itself still works regardless.
+function _detectAudioContextSupport() {
+  if (typeof window === 'undefined') return false
+  const Ctor = window.AudioContext || window.webkitAudioContext
+  return typeof Ctor === 'function'
+}
+const AUDIO_CONTEXT_SUPPORTED = _detectAudioContextSupport()
+
 // Pick the best webm-flavoured mimetype the browser supports. The clone
 // route accepts plain "audio/webm"; the codec hint helps Chrome / Firefox
 // pick a sensible default. Fall through to undefined ⇒ MediaRecorder
@@ -278,6 +289,82 @@ export default function CharacterCard({
   const recordedBlobRef = useRef(null)
   const recordedMimeRef = useRef('audio/webm')
   const tickRef = useRef(null)
+  // PR AY — Web Audio refs for the mic level meter. Held in refs (not
+  // React state) so each animation frame can mutate the bar's width
+  // directly without re-rendering the whole card. ``meterUnavailable``
+  // flags graceful fallback when AudioContext / AnalyserNode setup
+  // fails — recording still works, the bar just doesn't render.
+  const audioCtxRef = useRef(null)
+  const analyserRef = useRef(null)
+  const sourceNodeRef = useRef(null)
+  const meterRafRef = useRef(null)
+  const meterBarRef = useRef(null)
+  const [meterUnavailable, setMeterUnavailable] = useState(false)
+
+  const _stopMicMeter = () => {
+    if (meterRafRef.current) {
+      cancelAnimationFrame(meterRafRef.current)
+      meterRafRef.current = null
+    }
+    try { sourceNodeRef.current?.disconnect?.() } catch { /* ignore */ }
+    sourceNodeRef.current = null
+    try { analyserRef.current?.disconnect?.() } catch { /* ignore */ }
+    analyserRef.current = null
+    if (audioCtxRef.current) {
+      try {
+        // close() returns a promise on most browsers; we don't await
+        // it because the cleanup path is fire-and-forget.
+        audioCtxRef.current.close?.()
+      } catch { /* ignore */ }
+      audioCtxRef.current = null
+    }
+    if (meterBarRef.current) {
+      meterBarRef.current.style.width = '0%'
+    }
+  }
+
+  const _startMicMeter = (stream) => {
+    if (!AUDIO_CONTEXT_SUPPORTED || !stream) {
+      setMeterUnavailable(true)
+      return
+    }
+    setMeterUnavailable(false)
+    try {
+      const Ctor = window.AudioContext || window.webkitAudioContext
+      const ctx = new Ctor()
+      const source = ctx.createMediaStreamSource(stream)
+      const analyser = ctx.createAnalyser()
+      // 256 fft = 128 frequency bins, plenty for a single-bar meter
+      // and cheap enough that the RAF loop never feels expensive.
+      analyser.fftSize = 256
+      analyser.smoothingTimeConstant = 0.6
+      source.connect(analyser)
+      audioCtxRef.current = ctx
+      sourceNodeRef.current = source
+      analyserRef.current = analyser
+
+      const buf = new Uint8Array(analyser.frequencyBinCount)
+      const tick = () => {
+        if (!analyserRef.current) return
+        analyserRef.current.getByteFrequencyData(buf)
+        let sum = 0
+        for (let i = 0; i < buf.length; i++) sum += buf[i]
+        const avg = sum / buf.length // 0..255
+        // Lift the floor so a quiet room still nudges the bar; compress
+        // the top so a loud burst doesn't peg at 100% the whole time.
+        const pct = Math.min(100, Math.max(0, (avg / 200) * 100))
+        if (meterBarRef.current) {
+          meterBarRef.current.style.width = `${pct.toFixed(1)}%`
+        }
+        meterRafRef.current = requestAnimationFrame(tick)
+      }
+      meterRafRef.current = requestAnimationFrame(tick)
+    } catch {
+      // Any setup failure → drop into fallback; recording still works.
+      _stopMicMeter()
+      setMeterUnavailable(true)
+    }
+  }
 
   const _revokePreview = (url) => {
     if (!url || typeof URL === 'undefined' || !URL.revokeObjectURL) return
@@ -286,13 +373,15 @@ export default function CharacterCard({
 
   // Always-on cleanup so we never leak the mic stream when the tile
   // unmounts mid-record. Also revokes any lingering preview URL so the
-  // browser drops its hold on the recorded Blob.
+  // browser drops its hold on the recorded Blob, and tears down the
+  // PR AY mic-level meter analyser/audio context.
   useEffect(() => {
     return () => {
       if (tickRef.current) clearInterval(tickRef.current)
       try { recorderRef.current?.stop() } catch { /* ignore */ }
       streamRef.current?.getTracks?.().forEach((t) => t.stop())
       _revokePreview(previewUrl)
+      _stopMicMeter()
     }
     // Intentionally re-binds when previewUrl changes so the cleanup
     // closure carries the *current* URL (not whatever was in scope
@@ -350,6 +439,7 @@ export default function CharacterCard({
       const blob = new Blob(chunksRef.current, { type })
       recordedBlobRef.current = blob
       _stopMicTracks()
+      _stopMicMeter()  // PR AY
       if (tickRef.current) {
         clearInterval(tickRef.current)
         tickRef.current = null
@@ -381,6 +471,7 @@ export default function CharacterCard({
         `Recording error: ${ev?.error?.message || 'unknown'} — upload instead.`,
       )
       _stopMicTracks()
+      _stopMicMeter()  // PR AY
       if (tickRef.current) clearInterval(tickRef.current)
       setRecordState('idle')
     }
@@ -393,6 +484,8 @@ export default function CharacterCard({
       return
     }
     setRecordState('recording')
+    // PR AY — kick off the live mic-level meter tied to this stream.
+    _startMicMeter(stream)
     const startedAt = Date.now()
     tickRef.current = setInterval(() => {
       setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000))
@@ -418,6 +511,10 @@ export default function CharacterCard({
       _revokePreview(previewUrl)
       setPreviewUrl('')
     }
+    // PR AY — also tear down any lingering meter (defensive: stop
+    // already fires from onstop, but discard can be called from the
+    // recorded state too where the meter is already torn down).
+    _stopMicMeter()
   }
 
   const handleUseRecording = async () => {
@@ -995,6 +1092,41 @@ export default function CharacterCard({
                   >
                     Stop
                   </button>
+                )}
+                {/* PR AY — Live mic level meter. Renders inline next
+                    to the Stop button while recording. The bar's
+                    width is mutated directly via the ref by a RAF
+                    loop in _startMicMeter so React doesn't re-render
+                    on every analyser tick. Falls back to a single
+                    helper line when AudioContext / AnalyserNode setup
+                    fails — recording itself still works regardless. */}
+                {recordState === 'recording' && !meterUnavailable && (
+                  <div
+                    data-testid="custom-voice-mic-level"
+                    className="flex items-center gap-1 flex-1 min-w-[80px] max-w-[160px]"
+                    aria-label="microphone level"
+                  >
+                    <span className="text-[9px] uppercase tracking-wide text-zinc-500 font-mono">
+                      Mic level
+                    </span>
+                    <div className="flex-1 h-1.5 rounded-full bg-zinc-800 overflow-hidden ring-1 ring-zinc-700">
+                      <div
+                        ref={meterBarRef}
+                        data-testid="custom-voice-mic-level-bar"
+                        className="h-full bg-emerald-400/80 transition-[width] duration-75 ease-out"
+                        style={{ width: '0%' }}
+                      />
+                    </div>
+                  </div>
+                )}
+                {recordState === 'recording' && meterUnavailable && (
+                  <span
+                    data-testid="custom-voice-mic-level"
+                    className="text-[9px] text-zinc-500"
+                    title="AudioContext/AnalyserNode unavailable in this browser"
+                  >
+                    Mic level unavailable
+                  </span>
                 )}
                 {recordState === 'recorded' && (
                   <>

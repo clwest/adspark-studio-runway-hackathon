@@ -320,6 +320,18 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
       .getByTestId('custom-voice-refresh-preview')
       .count()
     expect(refreshPreviewButtons).toBeLessThanOrEqual(voiceSectionCount)
+    // PR AY — Live mic level meter. The meter only renders while
+    // recording is active. The smoke can't drive a real recording
+    // (would need fake getUserMedia + microphone permission), so we
+    // assert the negative: in the default idle state, neither the
+    // meter wrapper nor the inner bar testid is in the DOM. Their
+    // presence would prove the conditional render guard regressed.
+    await expect(
+      page.getByTestId('custom-voice-mic-level'),
+    ).toHaveCount(0)
+    await expect(
+      page.getByTestId('custom-voice-mic-level-bar'),
+    ).toHaveCount(0)
   }
 
   // 7b.6. PR U — stage order: Spokesperson leads, Campaign Brief

@@ -429,6 +429,40 @@ state.
 `custom-voice-record-status`, `custom-voice-record-start`,
 `custom-voice-record-stop`, `custom-voice-record-use`.
 
+#### Live mic level meter (PR AY)
+
+While recording is active, a tiny horizontal bar labeled
+**"Mic level"** renders inline next to the Stop button. The
+bar's width updates ~60 fps via a `requestAnimationFrame`
+loop driven by an `AnalyserNode` hooked into the same
+`MediaStream` the recorder is consuming. Direct DOM mutation
+on the bar's `style.width` keeps React out of the per-frame
+hot path so the rest of the card never re-renders during a
+take.
+
+Lifecycle teardown — every path that ends a recording also
+tears down the meter:
+
+- Stop button → `recorder.onstop` → `_stopMicMeter()`
+- Discard → `_stopMicMeter()`
+- Clone success → auto-discard → `_stopMicMeter()`
+- Component unmount → `useEffect` cleanup → `_stopMicMeter()`
+- `recorder.onerror` → `_stopMicMeter()`
+
+`_stopMicMeter()` cancels the RAF, disconnects the source +
+analyser nodes, calls `AudioContext.close()`, and resets the
+bar's width to 0% so a future take starts from a clean visual
+baseline.
+
+Graceful fallback: when `AudioContext` / `webkitAudioContext`
+isn't available (older browsers, locked-down WebViews) or the
+analyser setup throws, the meter renders as a single
+*"Mic level unavailable"* line. Recording itself still works.
+
+`data-testid` hooks: `custom-voice-mic-level` (the wrapper),
+`custom-voice-mic-level-bar` (the inner bar element). Both
+absent in idle / recorded / cloning states.
+
 #### Previewing a take before cloning (PR AP)
 
 Once a recording lands (state ⇒ `recorded`), the row reveals an

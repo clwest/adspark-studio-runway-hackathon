@@ -1,13 +1,13 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after PR AX (Refresh Missing Cloned Voice
-Preview) on top of the PR AG–AW / SESSION 011 anchors. Backend
-route count is **68** application routes — PR AX adds one new
-endpoint (`POST /api/characters/{id}/refresh-voice-preview`)
-that wires the existing PR AR `fetch_voice_preview` helper to
-an operator-facing button so a missing `custom_voice_preview_url`
-can be re-fetched without re-uploading audio.
+context-kit refresh after PR AY (Live Mic Level Meter for Voice
+Recording) on top of the PR AG–AX / SESSION 011 anchors.
+Backend route count is **68** application routes — PR AY is a
+frontend-only slice that hooks an `AnalyserNode` into the
+existing PR AO `MediaStream` and renders a tiny live meter while
+recording, so operators can confirm the mic is hot before
+spending a clone attempt.
 
 ## Backend (`backend/`)
 
@@ -218,6 +218,7 @@ the line's own `avatar_id`).
 | PR AV | Avatar Status Manual Refresh (read-only POST /refresh-avatar-voice route + Refresh avatar status button; reuses fetch_avatar_voice + compute_voice_drift_status without invoking PATCH; PR AQ patch fields preserved across refreshes) | (post-v13) |
 | PR AW | Voice Verification Freshness Label (frontend-only relative-time formatter + inline "Last checked … ago / Not checked yet" caption beside the verify pill) | (post-v13) |
 | PR AX | Refresh Missing Cloned Voice Preview (POST /refresh-voice-preview wires existing fetch_voice_preview helper to a Refresh preview button; preserves existing URL when fetch returns nothing) | (post-v13) |
+| PR AY | Live Mic Level Meter for Voice Recording (frontend-only AnalyserNode hooked into the PR AO MediaStream; RAF-driven horizontal bar with direct DOM mutation; full lifecycle teardown on stop / discard / clone / unmount / error; graceful "Mic level unavailable" fallback) | (post-v13) |
 
 ## Known limitations (current main)
 
