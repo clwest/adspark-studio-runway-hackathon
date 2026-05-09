@@ -97,27 +97,39 @@ export default function ModeBanner({ health, providerStatus, organization }) {
         )}
       </div>
 
-      <ul className="text-xs text-zinc-400 space-y-1 leading-relaxed">
-        <li>
-          <span className="text-zinc-300">Demo mode</span> — both providers
-          mocked. Deterministic concepts, mock task that "succeeds" with a
-          public sample MP4 in ~12s, mock reference image (locally-generated PNG).
-          No keys, no spend.
-        </li>
-        <li>
-          <span className="text-zinc-300">Real mode</span> — concepts and/or
-          Runway use live APIs based on which keys are set in the repo-root
-          <code className="px-1 bg-zinc-950 rounded">.env</code>.
-          Image Gen + Video Gen share the Runway key today.
-        </li>
-        {runwayReal && (
-          <li className="text-rose-300">
-            Runway is live — Gen-4 Turbo requires a reference image; Gen-4.5
-            supports text-only. Use the model selector and the
-            "Use text-only video" checkbox to choose.
+      {/* PR Q (Phase 3) — collapsed by default. Pills above stay
+          always visible (smoke depends on them); the explanatory copy
+          here is reference material the user rarely re-reads. */}
+      <details className="text-xs text-zinc-400 leading-relaxed group">
+        <summary className="cursor-pointer text-[11px] text-zinc-500 hover:text-zinc-300 list-none flex items-center gap-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-spark/40 rounded">
+          <span className="inline-block transition-transform group-open:rotate-90 text-zinc-600">
+            ▸
+          </span>
+          <span className="group-open:hidden">show details</span>
+          <span className="hidden group-open:inline">hide details</span>
+        </summary>
+        <ul className="space-y-1 mt-2 pl-3">
+          <li>
+            <span className="text-zinc-300">Demo mode</span> — both providers
+            mocked. Deterministic concepts, mock task that "succeeds" with a
+            public sample MP4 in ~12s, mock reference image (locally-generated PNG).
+            No keys, no spend.
           </li>
-        )}
-      </ul>
+          <li>
+            <span className="text-zinc-300">Real mode</span> — concepts and/or
+            Runway use live APIs based on which keys are set in the repo-root
+            <code className="px-1 bg-zinc-950 rounded">.env</code>.
+            Image Gen + Video Gen share the Runway key today.
+          </li>
+          {runwayReal && (
+            <li className="text-rose-300">
+              Runway is live — Gen-4 Turbo requires a reference image; Gen-4.5
+              supports text-only. Use the model selector and the
+              "Use text-only video" checkbox to choose.
+            </li>
+          )}
+        </ul>
+      </details>
     </div>
   )
 }

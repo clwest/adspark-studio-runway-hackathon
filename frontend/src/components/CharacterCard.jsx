@@ -35,9 +35,21 @@ export default function CharacterCard({
           : 'ring-1 ring-zinc-800 bg-zinc-950/50 hover:ring-pink-400/40 hover:bg-pink-500/5'
       } ${compact ? 'text-[10px]' : 'text-xs'}`}
     >
-      {/* Portrait */}
-      <div className="aspect-square w-full rounded bg-zinc-900 overflow-hidden">
-        {hasPortrait ? (
+      {/* Portrait — when generating, show a pulsing skeleton with a
+          short status caption. PR Q (Phase 3). */}
+      <div className="aspect-square w-full rounded bg-zinc-900 overflow-hidden relative">
+        {busyAction === 'portrait' ? (
+          <div
+            className="w-full h-full flex flex-col items-center justify-center gap-2 bg-pink-500/5 animate-pulse"
+            aria-busy="true"
+            aria-live="polite"
+          >
+            <div className="w-8 h-8 rounded-full ring-2 ring-pink-400/40 border-t-2 border-t-pink-300 animate-spin" />
+            <span className="text-[9px] text-pink-300/80 font-mono">
+              generating…
+            </span>
+          </div>
+        ) : hasPortrait ? (
           <img
             src={portraitUrl}
             alt={c.name}
@@ -62,7 +74,15 @@ export default function CharacterCard({
 
       {/* Avatar status pill */}
       <div className="flex items-center gap-1 flex-wrap">
-        {avatarReady && (
+        {busyAction === 'avatar' && (
+          <span
+            className="text-[9px] rounded-full bg-pink-500/20 text-pink-300 px-1.5 py-0.5 font-mono animate-pulse"
+            aria-busy="true"
+          >
+            binding avatar…
+          </span>
+        )}
+        {busyAction !== 'avatar' && avatarReady && (
           <span
             className={`text-[9px] rounded-full px-1.5 py-0.5 font-mono ${
               avatarMock
@@ -73,12 +93,12 @@ export default function CharacterCard({
             avatar {avatarMock ? 'mock' : 'ready'}
           </span>
         )}
-        {avatarFailed && (
+        {busyAction !== 'avatar' && avatarFailed && (
           <span className="text-[9px] rounded-full bg-rose-500/20 text-rose-300 px-1.5 py-0.5 font-mono">
             avatar failed
           </span>
         )}
-        {!avatarStatus && hasPortrait && (
+        {busyAction !== 'avatar' && !avatarStatus && hasPortrait && (
           <span className="text-[9px] rounded-full bg-zinc-700/50 text-zinc-300 px-1.5 py-0.5 font-mono">
             avatar pending
           </span>

@@ -269,16 +269,41 @@ export default function CharacterStudio({ onCharactersChanged }) {
       )}
 
       {loading ? (
-        <p className="text-xs text-zinc-500 italic">Loading characters…</p>
-      ) : characters.length === 0 ? (
-        <div className="rounded-lg ring-1 ring-pink-400/20 bg-pink-500/5 px-3 py-4 text-center">
-          <p className="text-xs text-zinc-300">
-            No characters yet.
-          </p>
-          <p className="text-[11px] text-zinc-500 mt-0.5">
-            Click <span className="text-pink-300 font-semibold">+ Create Character</span>{' '}
-            to build a reusable brand identity in ~1 minute.
-          </p>
+        <CharactersLoadingSkeleton />
+      ) : characters.length === 0 && !showCreate ? (
+        <div className="flex flex-col items-center text-center gap-3 py-8 px-4 rounded-xl ring-1 ring-pink-400/20 bg-pink-500/5">
+          <svg
+            viewBox="0 0 64 64"
+            aria-hidden="true"
+            className="w-12 h-12 text-pink-300/70"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <circle cx="32" cy="22" r="9" />
+            <path d="M14 52c2-9 9-14 18-14s16 5 18 14" />
+            <path d="M40 14l3-3M24 14l-3-3M32 11V7" />
+          </svg>
+          <div className="space-y-1">
+            <div className="text-sm font-semibold text-zinc-200">
+              No reusable characters yet
+            </div>
+            <p className="text-[11px] text-zinc-500 max-w-sm leading-relaxed">
+              Create a mascot, founder, coach, or local guide. Runway
+              generates the portrait via{' '}
+              <span className="text-zinc-300 font-mono">gen4_image_turbo</span>{' '}
+              and binds it to a reusable Avatar in about a minute.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowCreate(true)}
+            className="text-[11px] rounded-md bg-pink-500/80 hover:bg-pink-500 text-zinc-100 px-3 py-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-400"
+          >
+            + Create your first character
+          </button>
         </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
@@ -298,6 +323,30 @@ export default function CharacterStudio({ onCharactersChanged }) {
       {errMsg && (
         <p className="text-[10px] text-rose-300" title={errMsg}>{errMsg}</p>
       )}
+    </div>
+  )
+}
+
+/**
+ * PR Q (Phase 3) — pulsing tile placeholders rendered while we
+ * fetch the character library on first mount. Three placeholders
+ * is enough to fill the visible width on most viewports without
+ * over-promising; once data arrives the real CharacterCards swap in.
+ */
+function CharactersLoadingSkeleton() {
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+      {[0, 1, 2].map((i) => (
+        <div
+          key={i}
+          className="rounded-lg p-2 space-y-1.5 ring-1 ring-zinc-800 bg-zinc-950/50"
+          aria-hidden="true"
+        >
+          <div className="aspect-square w-full rounded bg-zinc-800/60 animate-pulse" />
+          <div className="h-2.5 w-3/4 rounded bg-zinc-800/60 animate-pulse" />
+          <div className="h-2 w-1/2 rounded bg-zinc-800/40 animate-pulse" />
+        </div>
+      ))}
     </div>
   )
 }

@@ -145,14 +145,12 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
     page.getByRole('button', { name: /^Saved · cached locally$/i }),
   ).toBeVisible()
 
-  // 12. Gallery now contains the new campaign. Scope to the gallery card
-  //     specifically (a `div.rounded-2xl` containing the heading) so we don't
-  //     accidentally match ModeBanner <li> bullets or the App root. The
-  //     newly saved campaign sits at the top of the campaigns <ul>.
-  const galleryCard = page
-    .locator('div.rounded-2xl')
-    .filter({ has: page.getByRole('heading', { name: /Saved campaigns/i }) })
-    .first()
+  // 12. Gallery now contains the new campaign. PR Q (Phase 3) — the
+  //     gallery wrapper is now a <section role="region"> with
+  //     aria-labelledby pointing at the heading, so we target it via
+  //     getByRole instead of the brittle div.rounded-2xl class
+  //     selector that locked layout changes behind a workaround.
+  const galleryCard = page.getByRole('region', { name: /Saved campaigns/i })
   const newestCard = galleryCard.locator('ul > li').first()
   // Card header (always visible regardless of active tab) — business
   // name + video-ready chip.

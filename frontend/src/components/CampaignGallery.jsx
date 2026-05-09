@@ -422,7 +422,8 @@ function CampaignCard({ c, onUpdated, onDeleted }) {
             <button
               type="button"
               onClick={() => setActiveTab(nextActionTab)}
-              className="rounded-md bg-spark/80 hover:bg-spark text-ink text-[11px] font-semibold px-2 py-0.5"
+              aria-label={`Open ${nextActionTab} tab`}
+              className="rounded-md bg-spark/80 hover:bg-spark text-ink text-[11px] font-semibold px-2 py-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-spark"
             >
               go
             </button>
@@ -924,11 +925,30 @@ function CampaignCard({ c, onUpdated, onDeleted }) {
             sample — not the ad copy — and seeds the multilingual samples
             below.
           </p>
+          {voiceBusy && (
+            // PR Q (Phase 3) — skeleton audio bar while Runway designs
+            // the voice. Brand-voice design takes ~10s; the spinner
+            // gives the user something to look at instead of a stalled
+            // button.
+            <div
+              className="rounded-md ring-1 ring-teal-500/30 bg-teal-500/5 px-2 py-2 flex items-center gap-2"
+              aria-busy="true"
+              aria-live="polite"
+            >
+              <div className="w-3 h-3 rounded-full ring-2 ring-teal-400/40 border-t-2 border-t-teal-300 animate-spin shrink-0" />
+              <div className="flex-1 h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+                <div className="h-full w-1/3 bg-teal-400/60 animate-pulse" />
+              </div>
+              <span className="text-[9px] text-teal-300/80 font-mono">
+                designing voice…
+              </span>
+            </div>
+          )}
           <button
             type="button"
             onClick={() => handleDesignVoice()}
             disabled={voiceBusy}
-            className="rounded-md bg-teal-500/80 hover:bg-teal-500 text-zinc-100 text-xs px-2 py-1 disabled:opacity-50"
+            className="rounded-md bg-teal-500/80 hover:bg-teal-500 text-zinc-100 text-xs px-2 py-1 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400"
           >
             {voiceBusy
               ? 'Designing Brand Voice…'
@@ -1183,10 +1203,32 @@ function CampaignCard({ c, onUpdated, onDeleted }) {
       </div>
 
       {/* ---- Tab row ----------------------------------------------- */}
+      {/* PR Q (Phase 3) — arrow-key navigation between tabs.
+          Inactive tabs are tabIndex=-1; only the active tab is in the
+          tab order. Left/Right cycles, Home/End jumps to ends. */}
       <div
         role="tablist"
         aria-label={`campaign ${c.business || c.id} tabs`}
         className="flex flex-wrap gap-1 border-b border-zinc-800/60 pb-1"
+        onKeyDown={(e) => {
+          if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return
+          e.preventDefault()
+          const idx = TABS.findIndex((t) => t.key === activeTab)
+          let nextIdx = idx
+          if (e.key === 'ArrowLeft') nextIdx = (idx - 1 + TABS.length) % TABS.length
+          else if (e.key === 'ArrowRight') nextIdx = (idx + 1) % TABS.length
+          else if (e.key === 'Home') nextIdx = 0
+          else if (e.key === 'End') nextIdx = TABS.length - 1
+          const nextKey = TABS[nextIdx].key
+          setActiveTab(nextKey)
+          // Move DOM focus to the new tab so keyboard nav stays sticky.
+          // Defer to next tick — React needs to re-render with the new
+          // active tab + new tabIndex before we can focus it.
+          setTimeout(() => {
+            const el = document.getElementById(`tab-${c.id}-${nextKey}`)
+            el?.focus()
+          }, 0)
+        }}
       >
         {TABS.map((t) => {
           const active = activeTab === t.key
@@ -1198,8 +1240,9 @@ function CampaignCard({ c, onUpdated, onDeleted }) {
               aria-selected={active}
               aria-controls={`tabpanel-${c.id}-${t.key}`}
               id={`tab-${c.id}-${t.key}`}
+              tabIndex={active ? 0 : -1}
               onClick={() => setActiveTab(t.key)}
-              className={`text-[11px] px-2.5 py-1 rounded-md transition-colors ${
+              className={`text-[11px] px-2.5 py-1 rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-spark/60 ${
                 active
                   ? 'bg-spark/20 text-spark ring-1 ring-spark/40 font-semibold'
                   : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'
@@ -1253,23 +1296,29 @@ export default function CampaignGallery({ campaigns, onRefresh }) {
     .map((c) => overrides[c.id] || c)
 
   return (
-    // `rounded-2xl` is also applied by the `studio-panel` utility via
-    // @apply, but kept as a literal class here for the Playwright
-    // smoke selector (`div.rounded-2xl` filtering by heading).
-    <div className="rounded-2xl studio-panel p-5">
+    // PR Q (Phase 3) — added role="region" + aria-labelledby so the
+    // Playwright smoke can target the gallery via getByRole('region')
+    // instead of the brittle div.rounded-2xl selector that used to
+    // lock layout changes behind workaround classes. studio-panel
+    // applies rounded-2xl via @apply.
+    <section
+      role="region"
+      aria-labelledby="saved-campaigns-heading"
+      className="studio-panel p-5"
+    >
       <div className="flex items-center justify-between mb-3">
-        <h3 className="font-semibold">Saved campaigns</h3>
+        <h3 id="saved-campaigns-heading" className="font-semibold">
+          Saved campaigns
+        </h3>
         <button
           type="button"
           onClick={onRefresh}
-          className="text-xs text-zinc-400 hover:text-zinc-200"
+          className="text-xs text-zinc-400 hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-spark/40 rounded px-1"
         >
           refresh
         </button>
       </div>
-      {!merged.length ? (
-        <p className="text-sm text-zinc-500">No campaigns saved yet.</p>
-      ) : (
+      {!merged.length ? <GalleryEmptyState /> : (
         <ul className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {merged.map((c) => (
             <CampaignCard
@@ -1281,6 +1330,58 @@ export default function CampaignGallery({ campaigns, onRefresh }) {
           ))}
         </ul>
       )}
+    </section>
+  )
+}
+
+/**
+ * PR Q — Phase 3 empty state for the saved-campaigns gallery. Renders
+ * a centered SVG sketch + headline + subtext + CTA pointing the user
+ * back to Stage 1. Pure presentation; no behaviour. The CTA is a
+ * scroll-link rather than a navigation since stages are anchors on
+ * the same page.
+ */
+function GalleryEmptyState() {
+  return (
+    <div className="flex flex-col items-center text-center gap-3 py-8 px-4 rounded-xl ring-1 ring-zinc-800/60 bg-studio-950/40">
+      <svg
+        viewBox="0 0 64 64"
+        aria-hidden="true"
+        className="w-12 h-12 text-zinc-600"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <rect x="8" y="14" width="48" height="36" rx="4" />
+        <path d="M8 22h48" />
+        <circle cx="14" cy="18" r="1.2" fill="currentColor" />
+        <circle cx="18" cy="18" r="1.2" fill="currentColor" />
+        <path d="M28 36l8-4-8-4z" fill="currentColor" stroke="none" />
+      </svg>
+      <div className="space-y-1">
+        <div className="text-sm font-semibold text-zinc-200">
+          No saved campaigns yet
+        </div>
+        <p className="text-xs text-zinc-500 max-w-sm leading-relaxed">
+          Generate a visual ad in Stage 2, save it, then build your
+          Campaign Pack, Spokesperson, Voice Identity, and Realtime
+          deliverables — all attached to the same campaign card.
+        </p>
+      </div>
+      <a
+        href="#"
+        onClick={(e) => {
+          e.preventDefault()
+          // Stage 1 is the first <section> on the page; scroll to top
+          // so the brief form is visible.
+          window.scrollTo({ top: 0, behavior: 'smooth' })
+        }}
+        className="text-[11px] rounded-md bg-spark/15 hover:bg-spark/25 text-spark px-3 py-1.5 ring-1 ring-spark/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-spark"
+      >
+        Start a campaign brief →
+      </a>
     </div>
   )
 }
