@@ -2,33 +2,33 @@
 
 **Last touched:** 2026-05-09 (PR AG/AH `6157512`; PR AI
 `108ca3b`; PR AJ `444cb6a`; PR AK `c59251a`; PR AL `8a43af2`;
-PR AM `3e12d27`; PR AN `f255c22 feat: clone custom voices for
-characters`; PR AO In-Browser Audio Recording in flight on top —
-SESSION_012–SESSION_020 handoffs added).
+PR AM `3e12d27`; PR AN `f255c22`; PR AO `5bca7c4 feat: record
+voice samples in-browser for cloning`; PR AP In-Card Voice
+Recording Playback Preview in flight on top —
+SESSION_012–SESSION_021 handoffs added).
 
 ## Where things stand
 
-- **Branch:** `main` at `f255c22` (`feat: clone custom voices for
-  characters`) on `origin/main`. PR AO patch in flight on top —
-  no new commit / tag yet, both pending explicit user approval.
+- **Branch:** `main` at `5bca7c4` (`feat: record voice samples
+  in-browser for cloning`) on `origin/main`. PR AP patch in
+  flight on top — no new commit / tag yet, both pending explicit
+  user approval.
 - **Latest tag:** still **`hackathon-submission-v13`** at `ec446e4`
-  (PR AF). PR AG–AN shipped the funnel + polish + persistent-
-  voice-identity stack; PR AO closes the friction gap by letting
-  operators record a voice sample directly in the browser.
+  (PR AF). PR AG–AO shipped the funnel + polish + voice-identity
+  stack; PR AP polishes the recording flow by letting operators
+  preview a take before sending it to Runway.
 - **Backend routes:** **65** application + FastAPI built-ins
-  (unchanged from PR AN; PR AO is frontend-only and reuses the
-  existing `/clone-voice` route).
-- **Frontend build:** 314.33 KB initial JS / 88.70 KB gzip +
-  561.97 KB lazy `@runwayml/avatars-react` chunk (≈ +5.6 KB
-  initial / +1.4 KB gzip vs PR AN — PR AO added the recording
-  state machine + Start/Stop/Use/Discard controls on each
-  Character Studio library tile).
-- **Playwright smoke:** `1 passed (~23.8 s)` against the mock
-  backend; the existing custom-voice-section assertions now also
-  cover the new MediaRecorder controls (`custom-voice-record-status`,
-  `custom-voice-record-start`). Headless Chromium ships
-  MediaRecorder, so the start button renders rather than the
-  unsupported-browser fallback message.
+  (unchanged from PR AN/AO; PR AP is frontend-only and adds no
+  endpoints).
+- **Frontend build:** 314.86 KB initial JS / 88.87 KB gzip +
+  561.97 KB lazy `@runwayml/avatars-react` chunk (≈ +0.5 KB
+  initial / +0.2 KB gzip vs PR AO — PR AP only added the
+  preview state + audio element).
+- **Playwright smoke:** `1 passed (~23.7 s)` against the mock
+  backend; the existing PR AO assertions still pass and PR AP
+  adds two negative assertions confirming the preview audio +
+  helper text don't render in the default idle state (the
+  conditional render guard never regresses).
 - **Repo:** https://github.com/clwest/adspark-studio-runway-hackathon
   (private). Pushes happen on explicit user approval.
 - **Stale local feature branches:** 22 left over from PR A through
@@ -55,6 +55,13 @@ SESSION_012–SESSION_020 handoffs added).
   file instead."* message when MediaRecorder / mic is missing
   or the user denies permission. Existing upload path stays
   fully functional in every fallback state.
+- **In-card playback preview** (PR AP) — once a recording lands
+  in the `recorded` state, an inline native `<audio controls>`
+  element (bound to `URL.createObjectURL(blob)`) renders inside
+  the row with helper copy *"Preview your take before cloning."*
+  Object URLs are revoked on discard, successful clone, component
+  unmount, and the next recording start so the browser never
+  holds a stale Blob.
 - New backend route: `POST /api/characters/{id}/clone-voice`
   (multipart form with `audio` + optional `name`). The route
   validates mime + size (cap 15 MB locally; Runway docs say

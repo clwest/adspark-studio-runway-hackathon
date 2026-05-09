@@ -188,6 +188,29 @@ state.
 `custom-voice-record-status`, `custom-voice-record-start`,
 `custom-voice-record-stop`, `custom-voice-record-use`.
 
+#### Previewing a take before cloning (PR AP)
+
+Once a recording lands (state ⇒ `recorded`), the row reveals an
+inline native `<audio controls>` player bound to the captured
+Blob via `URL.createObjectURL`. A one-line helper underneath
+reads *"Preview your take before cloning."* The operator can
+play, scrub, and decide whether to keep or discard before
+clicking **Clone from recording**.
+
+Object-URL lifecycle (always cleaned up):
+
+- **Discard** — URL revoked, state → `idle`, blob ref cleared.
+- **Successful clone** — URL revoked (handled by the auto-discard
+  inside `handleUseRecording`), persisted PR AN status pill
+  shows the cloned state.
+- **Component unmount** — `useEffect` cleanup revokes the URL.
+- **Next recording start** — previous URL revoked before the new
+  capture begins so the `<audio>` never points at a stale Blob.
+
+`data-testid` hooks: `custom-voice-record-preview` (the audio
+element), `custom-voice-record-preview-help` (the helper line).
+Both render only in `recorded` state.
+
 ### Where this maps to backend
 - `POST /api/characters` (record), `POST /api/characters/{id}/generate-portrait`,
   `POST /api/characters/{id}/create-avatar`, `GET /api/characters`,

@@ -106,6 +106,11 @@ export default function CharacterCard({
   const [recordState, setRecordState] = useState('idle')
   const [recordError, setRecordError] = useState('')
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
+  // PR AP — in-card preview URL for the captured Blob. Only set when
+  // a recording finishes (state ⇒ 'recorded'); cleared (and revoked)
+  // on discard / successful clone / unmount / a new recording start
+  // so we never leak object URLs.
+  const [previewUrl, setPreviewUrl] = useState('')
   const recorderRef = useRef(null)
   const streamRef = useRef(null)
   const chunksRef = useRef([])
@@ -113,15 +118,27 @@ export default function CharacterCard({
   const recordedMimeRef = useRef('audio/webm')
   const tickRef = useRef(null)
 
+  const _revokePreview = (url) => {
+    if (!url || typeof URL === 'undefined' || !URL.revokeObjectURL) return
+    try { URL.revokeObjectURL(url) } catch { /* ignore */ }
+  }
+
   // Always-on cleanup so we never leak the mic stream when the tile
-  // unmounts mid-record.
+  // unmounts mid-record. Also revokes any lingering preview URL so the
+  // browser drops its hold on the recorded Blob.
   useEffect(() => {
     return () => {
       if (tickRef.current) clearInterval(tickRef.current)
       try { recorderRef.current?.stop() } catch { /* ignore */ }
       streamRef.current?.getTracks?.().forEach((t) => t.stop())
+      _revokePreview(previewUrl)
     }
-  }, [])
+    // Intentionally re-binds when previewUrl changes so the cleanup
+    // closure carries the *current* URL (not whatever was in scope
+    // at first mount). React handles the revoke-on-replace by
+    // running the previous effect's cleanup before the next effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewUrl])
 
   const _stopMicTracks = () => {
     streamRef.current?.getTracks?.().forEach((t) => t.stop())
@@ -133,6 +150,12 @@ export default function CharacterCard({
     setRecordError('')
     chunksRef.current = []
     recordedBlobRef.current = null
+    // PR AP — drop the previous preview URL so a new take never
+    // points React's <audio> at a stale Blob.
+    if (previewUrl) {
+      _revokePreview(previewUrl)
+      setPreviewUrl('')
+    }
     setElapsedSeconds(0)
     let stream
     try {
@@ -179,6 +202,17 @@ export default function CharacterCard({
         setRecordState('idle')
         return
       }
+      // PR AP — mint a preview URL for the recorded state's audio
+      // player. Revoked on discard / successful clone / unmount /
+      // next recording start.
+      try {
+        const url = URL.createObjectURL(blob)
+        setPreviewUrl(url)
+      } catch {
+        // No object URL surface — recorded state still flips, but the
+        // preview player just doesn't render. Operator can still
+        // clone or discard.
+      }
       setRecordState('recorded')
     }
     recorder.onerror = (ev) => {
@@ -217,6 +251,12 @@ export default function CharacterCard({
     setElapsedSeconds(0)
     setRecordError('')
     setRecordState('idle')
+    // PR AP — revoke + clear the preview URL so the browser drops
+    // its hold on the captured Blob immediately.
+    if (previewUrl) {
+      _revokePreview(previewUrl)
+      setPreviewUrl('')
+    }
   }
 
   const handleUseRecording = async () => {
@@ -507,12 +547,37 @@ export default function CharacterCard({
                     </button>
                   </>
                 )}
+                {/* PR AP — In-card playback preview. Native <audio
+                    controls> bound to the captured Blob via
+                    URL.createObjectURL so the operator can listen
+                    before spending a Runway clone. The URL is revoked
+                    on discard / successful clone / unmount / next
+                    recording start. Only rendered in 'recorded' state
+                    when a URL exists; falls back gracefully when the
+                    object-URL surface is missing. */}
+                {recordState === 'recorded' && previewUrl && (
+                  <audio
+                    src={previewUrl}
+                    controls
+                    preload="metadata"
+                    data-testid="custom-voice-record-preview"
+                    className="w-full mt-1 h-7"
+                  />
+                )}
                 {recordState === 'cloning' && (
                   <span className="text-[9px] text-zinc-500">
                     posting to /v1/voices…
                   </span>
                 )}
               </div>
+              {recordState === 'recorded' && previewUrl && (
+                <p
+                  className="text-[9px] text-zinc-500"
+                  data-testid="custom-voice-record-preview-help"
+                >
+                  Preview your take before cloning.
+                </p>
+              )}
               {recordError && (
                 <p className="text-[9px] text-rose-300" title={recordError}>
                   {recordError}

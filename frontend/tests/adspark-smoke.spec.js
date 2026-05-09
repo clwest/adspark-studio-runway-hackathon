@@ -218,6 +218,17 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
     await expect(
       voiceSections.first().getByTestId('custom-voice-record-start'),
     ).toBeVisible()
+    // PR AP — playback preview is conditional on the 'recorded'
+    // state. The smoke can't drive a real recording so we assert the
+    // negative: in the default idle state, the preview audio + help
+    // testids must NOT render. Their presence would prove the
+    // conditional render guard regressed.
+    await expect(
+      page.getByTestId('custom-voice-record-preview'),
+    ).toHaveCount(0)
+    await expect(
+      page.getByTestId('custom-voice-record-preview-help'),
+    ).toHaveCount(0)
   }
 
   // 7b.6. PR U — stage order: Spokesperson leads, Campaign Brief
