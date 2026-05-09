@@ -2,7 +2,22 @@
 
 This file is the operator's run-of-show for the hackathon screen
 capture. It assumes a clean machine, both servers stopped, and the
-repo at `feature/pr-d-demo-hardening` (or later).
+repo at `feature/pr-d-demo-hardening` (or later — current `main` is
+at `hackathon-submission-v13`).
+
+> **Note:** Six fully-described demo paths now live in
+> [`docs/OPERATOR_USAGE_MAP.md`](./docs/OPERATOR_USAGE_MAP.md)
+> Section 12, including the new modes that landed since v6:
+>
+> - **Path B** — Real Spokesperson Ad (lip-synced talking head)
+> - **Path C** — Real Cinematic Commercial (silent visual + voiceover)
+> - **Path D** — Real Storyboard Commercial (3-shot stitch)
+> - **Path E** — Real Dialogue Scene Ad (multi-character skit)
+> - **Path F** — Realtime campaign-aware conversation
+>
+> The original Paths A–F below capture the v6-era flow and are kept
+> as historical reference. For new screen recordings, prefer the
+> operator map paths.
 
 ## Pre-flight checklist (do this *before* recording)
 

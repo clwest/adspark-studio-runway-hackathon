@@ -1,11 +1,45 @@
 # AdSpark Studio
 
-> **AI Campaign + Character Studio.** Type a business idea, get a
-> Runway-powered cinematic ad. Generate a reusable brand
-> mascot/founder/coach character, turn it into a Runway Avatar, and
-> reuse that same identity across host clips, multilingual voiceover,
-> and a live "Talk to your spokesperson" call — every artefact cached
-> locally — in under five minutes.
+> **AI Campaign + Character + Dialogue Studio.** Type a business
+> idea, get a Runway-powered cinematic ad — plus a reusable AI brand
+> character, plus a multi-character dialogue scene builder for
+> Office-style branded skits. Three sibling ad modes share one brief
+> + one character library + one Commercial Script. Every artefact
+> cached locally.
+
+## What's new since `hackathon-submission-v6`
+
+The product has expanded considerably. Latest tag is
+**`hackathon-submission-v13`**.
+
+- **Three ad modes.** Every saved campaign produces up to three
+  sibling outputs: **Cinematic Commercial** (silent visual + voiceover
+  mux, not lip-synced), **Spokesperson Ad** (Runway `avatar_videos`
+  lip-synced talking head), and **Dialogue Scene Ad** (multi-character
+  skit assembled from sequential `avatar_videos` lines). Surfaced as
+  a 3-card "Pick your ad mode" picker on every campaign Overview tab.
+- **Storyboard Commercial Builder.** 3 editable shot prompts → 3
+  cached `image_to_video` clips → ffmpeg concat into a longer (~15 s)
+  cinematic cut, with optional voiced storyboard mux.
+- **Commercial Script editor.** Saved on the campaign as
+  `commercial_script`. Drives Spokesperson / Cinematic / Dialogue
+  / Realtime — every spoken-pitch surface uses the same script.
+- **Campaign-aware realtime spokesperson.** PR AE injects
+  `personality` + `startScript` into `/v1/realtime_sessions` so the
+  live avatar opens with brand context instead of a generic greeting.
+- **Multi-character Dialogue Scene Builder (PR AF, v13).** Plan 3
+  lines, edit text + speaker per line, render each via Runway, stitch
+  with audio preserved. Office-style skits, founder ↔ mascot
+  reactions, fake podcasts.
+- **Operator Usage Map.** Twelve-section end-to-end "how do I use
+  this thing" guide: [`docs/OPERATOR_USAGE_MAP.md`](./docs/OPERATOR_USAGE_MAP.md).
+
+📘 **Read the operator map first** if you're new — it includes six
+demo paths with timings + credit estimates.
+
+---
+
+The original v6-era pitch (still accurate as a product overview):
 
 A RunwayML hackathon entry. AdSpark Studio is no longer just an AI ad
 generator. Phase K turns AdSpark into a **brand-character studio**:
@@ -54,7 +88,11 @@ locally so saved campaigns survive Runway's URL expiry.
 📄 **Submission write-up:** [`SUBMISSION.md`](./SUBMISSION.md)
 🎬 **Screen-recording script:** [`DEMO_SCRIPT.md`](./DEMO_SCRIPT.md)
 🧭 **Next-session handoff:** [`00-START-NEXT-SESSION.md`](./00-START-NEXT-SESSION.md)
-🔬 **Capability research:** [`docs/research/RUNWAY_API_CAPABILITY_MAP.md`](./docs/research/RUNWAY_API_CAPABILITY_MAP.md)
+🛠 **Operator usage map:** [`docs/OPERATOR_USAGE_MAP.md`](./docs/OPERATOR_USAGE_MAP.md)
+🔬 **Avatar API deep review:** [`docs/research/RUNWAY_AVATAR_API_DEEP_REVIEW.md`](./docs/research/RUNWAY_AVATAR_API_DEEP_REVIEW.md)
+🔬 **Broader Runway capability map:** [`docs/research/RUNWAY_API_CAPABILITY_MAP.md`](./docs/research/RUNWAY_API_CAPABILITY_MAP.md)
+🎭 **Storyboard design:** [`docs/research/STORYBOARD_COMMERCIAL_BUILDER.md`](./docs/research/STORYBOARD_COMMERCIAL_BUILDER.md)
+💬 **Dialogue Scene design:** [`docs/research/DIALOGUE_SCENE_BUILDER.md`](./docs/research/DIALOGUE_SCENE_BUILDER.md)
 
 ## Submission tags
 

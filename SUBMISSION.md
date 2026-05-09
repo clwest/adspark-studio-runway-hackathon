@@ -3,7 +3,39 @@
 ## Project name
 **AdSpark Studio**
 
-## One-line pitch
+## One-line pitch (current — `hackathon-submission-v13`)
+**AI Campaign + Character + Dialogue Studio.** Type a business
+idea, get a Runway-powered Campaign Pack **plus a reusable AI brand
+character plus a multi-character dialogue scene builder**. Three
+sibling ad modes (Cinematic Commercial / Spokesperson Ad / Dialogue
+Scene) share one brief + one character library + one Commercial
+Script. Every artefact cached locally.
+
+> **Read the operator usage map first:**
+> [`docs/OPERATOR_USAGE_MAP.md`](./docs/OPERATOR_USAGE_MAP.md) —
+> twelve-section end-to-end "how do I use this thing" guide with
+> six demo paths (mock walkthrough → Spokesperson → Cinematic →
+> Storyboard → Dialogue Scene → realtime campaign-aware
+> conversation), each with timings + credit estimates.
+
+## What landed since `v6` (post-PR-Y arc)
+
+- **Three ad modes** with explicit "Pick your ad mode" picker on
+  every saved campaign (PR AB / PR AD).
+- **Storyboard Commercial Builder** with editable shot prompts +
+  script-aware planner (PR Z + PR AC).
+- **Commercial Script editor** living in the Stage 3 Creative
+  Direction panel, persisted on the campaign and consumed by
+  every voiced surface (PR AA + PR AC).
+- **Spokesperson Ad alias** (`/spokesperson-ad`) and lip-sync UX
+  promotion of the Avatar Host Clip (PR AB).
+- **Campaign-aware realtime sessions.** Broker injects
+  `personality` + `startScript` into `/v1/realtime_sessions`
+  (PR AE).
+- **Multi-character Dialogue Scene Builder** (PR AF, v13).
+  Sequential `avatar_videos` lines stitched with audio preserved.
+
+## One-line pitch (original — historical context)
 **AI Campaign + Character Studio.** Type a business idea, get a
 Runway-powered Campaign Pack **plus a reusable AI brand character**
 (mascot / founder / coach / local guide) you can attach to every
