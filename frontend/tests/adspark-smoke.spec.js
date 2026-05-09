@@ -533,6 +533,18 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
   // file (backend/data/host/<id>.mp4); user-facing vocabulary aligned
   // with the rest of the UI.
   await expect(newestCard.getByText(/^Spokesperson Ad$/)).toBeVisible()
+  // PR AG / PR AH — Vertical / Reels exports ledger rows render
+  // unconditionally. The smoke campaign has not built either reels
+  // artefact, so the rows show the italic "not generated yet"
+  // placeholder — labels and meta copy are still visible regardless.
+  // PR AH renamed labels to "… · 720×1280 · Captioned" to surface the
+  // burned-in subtitles guarantee.
+  await expect(
+    newestCard.getByText(/Spokesperson Reels · 720×1280 · Captioned/i),
+  ).toBeVisible()
+  await expect(
+    newestCard.getByText(/Dialogue Scene Reels · 720×1280 · Captioned/i),
+  ).toBeVisible()
 
   // 13. Console / page errors — page errors are always fatal; console errors
   //     are filtered to drop video-network noise.

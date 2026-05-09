@@ -1,10 +1,11 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after PR AF (Multi-Character Dialogue Scene
-Builder) + the SESSION 011 docs pass. Latest tag is
-`hackathon-submission-v13` at `ec446e4`; main is **synced** with
-`origin/main`.
+context-kit refresh after PR AH (Burned-in Captions for Vertical
+Reels) on top of the PR AG / SESSION 011 anchors. Backend route
+count is **61** application routes — PR AH is a finishing-layer
+slice that extends the existing reels routes rather than adding
+new endpoints, so the route count is unchanged from PR AG.
 
 ## Backend (`backend/`)
 
@@ -16,7 +17,7 @@ Builder) + the SESSION 011 docs pass. Latest tag is
 | `app/services/concept_service.py` | real + mock fallback | OpenAI `gpt-4o-mini` JSON-mode call; deterministic mock |
 | `app/services/runway_client.py` | real + mock | `image_to_video` / `text_to_video` routing; `GENERATION_POLICY` validation |
 | `app/services/image_client.py` | real + mock | `/v1/text_to_image` (`gen4_image_turbo`); seeded `referenceImages`; stdlib zlib PNG mock |
-| `app/services/finisher_service.py` | real | Local ffmpeg Campaign Pack + **Voiced Cinematic Ad mux** (PR S/X `-stream_loop -1 -shortest`) + **Storyboard concat** (PR Z `concat=n=N:v=1:a=0`) + **Voiced Storyboard** (PR Z) + **Dialogue Scene concat** (PR AF `concat=n=N:v=1:a=1` audio-preserved) |
+| `app/services/finisher_service.py` | real | Local ffmpeg Campaign Pack + **Voiced Cinematic Ad mux** (PR S/X `-stream_loop -1 -shortest`) + **Storyboard concat** (PR Z `concat=n=N:v=1:a=0`) + **Voiced Storyboard** (PR Z) + **Dialogue Scene concat** (PR AF `concat=n=N:v=1:a=1` audio-preserved) + **Reels export** (PR AG `scale=720:1280:force_original_aspect_ratio=decrease,pad=…` letterbox; synthesises a silent AAC track when the source has no audio so output stays h264 + AAC) + **Burned-in captions** (PR AH chained `drawtext=…enable='between(t,start,end)'` per segment, textwrap word-wrap, bottom-safe placement, `probe_duration` ffprobe helper) |
 | `app/services/character_host_client.py` | real + mock | Phase 1 `/v1/avatars` + Phase 2 `/v1/avatar_videos`; image-source fallback chain; **`active_avatar_id(campaign, settings)` resolves character > selected > host**; **PR AA — uses `campaign.commercial_script` as `script_override` when no explicit override is supplied** |
 | `app/services/avatar_listing_client.py` | real + mock | `GET /v1/avatars` curation; 4 hard-coded mock presets (PR I+) |
 | `app/services/realtime_avatar_client.py` | real + mock | `/v1/realtime_sessions` broker — **PR AE injects campaign-aware `personality` + `startScript` overrides**, defensive 400-fallback retries the bare body, `_redact()` scrubs Bearer / sessionKey / JWT patterns from any logged upstream response |
@@ -25,7 +26,7 @@ Builder) + the SESSION 011 docs pass. Latest tag is
 | `app/services/character_store.py` | real | **PR K** — JSON-file Character store at `backend/data/characters.json`; threading.Lock; atomic writes |
 | `app/services/storyboard_service.py` | real + mock | **PR Z + PR AC** — script-aware `_split_script_beats` planner + per-shot `image_to_video` generation + ffmpeg lavfi mock; `_shot_prompt` weaves narrative cues from `campaign.commercial_script` |
 | `app/services/dialogue_service.py` | real + mock | **PR AF** — `plan_lines` builds Hook/Beat/Closer with primary + secondary speaker selection from ready characters; `generate_line` wraps `avatar_videos` (real) + ffmpeg lavfi (mock) targeted at the line's speaker avatar |
-| `app/services/storage.py` | real | JSON-file campaign store; threading.Lock; per-feature update helpers (cache / finish / host avatar / host video / brand voice / dub / selected avatar / **character attachment** / **commercial_script** / **storyboard plan + per-shot + stitch + voiced** / **dialogue plan + per-line + stitch**) |
+| `app/services/storage.py` | real | JSON-file campaign store; threading.Lock; per-feature update helpers (cache / finish / host avatar / host video / brand voice / dub / selected avatar / **character attachment** / **commercial_script** / **storyboard plan + per-shot + stitch + voiced** / **dialogue plan + per-line + stitch** / **reels (PR AG, kind=spokesperson|dialogue_scene)**) |
 | `app/routers/concepts.py` | real | `POST /api/concepts` |
 | `app/routers/runway.py` | real | All `/api/runway/*` routes including `provider-status`, `organization`, `avatars` (list), `image`, `generate`, `task`, `upload-image` |
 | `app/routers/campaigns.py` | real | All `/api/campaigns/*` routes (50+ now — see endpoint list below) |
@@ -74,7 +75,7 @@ Builder) + the SESSION 011 docs pass. Latest tag is
 *optional* PR-F knobs — defaults are `vincent` and a curated
 Unsplash portrait URL.
 
-## Endpoints (57 application + FastAPI built-ins)
+## Endpoints (61 application + FastAPI built-ins)
 
 ```
 GET    /health
@@ -116,8 +117,12 @@ POST   /api/campaigns/{id}/select-avatar                   (PR I+ — picker)
 POST   /api/campaigns/{id}/attach-character                (PR K — null detaches)
 POST   /api/campaigns/{id}/host-video                      (PR F)
 POST   /api/campaigns/{id}/spokesperson-ad                 (PR AB — alias for /host-video)
+POST   /api/campaigns/{id}/spokesperson-ad/reels           (PR AG — Vertical 720x1280 letterbox)
+POST   /api/campaigns/{id}/dialogue-scene/reels            (PR AG — Vertical 720x1280 letterbox)
 GET    /api/campaigns/{id}/host-video
 GET    /api/campaigns/{id}/spokesperson-ad                 (PR AB — alias)
+GET    /api/campaigns/{id}/spokesperson-ad/reels           (PR AG)
+GET    /api/campaigns/{id}/dialogue-scene/reels            (PR AG)
 POST   /api/campaigns/{id}/brand-voice                     (PR H)
 POST   /api/campaigns/{id}/dub                             (PR H)
 GET    /api/campaigns/{id}/audio/{kind}
@@ -157,6 +162,8 @@ the line's own `avatar_id`).
 | Voiced Storyboard | storyboard visual + host audio (ffmpeg loop) | host clip audio | ❌ | `data/finished/<id>-storyboard-voice.mp4` |
 | Spokesperson Ad | `avatar_videos` | spoken script | ✅ | `data/host/<id>.mp4` |
 | Dialogue Scene Ad | N × `avatar_videos` ffmpeg-concat (audio preserved) | spoken per line | ✅ per line | `data/finished/<id>-dialogue-scene.mp4` |
+| Spokesperson Ad — Captioned Reels (PR AG + AH) | ffmpeg pad/letterbox + drawtext caption from saved Commercial Script | host clip audio (preserved) | ✅ | `data/finished/<id>-spokesperson-reels.mp4` |
+| Dialogue Scene Ad — Captioned Reels (PR AG + AH) | ffmpeg pad/letterbox + per-line drawtext segments timed via ffprobe of cached line clips | per-line speech (preserved) | ✅ per line | `data/finished/<id>-dialogue-scene-reels.mp4` |
 
 ## Feature stack since v6 (the recent arc)
 
@@ -179,16 +186,32 @@ the line's own `avatar_id`).
 | PR AD | Cinematic vs Spokesperson UX (Ad Mode picker + identity-drift helper) | **v11** |
 | PR AE | Realtime campaign context injection | **v12** |
 | PR AF | Multi-Character Dialogue Scene Builder | **v13** |
+| PR AG | Vertical / Reels Export Pipeline (Spokesperson + Dialogue → 720×1280 letterbox) | (post-v13) |
+| PR AH | Burned-in Captions for Vertical Reels (drawtext from saved scripts; per-line timing for dialogue) | (post-v13) |
 
 ## Known limitations (current main)
 
 - **No multi-avatar realtime.** Realtime sessions are still
   single-character only; multi-character scenes use the async
   Dialogue Scene Builder instead.
-- **No vertical/Reels export of Spokesperson Ad or Dialogue Scene.**
-  Outputs are 1088×704 native; users re-crop manually for social.
-  Listed as Tier-1 future polish in
-  `DIALOGUE_SCENE_BUILDER.md` §6.
+- ~~**No vertical/Reels export of Spokesperson Ad or Dialogue Scene.**~~
+  **Resolved by PR AG.** Both outputs now ship a 720×1280 letterbox
+  via local ffmpeg (`scale=…:force_original_aspect_ratio=decrease,pad=…`).
+  Source aspect is preserved; bars are filled with a dark slate
+  backdrop by default. No new Runway calls; ~1–3 s per export.
+- ~~**No caption overlays on Dialogue Scene.**~~ **Resolved by
+  PR AH** for the vertical Reels export specifically. Per-line
+  text is now burned in over the matching segment of the stitched
+  Dialogue Reels via chained `drawtext=…enable='between(t,a,b)'`
+  filters, with timings derived from ffprobe of the cached line
+  clips. Captions on the horizontal Dialogue Scene Ad are still
+  out of scope (the talking-head face is the primary visual; the
+  vertical export is where text-over-video matters most).
+- ~~**No spokesperson script captions on the social-ready exports.**~~
+  **Resolved by PR AH.** The saved Commercial Script (or the
+  templated `build_script` fallback) is wrapped via `textwrap`
+  and rendered as a bottom-safe drawtext box across the full
+  Spokesperson Reels duration.
 - **No conversation transcript retrieval.** PR AE gives the avatar
   brand context; we don't yet wire `GET /v1/avatar_conversations/{id}`
   for a "replay your chat" UX.

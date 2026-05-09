@@ -217,6 +217,20 @@ class Campaign(CampaignCreate):
     ]] = None
     dialogue_scene_video_url: Optional[str] = None
     dialogue_scene_error: Optional[str] = None
+    # PR AG — Vertical / Reels export. Letterbox the existing
+    # Spokesperson Ad and Dialogue Scene MP4s into 720x1280 with a
+    # brand-coloured backdrop so the same renders are immediately
+    # postable to TikTok / Reels / Shorts. No new Runway calls.
+    spokesperson_reels_url: Optional[str] = None
+    spokesperson_reels_status: Optional[Literal[
+        "ok", "failed", "no_source", "unavailable"
+    ]] = None
+    spokesperson_reels_error: Optional[str] = None
+    dialogue_scene_reels_url: Optional[str] = None
+    dialogue_scene_reels_status: Optional[Literal[
+        "ok", "failed", "no_source", "unavailable"
+    ]] = None
+    dialogue_scene_reels_error: Optional[str] = None
 
 
 class CampaignList(BaseModel):

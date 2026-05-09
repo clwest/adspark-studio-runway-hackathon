@@ -185,4 +185,17 @@ export const api = {
       `/api/campaigns/${encodeURIComponent(campaignId)}/dialogue/stitch`,
       { method: 'POST' },
     ),
+  // PR AG — Vertical / Reels export. Letterbox the Spokesperson Ad
+  // and Dialogue Scene MP4s into 720x1280 via local ffmpeg. No new
+  // Runway calls; preconditions surface as 409s the UI handles.
+  buildSpokespersonReels: (campaignId) =>
+    jsonFetch(
+      `/api/campaigns/${encodeURIComponent(campaignId)}/spokesperson-ad/reels`,
+      { method: 'POST' },
+    ),
+  buildDialogueSceneReels: (campaignId) =>
+    jsonFetch(
+      `/api/campaigns/${encodeURIComponent(campaignId)}/dialogue-scene/reels`,
+      { method: 'POST' },
+    ),
 }

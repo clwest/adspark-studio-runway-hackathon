@@ -19,6 +19,7 @@ from ..services.character_host_client import (
     SUPPORTED_VOICE_PRESETS,
     active_avatar_id as host_active_avatar_id,
     active_avatar_status as host_active_avatar_status,
+    build_script as host_build_script,
     create_or_reuse_avatar,
     generate_host_video,
     path_for as host_path_for,
@@ -35,6 +36,7 @@ from ..services.finisher_service import (
     VideoFinisher,
     has_audio_stream,
     is_ffmpeg_available,
+    probe_duration,
 )
 from ..services import storyboard_service as storyboard_service  # type: ignore[attr-defined]
 from ..services import dialogue_service as dialogue_service  # type: ignore[attr-defined]
@@ -145,6 +147,9 @@ def delete_campaign(
     for line in (record.dialogue_lines or []):
         candidates.append(data / "dialogue" / f"{campaign_id}-{line.id}.mp4")
     candidates.append(data / "finished" / f"{campaign_id}-dialogue-scene.mp4")
+    # PR AG — Vertical / Reels exports.
+    candidates.append(data / "finished" / f"{campaign_id}-spokesperson-reels.mp4")
+    candidates.append(data / "finished" / f"{campaign_id}-dialogue-scene-reels.mp4")
 
     for path in candidates:
         try:
@@ -1694,6 +1699,257 @@ def get_spokesperson_ad(
     user-facing vocabulary.
     """
     return get_host_video(campaign_id, settings=settings)
+
+
+# ---- PR AG / PR AH — Vertical / Reels export (captioned) ----------
+#
+# Reuse the existing Spokesperson Ad and Dialogue Scene MP4s as input
+# to a local ffmpeg pad/letterbox + drawtext pass that produces a
+# 720x1280 vertical export with burned-in captions, suitable for
+# TikTok / Reels / Shorts. No new Runway calls; outputs land alongside
+# the other finisher artefacts under backend/data/finished/ and are
+# gitignored.
+
+
+def _spokesperson_caption_schedule(
+    record: Campaign, source_path: Path,
+) -> "list[tuple[float, float, str]]":
+    """PR AH — build a single-segment caption schedule for the
+    Spokesperson Reels export. Prefer the editable Commercial Script
+    (PR AA); fall back to the deterministic ``build_script`` template
+    that the host pipeline uses when no script is saved. Span the full
+    clip duration so the caption stays visible for the whole take.
+    Returns an empty list when no script is derivable or the source
+    has no measurable duration.
+    """
+    text = (record.commercial_script or "").strip()
+    if not text:
+        text = host_build_script(record).strip()
+    if not text:
+        return []
+    duration = probe_duration(source_path)
+    if duration is None or duration <= 0:
+        return []
+    return [(0.0, duration, text)]
+
+
+def _dialogue_caption_schedule(
+    record: Campaign, settings: Settings, fallback_total: Optional[float],
+) -> "list[tuple[float, float, str]]":
+    """PR AH — build a per-line caption schedule for the Dialogue
+    Reels export. ffprobe each cached line MP4 to derive its duration
+    and accumulate ``(start, end, text)`` tuples in dialogue order.
+    Lines without measurable durations get an even slice of
+    ``fallback_total`` so the schedule still spans the stitched output.
+    Lines whose text is empty are skipped (a silent gap is kinder than
+    an empty caption box). Returns an empty list when the campaign has
+    no planned dialogue lines at all.
+    """
+    from ..services import dialogue_service as _dlg
+    lines = list(record.dialogue_lines or [])
+    if not lines:
+        return []
+    durations: list[float] = []
+    missing: list[int] = []
+    for idx, line in enumerate(lines):
+        clip = _dlg.line_path(settings, record.id, line.id)
+        d = probe_duration(clip)
+        if d is None or d <= 0:
+            durations.append(0.0)
+            missing.append(idx)
+        else:
+            durations.append(d)
+    if missing:
+        # Spread the unaccounted-for runtime across lines that had no
+        # measurable duration (e.g. cleared cache + stale stitch).
+        known_total = sum(durations[i] for i in range(len(durations)) if i not in missing)
+        remaining = max(0.0, (fallback_total or 0.0) - known_total)
+        if remaining <= 0:
+            # Nothing to spread: give each missing line a 1.5 s nominal
+            # window so its caption still shows.
+            for i in missing:
+                durations[i] = 1.5
+        else:
+            slice_each = remaining / len(missing)
+            for i in missing:
+                durations[i] = slice_each
+    schedule: list[tuple[float, float, str]] = []
+    cursor = 0.0
+    for line, duration in zip(lines, durations):
+        text = (line.text or "").strip()
+        end = cursor + max(duration, 0.0)
+        if text:
+            schedule.append((cursor, end, text))
+        cursor = end
+    return schedule
+
+
+@router.post("/{campaign_id}/spokesperson-ad/reels", response_model=Campaign)
+def post_spokesperson_reels(
+    campaign_id: str,
+    settings: Settings = Depends(get_settings),
+    store: CampaignStore = Depends(_store),
+    finisher: VideoFinisher = Depends(_finisher),
+) -> Campaign:
+    """PR AG — letterbox the cached Spokesperson Ad into a 720x1280
+    vertical MP4. PR AH — burn the saved Commercial Script in as a
+    bottom-safe caption overlay. Source must already exist (caller
+    surfaces 409 when the talking-head clip hasn't been generated yet).
+    """
+    record = store.get(campaign_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="campaign not found")
+
+    source = host_path_for(settings, campaign_id)
+    if not source.exists():
+        store.update_reels_fields(
+            campaign_id, "spokesperson",
+            url=None, status="no_source",
+            error="generate the Spokesperson Ad first",
+        )
+        raise HTTPException(
+            status_code=409,
+            detail="Generate the Spokesperson Ad before exporting Reels",
+        )
+    if not is_ffmpeg_available():
+        store.update_reels_fields(
+            campaign_id, "spokesperson",
+            url=None, status="unavailable",
+            error="ffmpeg not found on PATH",
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="ffmpeg is unavailable on the server",
+        )
+
+    target = finisher.spokesperson_reels_path(campaign_id)
+    captions = _spokesperson_caption_schedule(record, source)
+    result = finisher.build_reels_export(source, target, captions=captions)
+    if result.status == "ok":
+        updated = store.update_reels_fields(
+            campaign_id, "spokesperson",
+            url=f"/api/campaigns/{campaign_id}/spokesperson-ad/reels",
+            status="ok",
+            error=None,
+        )
+    else:
+        logger.warning(
+            "spokesperson reels %s campaign=%s err=%s",
+            result.status, campaign_id, result.error,
+        )
+        updated = store.update_reels_fields(
+            campaign_id, "spokesperson",
+            url=None,
+            status=("unavailable" if result.status == "unavailable" else "failed"),
+            error=result.error,
+        )
+        if result.status == "unavailable":
+            raise HTTPException(status_code=503, detail=result.error or "ffmpeg unavailable")
+        raise HTTPException(status_code=500, detail=result.error or "reels export failed")
+    return updated or record
+
+
+@router.get("/{campaign_id}/spokesperson-ad/reels")
+def get_spokesperson_reels(
+    campaign_id: str,
+    finisher: VideoFinisher = Depends(_finisher),
+) -> FileResponse:
+    path = finisher.spokesperson_reels_path(campaign_id)
+    if not path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="No Spokesperson Reels export for this campaign",
+        )
+    return FileResponse(
+        str(path),
+        media_type="video/mp4",
+        filename=f"adspark-{campaign_id}-spokesperson-reels.mp4",
+    )
+
+
+@router.post("/{campaign_id}/dialogue-scene/reels", response_model=Campaign)
+def post_dialogue_scene_reels(
+    campaign_id: str,
+    settings: Settings = Depends(get_settings),
+    store: CampaignStore = Depends(_store),
+    finisher: VideoFinisher = Depends(_finisher),
+) -> Campaign:
+    """PR AG — letterbox the stitched Dialogue Scene into a 720x1280
+    vertical MP4. PR AH — burn each saved line's text in as a caption
+    overlay timed to that line's segment. Per-line durations come from
+    ffprobe over the cached line clips so captions track the actual
+    speech in the stitched output.
+    """
+    record = store.get(campaign_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="campaign not found")
+
+    source = finisher.dialogue_scene_path(campaign_id)
+    if not source.exists():
+        store.update_reels_fields(
+            campaign_id, "dialogue_scene",
+            url=None, status="no_source",
+            error="stitch the dialogue scene first",
+        )
+        raise HTTPException(
+            status_code=409,
+            detail="Stitch the Dialogue Scene before exporting Reels",
+        )
+    if not is_ffmpeg_available():
+        store.update_reels_fields(
+            campaign_id, "dialogue_scene",
+            url=None, status="unavailable",
+            error="ffmpeg not found on PATH",
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="ffmpeg is unavailable on the server",
+        )
+
+    target = finisher.dialogue_scene_reels_path(campaign_id)
+    fallback_total = probe_duration(source)
+    captions = _dialogue_caption_schedule(record, settings, fallback_total)
+    result = finisher.build_reels_export(source, target, captions=captions)
+    if result.status == "ok":
+        updated = store.update_reels_fields(
+            campaign_id, "dialogue_scene",
+            url=f"/api/campaigns/{campaign_id}/dialogue-scene/reels",
+            status="ok",
+            error=None,
+        )
+    else:
+        logger.warning(
+            "dialogue scene reels %s campaign=%s err=%s",
+            result.status, campaign_id, result.error,
+        )
+        updated = store.update_reels_fields(
+            campaign_id, "dialogue_scene",
+            url=None,
+            status=("unavailable" if result.status == "unavailable" else "failed"),
+            error=result.error,
+        )
+        if result.status == "unavailable":
+            raise HTTPException(status_code=503, detail=result.error or "ffmpeg unavailable")
+        raise HTTPException(status_code=500, detail=result.error or "reels export failed")
+    return updated or record
+
+
+@router.get("/{campaign_id}/dialogue-scene/reels")
+def get_dialogue_scene_reels(
+    campaign_id: str,
+    finisher: VideoFinisher = Depends(_finisher),
+) -> FileResponse:
+    path = finisher.dialogue_scene_reels_path(campaign_id)
+    if not path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="No Dialogue Scene Reels export for this campaign",
+        )
+    return FileResponse(
+        str(path),
+        media_type="video/mp4",
+        filename=f"adspark-{campaign_id}-dialogue-scene-reels.mp4",
+    )
 
 
 # ---- PR H — Brand Voice + Multilingual Dub --------------------------

@@ -192,6 +192,9 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
   const [dialogueLineSavingId, setDialogueLineSavingId] = useState(null)
   const [dialogueLineGenId, setDialogueLineGenId] = useState(null)
   const [dialogueStitchBusy, setDialogueStitchBusy] = useState(false)
+  // PR AG — Vertical / Reels export busy flags. One per output kind.
+  const [spokespersonReelsBusy, setSpokespersonReelsBusy] = useState(false)
+  const [dialogueReelsBusy, setDialogueReelsBusy] = useState(false)
   const [dialogueDrafts, setDialogueDrafts] = useState(() => {
     const out = {}
     for (const l of c.dialogue_lines || []) {
@@ -308,6 +311,12 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
     c.dialogue_scene_status === 'ok' && Boolean(c.dialogue_scene_video_url)
   const dialogueSomeMock =
     dialoguePlanned && dialogueLines.some((l) => l.mock_mode === true)
+  // PR AG — Vertical / Reels export readiness. Each kind is "ready"
+  // when status is ok and the URL persisted on the campaign record.
+  const spokespersonReelsReady =
+    c.spokesperson_reels_status === 'ok' && Boolean(c.spokesperson_reels_url)
+  const dialogueSceneReelsReady =
+    c.dialogue_scene_reels_status === 'ok' && Boolean(c.dialogue_scene_reels_url)
   // Avatar resolution chain: character > selected > host_avatar_id.
   // PR X uses this to decide whether the Build Voiced Commercial
   // button is enabled (true if EITHER a host clip exists OR an avatar
@@ -396,6 +405,35 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
       setLocalError(`spokesperson ad: ${e}`)
     } finally {
       setHostBusy(false)
+    }
+  }
+
+  // PR AG — Reels export handlers. Reuse existing rendered MP4s as
+  // input to a local ffmpeg pad pass; surface failures via the same
+  // localError banner pattern used by every other handler in this card.
+  const handleSpokespersonReels = async () => {
+    setLocalError('')
+    setSpokespersonReelsBusy(true)
+    try {
+      const updated = await api.buildSpokespersonReels(c.id)
+      onUpdated?.(updated)
+    } catch (e) {
+      setLocalError(`spokesperson reels: ${e}`)
+    } finally {
+      setSpokespersonReelsBusy(false)
+    }
+  }
+
+  const handleDialogueSceneReels = async () => {
+    setLocalError('')
+    setDialogueReelsBusy(true)
+    try {
+      const updated = await api.buildDialogueSceneReels(c.id)
+      onUpdated?.(updated)
+    } catch (e) {
+      setLocalError(`dialogue reels: ${e}`)
+    } finally {
+      setDialogueReelsBusy(false)
     }
   }
 
@@ -2079,6 +2117,36 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
                 >
                   download Spokesperson Ad ↗
                 </a>
+                {/* PR AG — Vertical / Reels export. Pads/letterboxes
+                    the existing 1088×704 talking-head MP4 into a
+                    720×1280 vertical clip via local ffmpeg. PR AH —
+                    captions burned in by default from the saved
+                    Commercial Script. No new Runway calls. */}
+                <button
+                  type="button"
+                  onClick={handleSpokespersonReels}
+                  disabled={spokespersonReelsBusy}
+                  data-testid="reels-spokesperson"
+                  className="text-[10px] rounded-md bg-violet-500/30 hover:bg-violet-500/45 text-violet-100 ring-1 ring-violet-400/40 px-2 py-0.5 font-semibold disabled:opacity-50"
+                  title="Letterbox to 720×1280 with burned-in captions for TikTok / Reels / Shorts"
+                >
+                  {spokespersonReelsBusy
+                    ? 'Building Reels…'
+                    : spokespersonReelsReady
+                    ? 'Rebuild Captioned Reels'
+                    : 'Captioned Reels (720×1280)'}
+                </button>
+                {spokespersonReelsReady && (
+                  <a
+                    href={c.spokesperson_reels_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[10px] text-spark hover:underline"
+                    download
+                  >
+                    download reels ↗
+                  </a>
+                )}
                 <button
                   type="button"
                   onClick={handlePresent}
@@ -2097,6 +2165,15 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
                   edit script ↗
                 </button>
               </div>
+              {c.spokesperson_reels_status === 'failed' &&
+                c.spokesperson_reels_error && (
+                  <p
+                    className="text-[10px] text-rose-300"
+                    title={c.spokesperson_reels_error}
+                  >
+                    Reels export failed: {c.spokesperson_reels_error}
+                  </p>
+                )}
               {/* PR AA — script provenance. Surfaces which script was
                   used so the user knows whether the audio reflects
                   the saved Commercial Script or the fallback template. */}
@@ -2722,6 +2799,35 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
                   >
                     download Dialogue Scene Ad ↗
                   </a>
+                  {/* PR AG — Vertical / Reels export. Pads the
+                      stitched 1088×704 dialogue scene into 720×1280
+                      via local ffmpeg. PR AH — burns each saved line's
+                      text in as a per-segment caption overlay. */}
+                  <button
+                    type="button"
+                    onClick={handleDialogueSceneReels}
+                    disabled={dialogueReelsBusy}
+                    data-testid="reels-dialogue"
+                    className="text-[10px] rounded-md bg-fuchsia-500/30 hover:bg-fuchsia-500/45 text-fuchsia-100 ring-1 ring-fuchsia-400/40 px-2 py-0.5 font-semibold disabled:opacity-50"
+                    title="Letterbox to 720×1280 with per-line captions for TikTok / Reels / Shorts"
+                  >
+                    {dialogueReelsBusy
+                      ? 'Building Reels…'
+                      : dialogueSceneReelsReady
+                      ? 'Rebuild Captioned Reels'
+                      : 'Captioned Reels (720×1280)'}
+                  </button>
+                  {dialogueSceneReelsReady && (
+                    <a
+                      href={c.dialogue_scene_reels_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[10px] text-spark hover:underline"
+                      download
+                    >
+                      download reels ↗
+                    </a>
+                  )}
                   <button
                     type="button"
                     onClick={handleStitchDialogue}
@@ -2732,6 +2838,15 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
                     {dialogueStitchBusy ? 'Re-stitching…' : 'rebuild'}
                   </button>
                 </div>
+                {c.dialogue_scene_reels_status === 'failed' &&
+                  c.dialogue_scene_reels_error && (
+                    <p
+                      className="text-[10px] text-rose-300"
+                      title={c.dialogue_scene_reels_error}
+                    >
+                      Reels export failed: {c.dialogue_scene_reels_error}
+                    </p>
+                  )}
               </div>
             ) : (
               <button
@@ -2845,6 +2960,21 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
       meta: c.host_mock_mode
         ? 'ffmpeg mock placeholder'
         : 'talking avatar video with synced voice (Runway avatar_videos)',
+    },
+    // PR AG — Vertical / Reels exports. Letterbox of the existing
+    // 1088×704 talking-head + dialogue-scene MP4s. PR AH — burned-in
+    // captions by default; label calls that out so judges + operators
+    // know what they're getting without playing the file. No new
+    // Runway calls.
+    {
+      label: 'Spokesperson Reels · 720×1280 · Captioned',
+      url: spokespersonReelsReady ? c.spokesperson_reels_url : null,
+      meta: 'ffmpeg pad/letterbox + drawtext from the saved Commercial Script',
+    },
+    {
+      label: 'Dialogue Scene Reels · 720×1280 · Captioned',
+      url: dialogueSceneReelsReady ? c.dialogue_scene_reels_url : null,
+      meta: 'ffmpeg pad/letterbox + per-line drawtext segments',
     },
     {
       label: 'Brand Voice Sample',

@@ -74,6 +74,19 @@ stitched into a longer (~15 s) silent or voiced cut.
     Runway `avatar_videos` clip targeted at a specific Character's
     avatar id. ffmpeg `concat=n=N:v=1:a=1` stitches with audio
     preserved. The multi-character branded skit primitive.
+14b. **Vertical / Reels exports with burned-in captions** (PR AG +
+    PR AH) — every Spokesperson Ad and Dialogue Scene MP4 can be
+    reframed into a 720×1280 vertical clip via local ffmpeg
+    (`scale=…:force_original_aspect_ratio=decrease` +
+    `pad=720:1280:(ow-iw)/2:(oh-ih)/2:color=#0b1220`). PR AH chains
+    `drawtext=…enable='between(t,a,b)'` filters on top so the saved
+    Commercial Script (Spokesperson) or per-line dialogue text
+    (Dialogue Scene, timed via ffprobe of the cached line clips)
+    is burned in as a bottom-safe subtitle box. Audio is preserved
+    end-to-end. Output lands at
+    `data/finished/<id>-spokesperson-reels.mp4` /
+    `data/finished/<id>-dialogue-scene-reels.mp4`. Distribution layer
+    only — no new Runway calls and no extra credit cost.
 15. **Brand Voice + Multilingual Dub Pack** — `/v1/voices`
     text-design + `/v1/voice_dubbing` into 29 languages. Sibling
     samples that demonstrate the brand voice; not the ad
@@ -143,6 +156,10 @@ audio, so duration = audio length).
     (`<id>-portrait.png`)
   - `backend/data/storyboard/` — per-shot cached MP4s
   - `backend/data/dialogue/` — per-line cached MP4s
+  - `backend/data/finished/<id>-spokesperson-reels.mp4` — PR AG
+    720×1280 vertical Spokesperson Ad
+  - `backend/data/finished/<id>-dialogue-scene-reels.mp4` — PR AG
+    720×1280 vertical Dialogue Scene Ad
 - **Finishing**: ffmpeg 7.1 (scale-cover + crop + drawtext for
   Campaign Pack; `-stream_loop -1 -shortest` for Voiced Cinematic
   Ad; `filter_complex concat` for Storyboard + Dialogue stitches;

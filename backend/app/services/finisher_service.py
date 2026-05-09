@@ -1,6 +1,7 @@
 import logging
 import shutil
 import subprocess
+import textwrap
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Optional
@@ -48,6 +49,53 @@ def is_ffmpeg_available() -> bool:
 
 def is_ffprobe_available() -> bool:
     return shutil.which("ffprobe") is not None
+
+
+def _wrap_caption_text(text: str, max_chars: int = 28) -> str:
+    """PR AH — collapse whitespace and wrap a caption string into
+    short lines that fit a 720-wide vertical frame at fontsize 36.
+    ``\\n``-joined output reads cleanly when handed to ffmpeg's
+    ``drawtext`` via ``textfile=``. Returns an empty string for blank
+    or whitespace-only input so callers can decide whether to skip
+    the segment entirely.
+    """
+    if not text:
+        return ""
+    flat = " ".join(text.split())
+    if not flat:
+        return ""
+    return "\n".join(textwrap.wrap(flat, width=max_chars)) or flat
+
+
+def probe_duration(path: Path) -> Optional[float]:
+    """PR AH — return the duration in seconds of an MP4 (or any media
+    file ffprobe understands), or None when ffprobe is missing / the
+    file is unreadable / the duration field is absent. Used by the
+    captioned reels pipeline to derive per-line timing schedules from
+    cached dialogue line clips.
+    """
+    if not is_ffprobe_available() or not path.exists():
+        return None
+    cmd = [
+        "ffprobe",
+        "-v", "error",
+        "-show_entries", "format=duration",
+        "-of", "default=noprint_wrappers=1:nokey=1",
+        str(path),
+    ]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+    except (subprocess.TimeoutExpired, OSError):
+        return None
+    if result.returncode != 0:
+        return None
+    raw = (result.stdout or "").strip()
+    if not raw:
+        return None
+    try:
+        return float(raw)
+    except ValueError:
+        return None
 
 
 def has_audio_stream(path: Path) -> bool:
@@ -581,6 +629,214 @@ class VideoFinisher:
                 status="failed",
                 error=f"unexpected: {exc!s}"[:200],
             )
+
+    # ---- PR AG — Vertical / Reels export ---------------------------
+
+    def spokesperson_reels_path(self, campaign_id: str) -> Path:
+        """Where the 720x1280 vertical Spokesperson Ad lives."""
+        return self.dir / f"{campaign_id}-spokesperson-reels.mp4"
+
+    def has_spokesperson_reels(self, campaign_id: str) -> bool:
+        return self.spokesperson_reels_path(campaign_id).exists()
+
+    def dialogue_scene_reels_path(self, campaign_id: str) -> Path:
+        """Where the 720x1280 vertical Dialogue Scene lives."""
+        return self.dir / f"{campaign_id}-dialogue-scene-reels.mp4"
+
+    def has_dialogue_scene_reels(self, campaign_id: str) -> bool:
+        return self.dialogue_scene_reels_path(campaign_id).exists()
+
+    def build_reels_export(
+        self,
+        source_path: Path,
+        target_path: Path,
+        *,
+        backdrop_color: str = "0x0b1220",
+        target_w: int = 720,
+        target_h: int = 1280,
+        captions: Optional[list[tuple[float, float, str]]] = None,
+        caption_max_chars: int = 28,
+        timeout: float = 120.0,
+    ) -> CommercialResult:
+        """PR AG — pad/letterbox an existing horizontal MP4 into a 720x1280
+        vertical export suitable for TikTok / Reels / Shorts. Aspect-preserve
+        scale-to-fit then pad the remaining bars with ``backdrop_color``.
+
+        Output is h264 + AAC. Audio is re-encoded so the muxer always has a
+        well-formed AAC track even when the source's audio params drift
+        (silent placeholders, weird sample rates, etc). Duration matches the
+        source within ffmpeg's normal frame-boundary precision.
+
+        Backdrop default is a dark slate that reads as intentional letterbox
+        on any avatar/dialogue clip; callers can pass an explicit ffmpeg
+        color spec (``"0xRRGGBB"`` or a named colour) when a brand colour
+        is available.
+
+        PR AH — when ``captions`` is supplied, each ``(start, end, text)``
+        triple becomes a chained ffmpeg ``drawtext`` filter with an
+        ``enable=between(t,start,end)`` time gate. Captions are word-wrapped
+        with ``textwrap`` to ``caption_max_chars`` per line so they fit
+        comfortably inside a 720-wide vertical frame at fontsize 36; the
+        block sits in the bottom-safe region with a translucent black box
+        so the talking head above stays readable. When the system has no
+        usable font we silently skip the captions — never blocks the export.
+
+        Never raises — caller inspects the returned CommercialResult.
+        """
+        if not is_ffmpeg_available():
+            return CommercialResult(
+                status="unavailable",
+                error="ffmpeg not found on PATH",
+            )
+        if not source_path.exists():
+            return CommercialResult(
+                status="no_video",
+                error=f"source missing: {source_path.name}",
+            )
+
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = target_path.with_suffix(".mp4.tmp")
+
+        # scale=…:force_original_aspect_ratio=decrease keeps the source
+        # aspect; pad fills the remaining bars centered. setsar=1 forces
+        # square pixels so downstream players don't apply a stretch hint.
+        filter_parts = [
+            f"scale={target_w}:{target_h}:force_original_aspect_ratio=decrease",
+            f"pad={target_w}:{target_h}:(ow-iw)/2:(oh-ih)/2:color={backdrop_color}",
+            "setsar=1",
+        ]
+
+        # PR AH — caption layer. Each segment becomes its own drawtext
+        # node; we write the text to a file so ffmpeg's filter parser
+        # never has to escape ' \ : etc inside the user text. Files live
+        # in self.dir under a hidden prefix so they don't clutter the
+        # finished/ ledger and are wiped via the try/finally below.
+        caption_files: list[Path] = []
+        if captions:
+            if self._font:
+                font_esc = self._font.replace(":", r"\:")
+                stem = target_path.stem
+                for idx, (start, end, raw_text) in enumerate(captions):
+                    wrapped = _wrap_caption_text(raw_text, caption_max_chars)
+                    if not wrapped:
+                        continue
+                    cf = self.dir / f".{stem}-cap-{idx}.txt"
+                    cf.write_text(wrapped, encoding="utf-8")
+                    caption_files.append(cf)
+                    cf_esc = str(cf).replace(":", r"\:")
+                    # Bottom-safe placement: leaves ~110 px of breathing
+                    # room beneath the caption block on a 1280-tall frame
+                    # (TikTok safe zone for the like / comment column).
+                    # box=1 + boxborderw=18 + black@0.6 keeps the text
+                    # readable over any backdrop and any face above it.
+                    filter_parts.append(
+                        "drawtext="
+                        f"fontfile='{font_esc}':"
+                        f"textfile='{cf_esc}':"
+                        "fontsize=36:"
+                        "fontcolor=white:"
+                        "line_spacing=8:"
+                        "x=(w-text_w)/2:"
+                        "y=h-text_h-110:"
+                        "box=1:"
+                        "boxcolor=black@0.6:"
+                        "boxborderw=18:"
+                        f"enable='between(t\\,{start:.3f}\\,{end:.3f})'"
+                    )
+            else:
+                logger.warning(
+                    "reels captions skipped: no usable system font (font candidates exhausted)"
+                )
+
+        vf = ",".join(filter_parts)
+
+        cmd = [
+            "ffmpeg",
+            "-y",
+            "-loglevel", "error",
+            "-i", str(source_path),
+            "-vf", vf,
+            "-c:v", "libx264",
+            "-preset", "veryfast",
+            "-crf", "23",
+            "-pix_fmt", "yuv420p",
+            "-c:a", "aac",
+            "-b:a", "192k",
+            "-movflags", "+faststart",
+            "-f", "mp4",
+            str(tmp),
+        ]
+        if not has_audio_stream(source_path):
+            # No audio on the source (e.g. ffmpeg lavfi mock placeholder
+            # without an audio stream) — synthesise a silent AAC track so
+            # the output keeps the h264 + AAC contract regardless of what
+            # the source carried.
+            cmd = [
+                "ffmpeg",
+                "-y",
+                "-loglevel", "error",
+                "-i", str(source_path),
+                "-f", "lavfi",
+                "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",
+                "-vf", vf,
+                "-map", "0:v:0",
+                "-map", "1:a:0",
+                "-c:v", "libx264",
+                "-preset", "veryfast",
+                "-crf", "23",
+                "-pix_fmt", "yuv420p",
+                "-c:a", "aac",
+                "-b:a", "192k",
+                "-shortest",
+                "-movflags", "+faststart",
+                "-f", "mp4",
+                str(tmp),
+            ]
+
+        try:
+            logger.info(
+                "ffmpeg reels export src=%s -> %s captions=%d",
+                source_path.name, target_path.name, len(caption_files),
+            )
+            result = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=timeout
+            )
+            if result.returncode != 0:
+                stderr = (result.stderr or "").strip()[-300:]
+                tmp.unlink(missing_ok=True)
+                return CommercialResult(
+                    status="failed",
+                    error=f"ffmpeg rc={result.returncode}: {stderr}",
+                )
+            if not tmp.exists():
+                return CommercialResult(
+                    status="failed",
+                    error="ffmpeg ok but reels output missing",
+                )
+            tmp.replace(target_path)
+            return CommercialResult(status="ok", output_path=target_path)
+        except subprocess.TimeoutExpired:
+            tmp.unlink(missing_ok=True)
+            return CommercialResult(
+                status="failed",
+                error=f"ffmpeg timed out after {timeout}s",
+            )
+        except OSError as exc:
+            tmp.unlink(missing_ok=True)
+            return CommercialResult(
+                status="failed",
+                error=f"io error: {exc}"[:200],
+            )
+        except Exception as exc:
+            tmp.unlink(missing_ok=True)
+            logger.exception("unexpected ffmpeg error (reels export)")
+            return CommercialResult(
+                status="failed",
+                error=f"unexpected: {exc!s}"[:200],
+            )
+        finally:
+            for cf in caption_files:
+                cf.unlink(missing_ok=True)
 
     def build_voiced_storyboard(
         self,

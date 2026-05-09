@@ -638,8 +638,10 @@ MP4. Output: `data/finished/<id>-dialogue-scene.mp4`.
   to line N+1's character. Acceptable for skit-style cuts; real
   multi-character co-presence would need Runway-side simultaneous
   realtime or Act-Two with driving videos (deferred).
-- **Output is 1088×704 horizontal.** Vertical export is Tier-1
-  future polish.
+- ~~**Output is 1088×704 horizontal.** Vertical export is Tier-1
+  future polish.~~ **Resolved by PR AG.** A 720×1280 vertical
+  letterbox is now one click away on both the Spokesperson Ad and
+  Dialogue Scene cards. See §11 "Building the Reels exports".
 - **No caption overlays.** Per-line text is saved but not yet
   burned in via `subtitles=`. Tier-1 future polish.
 - **300 chars per line.** Matches `avatar_videos` speech limit.
@@ -694,10 +696,64 @@ Every cached artefact a saved campaign can produce:
 | Storyboard Commercial | `data/finished/<id>-storyboard.mp4` | both | 3-shot stitch, ~15 s, silent |
 | Voiced Storyboard | `data/finished/<id>-storyboard-voice.mp4` | both | storyboard + host audio mux |
 | Spokesperson Ad | `data/host/<id>.mp4` | both | `avatar_videos` render |
+| Spokesperson Reels (PR AG + AH) | `data/finished/<id>-spokesperson-reels.mp4` | both | 720×1280 letterbox + burned-in caption from the saved Commercial Script — h264 + AAC |
 | Dialogue Scene Ad | `data/finished/<id>-dialogue-scene.mp4` | both | N-line stitch with audio preserved |
+| Dialogue Scene Reels (PR AG + AH) | `data/finished/<id>-dialogue-scene-reels.mp4` | both | 720×1280 letterbox + per-line burned-in captions timed via ffprobe — h264 + AAC |
 | Brand Voice Sample | `data/audio/<id>-voice-preview.mp3` | both | mock = silent placeholder |
 | Voice Sample — `<lang>` | `data/audio/<id>-dub-<lang>.mp3` | both | per-language dub of the Brand Voice sample |
 | Realtime session | (no cache; live WebRTC only) | real only | mock returns 503 |
+
+### Building the Reels exports
+
+The **Captioned Reels (720×1280)** button lives next to
+**`download Spokesperson Ad ↗`** (Character tab) and next to
+**`download Dialogue Scene Ad ↗`** (Dialogue tab) once the
+underlying clip is ready. Click it; ffmpeg runs locally
+(~1–3 s); the inline `download reels ↗` link unlocks and the
+matching Exports row flips from *not generated yet* to a
+`download ↓` link.
+
+Backend routes (unchanged from PR AG; PR AH layered captions on
+top without adding new endpoints):
+
+```
+POST /api/campaigns/{id}/spokesperson-ad/reels
+GET  /api/campaigns/{id}/spokesperson-ad/reels
+POST /api/campaigns/{id}/dialogue-scene/reels
+GET  /api/campaigns/{id}/dialogue-scene/reels
+```
+
+Preconditions surface as 409s the UI handles: source MP4 must
+already exist (Spokesperson Ad rendered or Dialogue Scene stitched).
+ffmpeg-missing surfaces as 503. Output dimensions are pinned at
+720×1280 with a dark slate backdrop (`#0b1220`) — no brand-colour
+override is wired today.
+
+### Captions (PR AH)
+
+Captions are **on by default**. Both Reels routes burn text into
+the output via chained ffmpeg `drawtext` filters; nothing extra
+to click.
+
+- **Spokesperson Reels** captions = `campaign.commercial_script`
+  (PR AA) when set, otherwise the deterministic
+  `character_host_client.build_script` template that the host
+  pipeline itself uses. The full caption shows for the whole
+  clip duration (no word-level timing).
+- **Dialogue Scene Reels** captions = each saved line's text,
+  timed to its segment by ffprobe-ing the cached
+  `data/dialogue/<id>-<line_id>.mp4` files and accumulating
+  durations. Lines whose cached clip is missing get an even
+  share of the leftover stitched-output runtime as a fallback,
+  so the caption schedule still spans the whole scene.
+
+Styling: `fontsize=36`, white text on a 60 %-opaque black box,
+`boxborderw=18`, line spacing 8, `textwrap` width 28 chars,
+positioned at `y=h-text_h-110` (bottom-safe / TikTok-safe). The
+`box=1` background guarantees readable contrast over any avatar
+or backdrop. When no usable system font is found, the export
+still completes — the caption layer is silently skipped rather
+than failing.
 
 The Exports tab on each saved campaign card is the canonical UI
 ledger of all of the above.

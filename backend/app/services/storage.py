@@ -573,6 +573,47 @@ class CampaignStore:
                     return Campaign.model_validate(row)
         return None
 
+    def update_reels_fields(
+        self,
+        campaign_id: str,
+        kind: str,
+        url: Optional[str],
+        status: Optional[str],
+        error: Optional[str],
+    ) -> Optional[Campaign]:
+        """PR AG — persist Vertical / Reels export fields. ``kind`` is
+        either ``"spokesperson"`` or ``"dialogue_scene"`` and selects
+        which pair of fields to write. Mirrors the per-feature update
+        shape used elsewhere in this store; never raises.
+        """
+        if kind not in {"spokesperson", "dialogue_scene"}:
+            return None
+        url_field = (
+            "spokesperson_reels_url"
+            if kind == "spokesperson"
+            else "dialogue_scene_reels_url"
+        )
+        status_field = (
+            "spokesperson_reels_status"
+            if kind == "spokesperson"
+            else "dialogue_scene_reels_status"
+        )
+        error_field = (
+            "spokesperson_reels_error"
+            if kind == "spokesperson"
+            else "dialogue_scene_reels_error"
+        )
+        with _LOCK:
+            rows = self._read()
+            for row in rows:
+                if row.get("id") == campaign_id:
+                    row[url_field] = url
+                    row[status_field] = status
+                    row[error_field] = error
+                    self._write(rows)
+                    return Campaign.model_validate(row)
+        return None
+
     def update_finish_fields(
         self,
         campaign_id: str,

@@ -1,22 +1,29 @@
 # START NEXT SESSION — AdSpark Studio
 
-**Last touched:** 2026-05-09 (PR AF merged + tagged
-`hackathon-submission-v13`; this docs refresh adds the Operator
-Usage Map + SESSION_011 handoff).
+**Last touched:** 2026-05-09 (PR AG Vertical / Reels Export +
+PR AH Burned-in Captions implemented on top of the v13 anchors;
+SESSION_012 + SESSION_013 handoffs added).
 
 ## Where things stand
 
-- **Branch:** `main` at `ec446e4` — synced with `origin/main`. Working
-  tree clean.
-- **Latest tag:** **`hackathon-submission-v13`** at `ec446e4` (PR AF
-  Multi-Character Dialogue Scene Builder). Submission tag roster on
-  origin: `hackathon-submission`, `v2`, `v3`, `v4`, `v5`, `v6`, `v8`,
-  `v9`, `v10`, `v11`, `v12`, `v13` (`v7` was deliberately skipped —
-  the next manual hero recording is still pending).
-- **Backend routes:** 57 application + FastAPI built-ins.
-- **Frontend build:** 290.87 KB initial JS / 82.95 KB gzip + 561.97 KB
-  lazy `@runwayml/avatars-react` chunk.
-- **Playwright smoke:** `1 passed (~23 s)` against the mock backend.
+- **Branch:** `main` (PR AG + PR AH patch in flight on top of
+  `ec446e4`; no commits yet, no tag pushed).
+- **Latest tag:** still **`hackathon-submission-v13`** at `ec446e4`
+  (PR AF). PR AG + PR AH together ship the next `v14`-eligible
+  feature pair; tag is **not** pushed yet.
+- **Backend routes:** **61** application + FastAPI built-ins
+  (was 57 at v13). PR AG added four new routes
+  (`POST/GET /api/campaigns/{id}/spokesperson-ad/reels` and
+  `POST/GET /api/campaigns/{id}/dialogue-scene/reels`); PR AH
+  layered captions on top of the same routes without adding any
+  new endpoints.
+- **Frontend build:** 293.49 KB initial JS / 83.46 KB gzip + 561.97 KB
+  lazy `@runwayml/avatars-react` chunk (≈ +0.14 KB initial /
+  +0.05 KB gzip vs PR AG; PR AH was a copy-only change).
+- **Playwright smoke:** `1 passed (~23 s)` against the mock backend
+  with two ledger-row assertions for the captioned Reels exports
+  (`Spokesperson Reels · 720×1280 · Captioned` /
+  `Dialogue Scene Reels · 720×1280 · Captioned`).
 - **Repo:** https://github.com/clwest/adspark-studio-runway-hackathon
   (private). Pushes happen on explicit user approval.
 - **Stale local feature branches:** 22 left over from PR A through
@@ -24,6 +31,32 @@ Usage Map + SESSION_011 handoff).
   (the user can run `git branch -d feature/...` whenever).
 
 ## What's implemented (full feature stack on `main`)
+
+### Distribution layer (PR AG — Vertical / Reels Export · PR AH — Burned-in Captions)
+
+- **Spokesperson Reels (720×1280, captioned)** — one click on
+  the saved Spokesperson Ad card runs a local ffmpeg pad/letterbox
+  over `data/host/<id>.mp4` and burns the saved Commercial Script
+  in via `drawtext`; writes
+  `data/finished/<id>-spokesperson-reels.mp4`.
+- **Dialogue Scene Reels (720×1280, captioned)** — same pipeline
+  over the stitched dialogue MP4, with each saved line's text
+  burned in over its matching segment (timings derived from
+  ffprobe of the cached line clips). Writes
+  `data/finished/<id>-dialogue-scene-reels.mp4`.
+- ffprobe-verified: `720×1280`, `h264 + aac`, duration matches
+  source within ffmpeg precision (5.0 s spokesperson / 15.0 s
+  dialogue measured during PR AH verification).
+- Visual-verified: bottom-safe caption box with white-on-black
+  high-contrast text; per-line dialogue captions change between
+  segments; multi-line word wrap at ~28 chars/line.
+- No new Runway calls. Source clips must already exist (caller
+  surfaces 409 otherwise). ffmpeg-missing surfaces as 503. Caption
+  layer is silently skipped (export still succeeds) when no usable
+  system font is found.
+- Mock mode produces real ffmpeg-padded + drawtext'd outputs over
+  the lavfi placeholder MP4s so CI/Playwright can flip the Exports
+  rows without keys.
 
 ### Three ad modes (the headline architecture)
 
@@ -91,11 +124,11 @@ Usage Map + SESSION_011 handoff).
 2. **Read** `docs/OPERATOR_USAGE_MAP.md` for end-to-end "how do I use
    this thing" instructions across all twelve surfaces.
 3. **Pick one** of the recommended next phases (in
-   `docs/handoffs/SESSION_011_OPERATOR_USAGE_MAP.md` §Next phases):
-   - **Vertical / Reels export** — automatic 720×1280 letterbox of
-     Spokesperson Ad + Dialogue Scene outputs.
-   - **Caption overlays** — burn-in subtitles for Dialogue Scene
-     lines via ffmpeg `subtitles=`.
+   `docs/handoffs/SESSION_011_OPERATOR_USAGE_MAP.md` §Next phases —
+   the Vertical / Reels + Captions items are now ✅ landed):
+   - ✅ ~~Vertical / Reels export~~ — shipped in PR AG.
+   - ✅ ~~Caption overlays~~ — shipped in PR AH (Reels-only;
+     horizontal Dialogue Scene Ad captions still optional polish).
    - **Avatar RAG / `documentIds`** — attach campaign brief +
      FAQ as a knowledge document so realtime can answer grounded
      questions about the brand (Tier-1 from the avatar deep review).
