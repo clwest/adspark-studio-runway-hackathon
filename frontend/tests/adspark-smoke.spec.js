@@ -1065,24 +1065,51 @@ test('AdSpark Studio UX v2 SpokespersonStudio scaffold', async ({ page }) => {
     modal.getByTestId('campaign-mode-card-dialogue'),
   ).toContainText(/Dialogue Scene/i)
   // Pick Spokesperson Ad → modal closes → pill appears with the
-  // matching mode label + the "Mode selected." copy.
+  // matching mode label + (PR BI) the "Spokesperson Ad lane open."
+  // copy that signals the new lane is mounted below.
   await modal.getByTestId('campaign-mode-card-spokesperson').click()
   await expect(modal).toHaveCount(0)
   const activeModePill = page.getByTestId('spokesperson-active-mode')
   await expect(activeModePill).toBeVisible()
   await expect(activeModePill).toHaveAttribute('data-mode', 'spokesperson')
   await expect(activeModePill).toContainText(/Spokesperson Ad/i)
-  await expect(activeModePill).toContainText(/Mode selected/i)
+  await expect(activeModePill).toContainText(/Spokesperson Ad lane open/i)
+
+  // PR BI — Spokesperson Ad lane scaffold. Mounts below the pill
+  // when activeMode === "spokesperson". Three step boxes render
+  // unconditionally (so the smoke can rely on the testids); the
+  // two render targets are disabled placeholders in this slice.
+  const lane = page.getByTestId('spokesperson-lane')
+  await expect(lane).toBeVisible()
+  await expect(lane).toHaveAttribute('data-mode', 'spokesperson')
+  await expect(lane).toContainText(/Spokesperson Ad lane/i)
+  await expect(lane.getByTestId('spokesperson-lane-step-brief')).toBeVisible()
+  await expect(lane.getByTestId('spokesperson-lane-step-script')).toBeVisible()
+  await expect(lane.getByTestId('spokesperson-lane-step-render')).toBeVisible()
+  // Both render targets render as disabled placeholder buttons.
+  const horizontalBtn = lane.getByTestId('spokesperson-lane-horizontal')
+  const reelsBtn = lane.getByTestId('spokesperson-lane-reels')
+  await expect(horizontalBtn).toBeVisible()
+  await expect(reelsBtn).toBeVisible()
+  await expect(horizontalBtn).toBeDisabled()
+  await expect(reelsBtn).toBeDisabled()
+  await expect(horizontalBtn).toHaveAttribute('data-render-target', 'horizontal')
+  await expect(reelsBtn).toHaveAttribute('data-render-target', 'reels')
   // localStorage carries the persisted choice so a future session
   // surfaces the same pill on first paint.
   const persisted = await page.evaluate(() =>
     window.localStorage.getItem('adspark.activeMode'),
   )
   expect(persisted).toBe('spokesperson')
-  // Dismiss link clears the pill + the localStorage entry.
+  // Dismiss link clears the pill + the localStorage entry. PR BI —
+  // the Spokesperson lane unmounts at the same time because it's
+  // gated on `activeMode === "spokesperson"`.
   await page.getByTestId('spokesperson-active-mode-dismiss').click()
   await expect(
     page.getByTestId('spokesperson-active-mode'),
+  ).toHaveCount(0)
+  await expect(
+    page.getByTestId('spokesperson-lane'),
   ).toHaveCount(0)
   const cleared = await page.evaluate(() =>
     window.localStorage.getItem('adspark.activeMode'),

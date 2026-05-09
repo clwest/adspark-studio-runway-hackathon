@@ -10,6 +10,7 @@ import {
 } from '../uxFlag.js'
 import CampaignModeModal from './CampaignModeModal.jsx'
 import SpokespersonCard from './SpokespersonCard.jsx'
+import SpokespersonLane from './lanes/SpokespersonLane.jsx'
 
 // PR BH — operator-friendly labels per campaign mode. Backend has
 // no schema for these yet; selection lives in localStorage until
@@ -283,7 +284,11 @@ export default function SpokespersonStudio({
       </div>
 
       {/* Selected mode pill + dismiss link. Renders only after the
-          operator has chosen a mode in the modal. */}
+          operator has chosen a mode in the modal. PR BI — when the
+          mode is "spokesperson", the placeholder copy is replaced
+          with a lane-open status string (the lane itself mounts
+          below the pill). Other modes still show the original
+          placeholder until their lanes ship in PR BJ–BK. */}
       {activeMode && (
         <div
           data-testid="spokesperson-active-mode"
@@ -301,8 +306,17 @@ export default function SpokespersonStudio({
               {MODE_LABELS[activeMode] || activeMode}
             </span>
             <span className="text-[11px] text-zinc-300">
-              <span className="font-semibold">Mode selected.</span>{' '}
-              Lane-specific builder lands next (PR BJ–BL).
+              {activeMode === CAMPAIGN_MODES.SPOKESPERSON ? (
+                <>
+                  <span className="font-semibold">Spokesperson Ad lane open.</span>{' '}
+                  Cinematic / Dialogue lanes land next (PR BJ–BK).
+                </>
+              ) : (
+                <>
+                  <span className="font-semibold">Mode selected.</span>{' '}
+                  Lane-specific builder lands next (PR BJ–BL).
+                </>
+              )}
             </span>
           </div>
           <button
@@ -315,6 +329,26 @@ export default function SpokespersonStudio({
             dismiss
           </button>
         </div>
+      )}
+
+      {/* PR BI — Spokesperson Ad lane scaffold. Mounts below the
+          pill only when the operator has chosen the spokesperson
+          mode. Receives the active spokesperson (set via PR U
+          "Use as Spokesperson") + that spokesperson's linked
+          campaigns indexed in this component. */}
+      {activeMode === CAMPAIGN_MODES.SPOKESPERSON && (
+        <SpokespersonLane
+          activeSpokesperson={
+            activeCharacterId
+              ? characters.find((c) => c.id === activeCharacterId) || null
+              : null
+          }
+          linkedCampaigns={
+            activeCharacterId
+              ? campaignsByCharacter[activeCharacterId] || []
+              : []
+          }
+        />
       )}
 
       {loading ? (
