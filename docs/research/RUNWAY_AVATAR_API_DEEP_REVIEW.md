@@ -715,3 +715,107 @@ Where docs and observed behaviour diverged, **observed behaviour wins**
 (empirically: preset characters are not API-listable; AdSpark's
 `SUPPORTED_VOICE_PRESETS` is canonical for the 30 preset ids;
 `avatar_videos` script length effectively caps at 300 chars).
+
+---
+
+## 17. PR AE — Realtime Campaign Context Injection (2026-05-09)
+
+Tier-1 item §12.1 from this doc landed. The realtime broker
+(`backend/app/services/realtime_avatar_client.py`) now composes
+`personality` + `startScript` overrides from the saved campaign +
+attached character + commercial_script and merges them into the
+`POST /v1/realtime_sessions` body.
+
+### Override payload (verified)
+
+```python
+# overrides emitted by _build_session_overrides(campaign, settings)
+{
+  "personality": "<system-prompt-style string ≤ 9,500 chars>",
+  "startScript": "<opening line ≤ 280 chars>"
+}
+```
+
+The personality string follows the Runway-recommended ordering
+(business → character voice → script + concept → behaviour rule):
+
+```
+You are {character.name}, the brand {character.template} for {business}.
+The product is {product}. The audience: {audience}. Tone: {tone}.
+Speak in your {voice_preset} voice.
+Personality cue: {character.personality}
+Campaign hook: {hook}
+Supporting caption: {caption}
+Call to action: {cta}
+Saved commercial script: {commercial_script}
+Stay concise, warm, and brand-honest. When the user asks about the
+product or audience, answer with the cues above. If asked something
+unrelated, redirect politely back to the campaign.
+```
+
+Every line is conditional — empty fields drop out cleanly so the
+helper degrades gracefully on incomplete campaigns. Empty-campaign
+edge case still emits a coherent fallback ("You are the brand
+spokesperson. Stay concise…" + "Hi, I'm your spokesperson. I'm
+here to talk about X and X.").
+
+### startScript composition
+
+1. First sentence of `commercial_script` when present (truncated to
+   280 chars on a sentence/word boundary).
+2. Templated fallback `"Hi, I'm {character.name}. I'm here to talk
+   about {business} and {product}."` when no script exists but a
+   business name is set.
+3. Empty when neither is set — `startScript` key drops out of the
+   body (Runway uses its default greeting).
+
+### Defensive fallback
+
+If Runway returns **HTTP 400** with the override keys present, the
+broker logs (with `_redact()` to scrub Bearer tokens / sessionKey
+JWTs) and **retries once with the bare `{model, avatar}` body**.
+Same as pre-PR-AE behaviour. Keeps realtime working even if Runway
+removes or renames the override keys without notice.
+
+### Logging hygiene
+
+A new `_redact(text, limit=200)` helper strips:
+- `Bearer <token>` → `Bearer <redacted>`
+- `sk_*` / `rwk_*` / `key_*` / `sessionKey*` → `<redacted>`
+- `eyJ…` JWT-shaped strings → `<redacted-jwt>`
+
+Used on any external response text we log.
+
+### Frontend copy
+
+`RealtimeSpokesperson.jsx` caption (gated + idle paths) updated to:
+
+> "This avatar knows the campaign brief and saved script. Ask it
+>  about the product, audience, or pitch."
+
+Suggested-prompt chips reframed as *starter questions* rather than
+context patches.
+
+### Verification
+
+- Backend smoke-import: 51 routes (no schema/route change).
+- Contract test (real-mode probe path) on a CEO Buzz fixture:
+  personality 729 chars including business / product / audience /
+  saved script, startScript = "Meet CEO Buzz." (first sentence).
+  Empty-campaign path emits coherent fallback.
+- Frontend Playwright smoke: 1 passed (~21 s) with the new caption
+  assertion.
+
+### Remaining limitations
+
+- **No persistent transcript yet.** `GET /v1/avatar_conversations`
+  remains unwired; no "replay your conversation" UX.
+- **No RAG document attachment.** `POST /v1/documents` +
+  `PATCH /v1/avatars/{id}` `documentIds=[...]` still on the deferred
+  list (§12.2). Personality strings carry the campaign brief
+  inline today, which is fine for short campaigns but won't scale
+  to long catalogues.
+- **No per-session A/B testing of personalities.** The override is
+  derived deterministically from the saved campaign. If we ever want
+  side-by-side personality variants, surface a `personality_variant`
+  selector + persist the chosen variant on the session record.

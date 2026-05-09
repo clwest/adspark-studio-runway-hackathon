@@ -16,10 +16,18 @@ the router enforces the gate.
 
 See ``docs/research/RUNWAY_REALTIME_SPOKESPERSON_SPIKE.md`` for the
 locked schema and the rationale behind every choice in this module.
+
+PR AE — campaign context injection. The session-create body now
+carries ``personality`` + ``startScript`` overrides composed from
+the saved campaign + character + commercial_script so the live
+avatar opens with brand-aware context instead of a generic greeting.
+The overrides are documented in
+``docs/research/RUNWAY_AVATAR_API_DEEP_REVIEW.md`` §5.
 """
 from __future__ import annotations
 
 import logging
+import re
 import time
 from dataclasses import dataclass
 from typing import Optional
@@ -38,6 +46,13 @@ _REALTIME_MODEL = "gwm1_avatars"
 # upstream variability without blocking the request indefinitely.
 _READY_POLL_INTERVAL_S = 0.5
 _READY_POLL_TIMEOUT_S = 30.0
+
+# PR AE — Runway documents personality up to 10,000 chars.
+# Cap below that on a sentence boundary so we never bump the wire.
+_PERSONALITY_MAX = 9500
+# Empirical avatar_videos limit; safe ceiling for an opening line.
+_START_SCRIPT_MAX = 280
+_SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
 
 
 @dataclass
@@ -58,12 +73,189 @@ class RealtimeUnavailableError(RuntimeError):
     """
 
 
+def _redact(text: str, limit: int = 200) -> str:
+    """Defensive log-safety helper. Strips Bearer tokens, sessionKey
+    JWT-shaped strings, and `key_…`/`rwk_…` patterns before truncating
+    to ``limit`` chars. Used for any external-response text we log so a
+    misbehaving upstream can never leak credentials into the log file.
+    """
+    if not text:
+        return ""
+    cleaned = re.sub(r"Bearer\s+[A-Za-z0-9._\-]+", "Bearer <redacted>", text)
+    cleaned = re.sub(
+        r"\b(?:sk_|rwk_|key_|sessionKey)[A-Za-z0-9._\-]+", "<redacted>", cleaned,
+    )
+    cleaned = re.sub(r"\beyJ[A-Za-z0-9._\-]{20,}", "<redacted-jwt>", cleaned)
+    cleaned = cleaned.replace("\n", " ").strip()
+    return cleaned[:limit]
+
+
 def _runway_headers(settings: Settings) -> dict[str, str]:
     return {
         "Authorization": f"Bearer {settings.runway_api_key}",
         "X-Runway-Version": settings.runway_api_version,
         "Content-Type": "application/json",
     }
+
+
+# ---- PR AE — campaign context overrides --------------------------------
+
+def _trim(text: Optional[str]) -> str:
+    return (text or "").strip()
+
+
+def _attached_character(campaign: Campaign, settings: Settings) -> Optional[dict]:
+    """Lazy-load the attached Character record (mirrors the
+    character_host_client lookup pattern). Returns None when the
+    campaign has no attached character or the lookup fails — the
+    overrides helper degrades gracefully.
+    """
+    if not campaign.character_id:
+        return None
+    # Lazy import to avoid the same circular dependency the host
+    # client already documented around CharacterStore.
+    from .character_store import CharacterStore  # noqa: WPS433
+
+    try:
+        record = CharacterStore(settings.data_path).get(campaign.character_id)
+    except Exception:  # pragma: no cover — defensive
+        return None
+    if not record:
+        return None
+    return record.model_dump()
+
+
+def _truncate_at_sentence(text: str, limit: int) -> str:
+    """Trim ``text`` to ``limit`` chars on the nearest sentence boundary
+    so the wire never carries half a phrase. Falls back to a word
+    boundary when no sentence stop fits inside the cap.
+    """
+    if not text:
+        return ""
+    if len(text) <= limit:
+        return text
+    truncated = text[:limit]
+    stop = max(
+        truncated.rfind("."),
+        truncated.rfind("!"),
+        truncated.rfind("?"),
+    )
+    if stop > limit // 2:
+        return truncated[: stop + 1].strip()
+    return truncated.rsplit(" ", 1)[0].rstrip(",.;:!?").strip()
+
+
+def _first_sentence(text: str, limit: int = _START_SCRIPT_MAX) -> str:
+    """Take the first sentence (or the leading clause when no
+    punctuation exists) of ``text`` and clip to ``limit`` chars.
+    """
+    cleaned = _trim(text)
+    if not cleaned:
+        return ""
+    parts = [p for p in _SENTENCE_SPLIT.split(cleaned) if p]
+    head = parts[0] if parts else cleaned
+    return _truncate_at_sentence(head, limit)
+
+
+def _build_session_overrides(
+    campaign: Campaign, settings: Settings,
+) -> dict[str, str]:
+    """Compose ``personality`` + ``startScript`` overrides for the
+    realtime session from the saved campaign + attached character +
+    saved Commercial Script. Both keys are optional in the Runway
+    request — only non-empty values land in the returned dict so the
+    broker never sends empty strings to the wire.
+
+    Order matters: business context first, character voice second,
+    script + concept last. Runway's GWM-1 weights later instructions
+    higher, so the most concrete brand cues stay near the bottom.
+    """
+    business = _trim(campaign.business)
+    product = _trim(campaign.product)
+    audience = _trim(campaign.audience)
+    tone = _trim(campaign.tone)
+    runway_prompt = _trim(campaign.runway_prompt)
+    commercial_script = _trim(campaign.commercial_script or "")
+    concept = campaign.selected_concept
+    hook = _trim(getattr(concept, "hook", "")) if concept else ""
+    caption = _trim(getattr(concept, "caption", "")) if concept else ""
+    cta = _trim(getattr(concept, "cta", "")) if concept else ""
+
+    character = _attached_character(campaign, settings)
+    char_name = _trim((character or {}).get("name"))
+    char_template = _trim((character or {}).get("template"))
+    char_voice = _trim((character or {}).get("voice_preset"))
+    char_personality = _trim((character or {}).get("personality"))
+
+    # ---- personality (system prompt) ----
+    parts: list[str] = []
+    if char_name:
+        intro = (
+            f"You are {char_name}"
+            + (f", the brand {char_template}" if char_template else "")
+            + (f" for {business}" if business else "")
+            + "."
+        )
+    elif business:
+        intro = f"You are the brand spokesperson for {business}."
+    else:
+        intro = "You are the brand spokesperson."
+    parts.append(intro)
+
+    if product:
+        parts.append(f"The product is {product}.")
+    if audience:
+        parts.append(f"The audience: {audience}.")
+    if tone:
+        parts.append(f"Tone: {tone}.")
+    if char_voice:
+        parts.append(f"Speak in your {char_voice} voice.")
+    if char_personality:
+        parts.append(f"Personality cue: {char_personality}")
+
+    if hook:
+        parts.append(f"Campaign hook: {hook}")
+    if caption:
+        parts.append(f"Supporting caption: {caption}")
+    if cta:
+        parts.append(f"Call to action: {cta}")
+
+    if commercial_script:
+        parts.append(f"Saved commercial script: {commercial_script}")
+    elif runway_prompt:
+        # Visual prompt is a weaker context cue than the spoken
+        # script, so only fall back to it when no script exists.
+        parts.append(
+            f"Visual scene context (not lip-synced here): {runway_prompt}"
+        )
+
+    parts.append(
+        "Stay concise, warm, and brand-honest. When the user asks "
+        "about the product or audience, answer with the cues above. "
+        "If asked something unrelated, redirect politely back to "
+        "the campaign."
+    )
+
+    personality = " ".join(parts).strip()
+    personality = _truncate_at_sentence(personality, _PERSONALITY_MAX)
+
+    # ---- startScript (opening line) ----
+    if commercial_script:
+        start = _first_sentence(commercial_script)
+    elif business:
+        identity = char_name or "your spokesperson"
+        product_phrase = product or business
+        start = f"Hi, I'm {identity}. I'm here to talk about {business} and {product_phrase}."
+        start = _truncate_at_sentence(start, _START_SCRIPT_MAX)
+    else:
+        start = ""
+
+    out: dict[str, str] = {}
+    if personality:
+        out["personality"] = personality
+    if start:
+        out["startScript"] = start
+    return out
 
 
 def create_session(campaign: Campaign, settings: Settings) -> RealtimeSession:
@@ -89,13 +281,29 @@ def create_session(campaign: Campaign, settings: Settings) -> RealtimeSession:
             "POST /api/campaigns/{id}/avatar."
         )
 
-    body = {
+    base_body = {
         "model": _REALTIME_MODEL,
         "avatar": {"type": "custom", "avatarId": avatar_id},
     }
+    overrides = _build_session_overrides(campaign, settings)
+    body = {**base_body, **overrides}
     create_url = f"{settings.runway_api_base}/v1/realtime_sessions"
+
     with httpx.Client(timeout=20.0) as client:
         resp = client.post(create_url, headers=_runway_headers(settings), json=body)
+        # PR AE — defensive fallback. If Runway rejects the override
+        # fields with a 400, retry once with the bare body so the
+        # session still starts (just without campaign awareness). The
+        # retry path mirrors the pre-PR-AE behaviour exactly.
+        if resp.status_code == 400 and overrides:
+            logger.warning(
+                "realtime session 400 with overrides (%s); "
+                "retrying without personality/startScript",
+                _redact(resp.text),
+            )
+            resp = client.post(
+                create_url, headers=_runway_headers(settings), json=base_body,
+            )
         if resp.status_code != 200:
             raise RealtimeUnavailableError(
                 f"realtime session create failed: {resp.status_code} {resp.text[:300]}"

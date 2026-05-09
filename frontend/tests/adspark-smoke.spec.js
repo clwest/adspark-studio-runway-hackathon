@@ -482,6 +482,11 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
     await expect(
       newestCard.getByRole('button', { name: /Make this pitch funnier/i }),
     ).toBeVisible()
+    // PR AE — caption should now reflect the broker's campaign-context
+    // injection ("avatar knows the campaign brief and saved script…").
+    await expect(
+      newestCard.getByText(/avatar knows the campaign brief and saved script/i),
+    ).toBeVisible()
   } else {
     await expect(
       newestCard.getByText(/Brand Spokesperson required/i),

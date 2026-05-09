@@ -129,14 +129,14 @@ export default function RealtimeSpokesperson({ campaign, gateReason }) {
     ? fmtRemaining(session.expires_at) || `${tick % 0}` // ref tick to keep effect honest
     : ''
 
-  // Suggested-prompt chip row. Renders in both gated + idle paths so
-  // users can read context-grounded questions aloud once the session
-  // is live (or copy them now and paste into another tool). The
-  // realtime broker does not pass any campaign context to Runway today.
+  // PR AE — chip row reframed as "starter questions". The broker now
+  // injects campaign-aware personality + startScript on session
+  // create, so chips no longer need to "patch missing context" — they
+  // are jumping-off questions the user can ask the brand-aware avatar.
   const chipRow = (
     <div
       className="flex flex-wrap gap-1"
-      aria-label="suggested realtime prompts"
+      aria-label="starter questions for the campaign-aware spokesperson"
     >
       {promptChips.map((text, i) => {
         const copied = copiedChipIdx === i
@@ -150,7 +150,7 @@ export default function RealtimeSpokesperson({ campaign, gateReason }) {
                 ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/40'
                 : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:border-fuchsia-400 hover:text-fuchsia-200'
             }`}
-            title={copied ? 'Copied to clipboard' : 'Click to copy — read aloud once the session is live'}
+            title={copied ? 'Copied to clipboard' : 'Click to copy — ask the brand-aware avatar this once you start the conversation'}
           >
             {copied ? '✓ copied' : text}
           </button>
@@ -195,9 +195,11 @@ export default function RealtimeSpokesperson({ campaign, gateReason }) {
       <div className="border-t border-zinc-800/60 pt-2 space-y-1.5">
         {header}
         <p className="text-[10px] text-zinc-500 leading-relaxed">
-          Realtime session uses the selected avatar. The avatar does not
-          automatically know the campaign — use the suggested prompts
-          below to give it context once you're live.
+          {/* PR AE — broker now injects campaign-aware personality +
+              startScript into the session create body, so the avatar
+              opens with brand context instead of a generic greeting. */}
+          This avatar knows the campaign brief and saved script. Ask
+          it about the product, audience, or pitch.
         </p>
         {chipRow}
         <button
@@ -259,9 +261,11 @@ export default function RealtimeSpokesperson({ campaign, gateReason }) {
     <div className="border-t border-zinc-800/60 pt-2 space-y-1.5">
       {header}
       <p className="text-[10px] text-zinc-500 leading-relaxed">
-        Realtime session uses the selected avatar. The avatar does not
-        automatically know the campaign — use the suggested prompts
-        below to give it context once you're live.{' '}
+        {/* PR AE — broker injects campaign personality + startScript so
+            the avatar opens with brand context. The chips below are now
+            starter questions, not context patches. */}
+        This avatar knows the campaign brief and saved script. Ask
+        it about the product, audience, or pitch.{' '}
         <span className="text-zinc-400">Mic required. Webcam optional.</span>
       </p>
       {chipRow}
