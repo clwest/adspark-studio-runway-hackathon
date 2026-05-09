@@ -235,6 +235,88 @@ export default function SpokespersonStudio({
     return updated
   }
 
+  // PR BP — Generate Real Spokesperson Ad. Burns Runway credits:
+  // POST /spokesperson-ad → creates an avatar_videos task, polls
+  // until READY (route is sync end-to-end; ~30-60 s). Updates
+  // local campaigns slice on success.
+  //
+  // ⚠️ This is the only PR BP handler that actually fires real
+  // Runway. The other four wires (storyboard stitch, dialogue
+  // plan/stitch, dialogue reels) are ffmpeg-only or
+  // template-driven planning with no upstream cost.
+  const handleGenerateSpokespersonAd = async (campaignId) => {
+    if (!campaignId) {
+      throw new Error('campaign id required')
+    }
+    const updated = await api.generateSpokespersonAd(campaignId)
+    setCampaigns((cs) =>
+      cs.map((x) => (x.id === campaignId ? updated : x)),
+    )
+    onCharactersChanged?.()
+    return updated
+  }
+
+  // PR BP — Stitch Storyboard Commercial. ffmpeg-only concat
+  // over the existing per-shot MP4s. Backend route 409s if any
+  // shot's status !== 'ok'.
+  const handleStitchStoryboard = async (campaignId) => {
+    if (!campaignId) {
+      throw new Error('campaign id required')
+    }
+    const updated = await api.stitchStoryboard(campaignId)
+    setCampaigns((cs) =>
+      cs.map((x) => (x.id === campaignId ? updated : x)),
+    )
+    onCharactersChanged?.()
+    return updated
+  }
+
+  // PR BP — Plan Dialogue Lines. No Runway credits — sets up the
+  // 3-line Hook/Beat/Closer structure on the Campaign so the
+  // operator can edit + render lines individually via the
+  // classic UX Dialogue tab. No-op when lines already exist
+  // (server returns the same plan).
+  const handlePlanDialogue = async (campaignId) => {
+    if (!campaignId) {
+      throw new Error('campaign id required')
+    }
+    const updated = await api.planDialogue(campaignId)
+    setCampaigns((cs) =>
+      cs.map((x) => (x.id === campaignId ? updated : x)),
+    )
+    onCharactersChanged?.()
+    return updated
+  }
+
+  // PR BP — Stitch Dialogue Scene. ffmpeg-only concat with audio
+  // preserved. Backend route 409s if any line's status !== 'ok'.
+  const handleStitchDialogue = async (campaignId) => {
+    if (!campaignId) {
+      throw new Error('campaign id required')
+    }
+    const updated = await api.stitchDialogue(campaignId)
+    setCampaigns((cs) =>
+      cs.map((x) => (x.id === campaignId ? updated : x)),
+    )
+    onCharactersChanged?.()
+    return updated
+  }
+
+  // PR BP — Build Captioned Dialogue Reels. ffmpeg-only pad +
+  // per-line drawtext over the stitched scene MP4. Backend route
+  // 409s if dialogue_scene_video_url is unset.
+  const handleBuildDialogueReels = async (campaignId) => {
+    if (!campaignId) {
+      throw new Error('campaign id required')
+    }
+    const updated = await api.buildDialogueSceneReels(campaignId)
+    setCampaigns((cs) =>
+      cs.map((x) => (x.id === campaignId ? updated : x)),
+    )
+    onCharactersChanged?.()
+    return updated
+  }
+
   // PR BH — mode-first creation handlers.
   const handleOpenCreateModal = () => {
     setModeModalOpen(true)
@@ -396,6 +478,10 @@ export default function SpokespersonStudio({
           // its own busy / error state but bubbles the API call
           // up so the studio can keep the campaigns slice fresh.
           onBuildReels={handleBuildSpokespersonReels}
+          // PR BP — wire the Horizontal button to the real
+          // Runway avatar_videos route. Lane shows a credit-burn
+          // warning + "Generate Real Spokesperson Ad" copy.
+          onGenerateSpokesperson={handleGenerateSpokespersonAd}
         />
       )}
       {/* PR BK — Cinematic Ad lane scaffold. Same shape as the
@@ -417,6 +503,10 @@ export default function SpokespersonStudio({
           // as PR BN's onBuildReels; no Runway calls — ffmpeg
           // mux of cached visual + host clip audio.
           onBuildVoicedCinematic={handleBuildVoicedCinematic}
+          // PR BP — wire the Storyboard Commercial button. ffmpeg
+          // concat of cached per-shot MP4s; lane gates on every
+          // shot status='ok'.
+          onStitchStoryboard={handleStitchStoryboard}
         />
       )}
       {/* PR BL — Dialogue Scene lane scaffold. Mirrors PR BI / PR BK
@@ -435,6 +525,12 @@ export default function SpokespersonStudio({
               ? campaignsByCharacter[activeCharacterId] || []
               : []
           }
+          // PR BP — wire all three Dialogue lane buttons. Plan is
+          // template-driven (no Runway credits); Stitch + Reels
+          // are ffmpeg-only over existing per-line MP4s.
+          onPlanDialogue={handlePlanDialogue}
+          onStitchDialogue={handleStitchDialogue}
+          onBuildDialogueReels={handleBuildDialogueReels}
         />
       )}
 

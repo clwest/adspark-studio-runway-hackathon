@@ -37,6 +37,10 @@ export default function CinematicLane({
   // on failure (typically a 409 from the backend route when no
   // silent cinematic visual or no host clip exists yet).
   onBuildVoicedCinematic = null,
+  // PR BP — Stitch Storyboard Commercial handler. ffmpeg concat
+  // of the three cached per-shot MP4s; gated on every shot
+  // status === 'ok'.
+  onStitchStoryboard = null,
 }) {
   const campaigns = Array.isArray(linkedCampaigns) ? linkedCampaigns : []
   const sorted = [...campaigns].sort((a, b) => {
@@ -108,6 +112,53 @@ export default function CinematicLane({
       setVoicedError(`${e?.message || e}`)
     } finally {
       setVoicedBusy(false)
+    }
+  }
+
+  // PR BP — Storyboard Commercial gating. The backend route
+  // (POST /storyboard/stitch) requires every shot in
+  // storyboard_shots to have status === 'ok'. ffmpeg-only —
+  // no Runway credits.
+  const storyShots = Array.isArray(focused?.storyboard_shots)
+    ? focused.storyboard_shots
+    : []
+  const storyAllReady =
+    storyShots.length > 0 && storyShots.every((s) => s.status === 'ok')
+  const storyCached =
+    focused?.storyboard_status === 'ok' &&
+    Boolean(focused?.storyboard_video_url)
+  const storyFailed =
+    focused?.storyboard_status === 'failed' &&
+    Boolean(focused?.storyboard_error)
+  const [storyBusy, setStoryBusy] = useState(false)
+  const [storyError, setStoryError] = useState('')
+  const storyCanFire = Boolean(
+    onStitchStoryboard && hasCampaign && storyAllReady && !storyBusy,
+  )
+  const storyLabel = storyBusy
+    ? 'Stitching Storyboard…'
+    : storyCached
+    ? 'Restitch Storyboard Commercial'
+    : 'Stitch Storyboard Commercial'
+  const storyDisabledReason = !hasCampaign
+    ? 'Pick a linked campaign first.'
+    : storyShots.length === 0
+    ? 'Plan a storyboard first via classic UX (3 shots required).'
+    : !storyAllReady
+    ? `${storyShots.filter((s) => s.status === 'ok').length}/${storyShots.length} shots ready — generate the rest in classic UX before stitching.`
+    : !onStitchStoryboard
+    ? 'Wire the v2 onStitchStoryboard handler before this button can fire.'
+    : ''
+  const handleStitchStoryboard = async () => {
+    if (!storyCanFire) return
+    setStoryError('')
+    setStoryBusy(true)
+    try {
+      await onStitchStoryboard(focused.id)
+    } catch (e) {
+      setStoryError(`${e?.message || e}`)
+    } finally {
+      setStoryBusy(false)
     }
   }
 
@@ -301,18 +352,43 @@ export default function CinematicLane({
                   : 'no source'}
               </span>
             </button>
+            {/* PR BP — Storyboard Commercial button. ffmpeg-
+                only stitch over the 3 cached per-shot MP4s.
+                Enabled only when every shot has status='ok'.
+                Per-shot generation still lives in classic UX
+                (real Runway image_to_video, async polling). */}
             <button
               type="button"
-              disabled
+              onClick={handleStitchStoryboard}
+              disabled={!storyCanFire}
               data-testid="cinematic-lane-storyboard"
               data-render-target="storyboard"
               data-has-output={focused?.storyboard_video_url ? 'true' : 'false'}
-              title="Render wiring lands with the cinematic lane builder. Use the classic gallery to render today."
-              className="w-full flex items-center justify-between gap-2 text-[11px] rounded ring-1 ring-zinc-700 bg-zinc-800/40 text-zinc-300 px-2 py-1 font-mono cursor-not-allowed disabled:opacity-80"
+              data-source-ready={storyAllReady ? 'true' : 'false'}
+              data-busy={storyBusy ? 'true' : 'false'}
+              title={
+                storyCanFire
+                  ? 'POST /api/campaigns/{id}/storyboard/stitch — ffmpeg concat of cached per-shot MP4s. No Runway calls.'
+                  : storyDisabledReason
+              }
+              className={
+                'w-full flex items-center justify-between gap-2 text-[11px] rounded px-2 py-1 font-mono transition-colors ' +
+                (storyCanFire
+                  ? 'ring-1 ring-amber-400/40 bg-amber-500/30 hover:bg-amber-500/45 text-amber-100'
+                  : 'ring-1 ring-zinc-700 bg-zinc-800/40 text-zinc-300 cursor-not-allowed disabled:opacity-80')
+              }
             >
-              <span className="truncate">Storyboard Commercial</span>
-              <span className="text-[9px] text-zinc-500">
-                {focused?.storyboard_video_url ? 'cached' : 'placeholder'}
+              <span className="truncate">{storyLabel}</span>
+              <span className="text-[9px] text-zinc-200/70">
+                {storyBusy
+                  ? 'stitching…'
+                  : storyCached
+                  ? 'cached'
+                  : storyAllReady
+                  ? 'ready'
+                  : storyShots.length > 0
+                  ? `${storyShots.filter((s) => s.status === 'ok').length}/${storyShots.length} shots`
+                  : 'no plan'}
               </span>
             </button>
           </div>
@@ -357,6 +433,45 @@ export default function CinematicLane({
               className="text-[10px] text-spark hover:underline font-mono"
             >
               download voiced cinematic ↗
+            </a>
+          )}
+          {/* PR BP — Storyboard status row */}
+          {storyError && (
+            <p
+              data-testid="cinematic-lane-storyboard-status"
+              className="text-[10px] text-rose-300 leading-snug"
+              title={storyError}
+            >
+              {storyError}
+            </p>
+          )}
+          {!storyError && storyBusy && (
+            <p
+              data-testid="cinematic-lane-storyboard-status"
+              className="text-[10px] text-zinc-500 leading-snug"
+            >
+              posting to /storyboard/stitch…
+            </p>
+          )}
+          {!storyError && !storyBusy && storyFailed && (
+            <p
+              data-testid="cinematic-lane-storyboard-status"
+              className="text-[10px] text-rose-300 leading-snug"
+              title={focused.storyboard_error}
+            >
+              Storyboard stitch failed: {focused.storyboard_error}
+            </p>
+          )}
+          {!storyError && !storyBusy && storyCached && (
+            <a
+              href={focused.storyboard_video_url}
+              target="_blank"
+              rel="noreferrer"
+              download
+              data-testid="cinematic-lane-storyboard-link"
+              className="text-[10px] text-spark hover:underline font-mono"
+            >
+              download storyboard commercial ↗
             </a>
           )}
           {focused?.realtime_transcript_fetched_at && (

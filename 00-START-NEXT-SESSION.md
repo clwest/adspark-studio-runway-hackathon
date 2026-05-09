@@ -10,17 +10,17 @@ PR BA `9d0a99d`; PR BB `8702660`; PR BC `9eae15f`; PR BD
 `0171078`; PR BE `e2ed1ee`; PR BF `d897437`; PR BG
 `af48e28`; SESSION REAL-API `4a68278`; PR BH `600eec9`; PR BI
 `42a8054`; PR BJ `c04aced`; PR BK `7185554`; PR BL `8967061`;
-PR BM `669a584`; PR BN `13bc608 feat: wire v2 spokesperson
-lane reels action (PR BN)`; PR BO Wire V2 Cinematic Lane
-Voiced Cinematic Action in flight on top —
-SESSION_012–SESSION_046 handoffs added).
+PR BM `669a584`; PR BN `13bc608`; PR BO `5e7400f feat: wire
+v2 cinematic lane voiced cinematic action (PR BO)`; PR BP
+Wire V2 Real Runway Generation Buttons in flight on top —
+SESSION_012–SESSION_047 handoffs added).
 
 ## Where things stand
 
-- **Branch:** `main` at `13bc608` (`feat: wire v2 spokesperson
-  lane reels action (PR BN)`) on `origin/main`. PR BO patch
-  in flight on top — no new commit / tag yet, both pending
-  explicit user approval.
+- **Branch:** `main` at `5e7400f` (`feat: wire v2 cinematic
+  lane voiced cinematic action (PR BO)`) on `origin/main`.
+  PR BP patch in flight on top — no new commit / tag yet,
+  both pending explicit user approval.
 - **Latest tag:** still **`hackathon-submission-v13`** at `ec446e4`
   (PR AF). PR AG–BI shipped the full voice arc + audit trails
   + UX v2 foundation + SpokespersonStudio + Knowledge +
@@ -36,24 +36,30 @@ SESSION_012–SESSION_046 handoffs added).
   switches modes. **Default load remains v1**; v2 reachable
   via footer toggle or `?ux=v2`.
 - **Backend routes:** **68** application + FastAPI built-ins
-  (unchanged from PR BN; PR BO is frontend-only and reuses
-  the existing `POST /api/campaigns/{id}/commercial-with-voice`
-  route).
-- **Frontend build:** 382.22 KB initial JS / 103.06 KB gzip +
-  561.97 KB lazy `@runwayml/avatars-react` chunk (+2.20 KB
-  initial / +0.41 KB gzip vs PR BN — wired Voiced Cinematic
-  button + busy/error/link UI).
-- **Playwright smoke:** `3 passed (~24.2 s)` against the mock
+  (unchanged from PR BO; PR BP is frontend-only and reuses
+  five existing routes).
+- **Frontend build:** 390.35 KB initial JS / 104.67 KB gzip +
+  561.97 KB lazy `@runwayml/avatars-react` chunk (+8.13 KB
+  initial / +1.61 KB gzip vs PR BO — five wired buttons +
+  busy/error/link UI per lane).
+- **Playwright smoke:** `3 passed (~23.5 s)` against the mock
   backend booted via `bash scripts/start-local-mock.sh`. v1
-  test ~21.6 s unchanged. v2 test ~1.2 s now also asserts the
-  Cinematic lane's Voiced button carries `data-source-ready`
-  ∈ {true, false} + `data-busy="false"` and is enabled iff
-  source-ready is true (resilient disjunction matching PR BN's
-  pattern). Toggle round-trip ~728 ms unchanged.
+  test ~20.8 s unchanged. v2 test ~1.3 s now asserts every
+  newly-wired button carries `data-source-ready` ∈ {true,
+  false} + `data-busy="false"` + the appropriate
+  `data-render-target`; Horizontal also carries
+  `data-burns-credits="true"`; resilient disjunctions across
+  all wired buttons. Toggle round-trip ~794 ms unchanged.
   ```bash
   bash scripts/start-local-mock.sh
   (cd frontend && npm run test:e2e)
   ```
+- **Real-mode validation:** one fresh `avatar_videos` task
+  on CEO Buzz / Brewster confirms the new Horizontal wiring
+  end-to-end. Output `data/host/fc8a20c42bc5.mp4` overwritten
+  with a fresh 1088×704 / 18.25 s / 6.3 MB take. Task id
+  `cf7e6067-0a11-4dbb-be17-21169c5a0177`. Logged in
+  `docs/handoffs/SESSION_REAL_API_CREDIT_BURN.md`.
 - **Local manual testing:** `bash scripts/start-local-real.sh`.
   Sources `.env`, no overrides. Health probe afterwards reads
   `runway_mock=false` + `image_gen_mock=false`. Real Runway
@@ -68,7 +74,7 @@ SESSION_012–SESSION_046 handoffs added).
 
 ## What's implemented (full feature stack on `main`)
 
-### UX redesign foundation (PR BD — UX v2 Flag + Shared Helpers · PR BE — SpokespersonStudio Scaffold · PR BF — Knowledge Tab Wiring · PR BG — Appearances Tab Wiring · PR BH — Mode-First Creation Modal · PR BI — Spokesperson Lane Scaffold · PR BK — Cinematic Lane Scaffold · PR BL — Dialogue Lane Scaffold · PR BM — Lane Regression Pass · PR BN — Spokesperson Reels Action Wired · PR BO — Cinematic Voiced Action Wired)
+### UX redesign foundation (PR BD — UX v2 Flag + Shared Helpers · PR BE — SpokespersonStudio Scaffold · PR BF — Knowledge Tab Wiring · PR BG — Appearances Tab Wiring · PR BH — Mode-First Creation Modal · PR BI — Spokesperson Lane Scaffold · PR BK — Cinematic Lane Scaffold · PR BL — Dialogue Lane Scaffold · PR BM — Lane Regression Pass · PR BN — Spokesperson Reels Action Wired · PR BO — Cinematic Voiced Action Wired · PR BP — All Remaining v2 Lane Actions Wired)
 
 - **UX v2 feature flag** at `frontend/src/uxFlag.js`. Resolves
   precedence URL `?ux=v2|v1` > localStorage `adspark.ux` >
@@ -189,6 +195,34 @@ SESSION_012–SESSION_046 handoffs added).
   `spokesperson-lane-reels-status`,
   `spokesperson-lane-reels-link`. Reels button new attrs:
   `data-source-ready`, `data-busy`.
+- **All remaining v2 lane actions wired** (PR BP) — five
+  more buttons across all three lanes:
+  - **Spokesperson Lane Horizontal** → real `avatar_videos`
+    via `/spokesperson-ad`. Burns Runway credits per click.
+    Rose chrome + "Generate Real Spokesperson Ad" / "Regenerate
+    Real Spokesperson Ad" copy + a "⚠️ Real Runway. Each click
+    bills `avatar_videos`." caption + `data-burns-credits="true"`
+    attribute. Gated on usable avatar (character_id /
+    selected_avatar_id / host_avatar_id ready).
+  - **Cinematic Lane Storyboard Commercial** → `stitchStoryboard`,
+    ffmpeg-only. Amber chrome. Gated on every shot in
+    `storyboard_shots[*]` having `status === "ok"` (per-shot
+    `image_to_video` generation still lives in classic UX).
+  - **Dialogue Lane Plan Lines** → `planDialogue`,
+    template-driven, no Runway credits. Sky chrome.
+  - **Dialogue Lane Stitch Scene** → `stitchDialogue`,
+    ffmpeg-only. Sky chrome. Gated on every line having
+    `status === "ok"`.
+  - **Dialogue Lane Captioned Reels** → `buildDialogueSceneReels`,
+    ffmpeg-only. Sky chrome. Gated on stitched scene cached.
+  Cinematic Video stays a disabled placeholder (async
+  `image_to_video` polling deferred). Real-mode validated
+  via one fresh `avatar_videos` task on CEO Buzz / Brewster
+  (`cf7e6067-…`). data-testid: `spokesperson-lane-horizontal-status`,
+  `spokesperson-lane-horizontal-warning`,
+  `cinematic-lane-storyboard-status`,
+  `cinematic-lane-storyboard-link`, `dialogue-lane-status`,
+  `dialogue-lane-stitch-link`, `dialogue-lane-reels-link`.
 - **Cinematic Voiced action wired** (PR BO) — second v2 lane
   action. The CinematicLane "Voiced Cinematic" button now
   calls `api.buildCommercialWithVoice(focused.id)` against

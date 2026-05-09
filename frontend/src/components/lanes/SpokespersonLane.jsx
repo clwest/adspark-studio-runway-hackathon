@@ -31,6 +31,11 @@ export default function SpokespersonLane({
   // message on failure (typically a 409 from the backend route
   // when no spokesperson source video exists yet).
   onBuildReels = null,
+  // PR BP — Generate Real Spokesperson Ad handler. ⚠️ Burns
+  // Runway credits — fires `POST /v1/avatar_videos` via the
+  // existing /spokesperson-ad route. The lane shows credit-burn
+  // warning copy on the button.
+  onGenerateSpokesperson = null,
 }) {
   const campaigns = Array.isArray(linkedCampaigns) ? linkedCampaigns : []
   // Pick the most recently-touched campaign as the lane's "focused"
@@ -89,6 +94,51 @@ export default function SpokespersonLane({
       setReelsError(`${e?.message || e}`)
     } finally {
       setReelsBusy(false)
+    }
+  }
+
+  // PR BP — Real Spokesperson Ad gating. Required source: a
+  // usable avatar (character_id / selected_avatar_id /
+  // host_avatar_id ready). Mirrors v1's spokesperson-ad
+  // precondition. Existing host_video_url means a "regenerate"
+  // copy + warning the operator about double-billing.
+  const horizontalHasUsableAvatar = Boolean(
+    focused?.character_id ||
+      focused?.selected_avatar_id ||
+      (focused?.host_avatar_id &&
+        ['ready', 'mock'].includes(focused?.host_avatar_status || '')),
+  )
+  const horizontalCached = Boolean(focused?.host_video_url)
+  const [horizontalBusy, setHorizontalBusy] = useState(false)
+  const [horizontalError, setHorizontalError] = useState('')
+  const horizontalCanFire = Boolean(
+    onGenerateSpokesperson &&
+      hasCampaign &&
+      horizontalHasUsableAvatar &&
+      !horizontalBusy,
+  )
+  const horizontalLabel = horizontalBusy
+    ? 'Generating Real Spokesperson Ad…'
+    : horizontalCached
+    ? 'Regenerate Real Spokesperson Ad'
+    : 'Generate Real Spokesperson Ad'
+  const horizontalDisabledReason = !hasCampaign
+    ? 'Pick a linked campaign first.'
+    : !horizontalHasUsableAvatar
+    ? 'A usable avatar is required (character_id / selected_avatar_id / host_avatar_id ready).'
+    : !onGenerateSpokesperson
+    ? 'Wire the v2 onGenerateSpokesperson handler before this button can fire.'
+    : ''
+  const handleGenerateHorizontal = async () => {
+    if (!horizontalCanFire) return
+    setHorizontalError('')
+    setHorizontalBusy(true)
+    try {
+      await onGenerateSpokesperson(focused.id)
+    } catch (e) {
+      setHorizontalError(`${e?.message || e}`)
+    } finally {
+      setHorizontalBusy(false)
     }
   }
 
@@ -229,20 +279,53 @@ export default function SpokespersonLane({
             Step 3 · Render
           </span>
           <div className="space-y-1">
+            {/* PR BP — Horizontal Spokesperson Ad button is now
+                wired to real Runway. Burns credits per click —
+                the route fires POST /v1/avatar_videos and waits
+                for the task to reach READY. Rose chrome to
+                signal "this costs money"; tooltip + adjacent
+                caption double-confirm before the click. */}
             <button
               type="button"
-              disabled
+              onClick={handleGenerateHorizontal}
+              disabled={!horizontalCanFire}
               data-testid="spokesperson-lane-horizontal"
               data-render-target="horizontal"
               data-has-output={focused?.host_video_url ? 'true' : 'false'}
-              title="Render wiring lands with PR BJ. Use the classic gallery to render today."
-              className="w-full flex items-center justify-between gap-2 text-[11px] rounded ring-1 ring-zinc-700 bg-zinc-800/40 text-zinc-300 px-2 py-1 font-mono cursor-not-allowed disabled:opacity-80"
+              data-source-ready={horizontalHasUsableAvatar ? 'true' : 'false'}
+              data-busy={horizontalBusy ? 'true' : 'false'}
+              data-burns-credits="true"
+              title={
+                horizontalCanFire
+                  ? '⚠️ POST /v1/avatar_videos — burns Runway credits per click. Generation is sync (~30–60 s).'
+                  : horizontalDisabledReason
+              }
+              className={
+                'w-full flex items-center justify-between gap-2 text-[11px] rounded px-2 py-1 font-mono transition-colors ' +
+                (horizontalCanFire
+                  ? 'ring-1 ring-rose-400/50 bg-rose-500/30 hover:bg-rose-500/45 text-rose-100'
+                  : 'ring-1 ring-zinc-700 bg-zinc-800/40 text-zinc-300 cursor-not-allowed disabled:opacity-80')
+              }
             >
-              <span className="truncate">Horizontal Spokesperson Ad</span>
-              <span className="text-[9px] text-zinc-500">
-                {focused?.host_video_url ? 'cached' : 'placeholder'}
+              <span className="truncate">{horizontalLabel}</span>
+              <span className="text-[9px] text-zinc-200/70">
+                {horizontalBusy
+                  ? 'generating…'
+                  : horizontalCached
+                  ? 'cached · burns credits'
+                  : horizontalCanFire
+                  ? 'burns credits'
+                  : 'no avatar'}
               </span>
             </button>
+            {horizontalCanFire && (
+              <p
+                data-testid="spokesperson-lane-horizontal-warning"
+                className="text-[9px] text-rose-300 leading-snug"
+              >
+                ⚠️ Real Runway. Each click bills `avatar_videos`.
+              </p>
+            )}
             {/* PR BN — Reels button is now wired. Enabled only
                 when a focused campaign has a cached spokesperson
                 source MP4. Tooltip explains why disabled when
@@ -284,6 +367,26 @@ export default function SpokespersonLane({
               </span>
             </button>
           </div>
+          {/* PR BP — Horizontal status row. Renders one of:
+              - rose error from the click handler
+              - zinc "posting to /spokesperson-ad…" while busy */}
+          {horizontalError && (
+            <p
+              data-testid="spokesperson-lane-horizontal-status"
+              className="text-[10px] text-rose-300 leading-snug"
+              title={horizontalError}
+            >
+              {horizontalError}
+            </p>
+          )}
+          {!horizontalError && horizontalBusy && (
+            <p
+              data-testid="spokesperson-lane-horizontal-status"
+              className="text-[10px] text-zinc-500 leading-snug"
+            >
+              posting to /spokesperson-ad… (real Runway, may take 30–60 s)
+            </p>
+          )}
           {/* Reels status row — shows live error from the click,
               the persisted backend failure (PR AG/AH), and the
               download link when reels are cached. */}

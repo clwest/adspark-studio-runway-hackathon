@@ -1107,20 +1107,25 @@ test('AdSpark Studio UX v2 SpokespersonStudio scaffold', async ({ page }) => {
   await expect(lane.getByTestId('spokesperson-lane-step-brief')).toBeVisible()
   await expect(lane.getByTestId('spokesperson-lane-step-script')).toBeVisible()
   await expect(lane.getByTestId('spokesperson-lane-step-render')).toBeVisible()
-  // Render targets render with mode-specific gating after PR BN.
-  // Horizontal stays a disabled placeholder; Reels is wired to
-  // the existing /spokesperson-ad/reels backend route and is
-  // enabled iff a focused linked campaign carries an existing
-  // host video source. The smoke's v2 case doesn't set an
-  // activeCharacterId so `linkedCampaigns` is empty and the
-  // button stays disabled with data-source-ready="false".
+  // PR BP — both Spokesperson lane buttons are now wired with
+  // resilient gating disjunctions. Horizontal burns Runway
+  // credits; Reels is ffmpeg-only. Both honour
+  // data-source-ready / data-busy attrs.
   const horizontalBtn = lane.getByTestId('spokesperson-lane-horizontal')
   const reelsBtn = lane.getByTestId('spokesperson-lane-reels')
   await expect(horizontalBtn).toBeVisible()
   await expect(reelsBtn).toBeVisible()
-  await expect(horizontalBtn).toBeDisabled()
   await expect(horizontalBtn).toHaveAttribute('data-render-target', 'horizontal')
   await expect(reelsBtn).toHaveAttribute('data-render-target', 'reels')
+  // Horizontal carries a credit-burn marker so future tooling
+  // can flag it specifically.
+  await expect(horizontalBtn).toHaveAttribute('data-burns-credits', 'true')
+  // Smoke's v2 case never sets activeCharacterId, so neither
+  // button has source-ready data. Both stay disabled with the
+  // correct attrs.
+  await expect(horizontalBtn).toHaveAttribute('data-source-ready', 'false')
+  await expect(horizontalBtn).toHaveAttribute('data-busy', 'false')
+  await expect(horizontalBtn).toBeDisabled()
   // PR BN — disjunction: the button is enabled iff a campaign
   // linked to the active spokesperson has a cached source MP4.
   // Either branch is valid fixture state.
@@ -1171,17 +1176,17 @@ test('AdSpark Studio UX v2 SpokespersonStudio scaffold', async ({ page }) => {
   await expect(
     cinematicLane.getByTestId('cinematic-lane-step-render'),
   ).toBeVisible()
-  // PR BO — Voiced Cinematic is wired; the other two stay
-  // disabled placeholders. Source-readiness disjunction
-  // mirrors PR BN's pattern.
+  // PR BO/BP — Voiced + Storyboard buttons are wired. Cinematic
+  // Video stays a disabled placeholder (would require async
+  // image_to_video polling, deferred). Source-readiness
+  // disjunctions mirror PR BN's pattern.
   const cineVideoBtn = cinematicLane.getByTestId('cinematic-lane-video')
   const cineVoicedBtn = cinematicLane.getByTestId('cinematic-lane-voiced')
   const cineStoryBtn = cinematicLane.getByTestId('cinematic-lane-storyboard')
   await expect(cineVideoBtn).toBeVisible()
   await expect(cineVoicedBtn).toBeVisible()
   await expect(cineStoryBtn).toBeVisible()
-  await expect(cineVideoBtn).toBeDisabled()
-  await expect(cineStoryBtn).toBeDisabled()
+  await expect(cineVideoBtn).toBeDisabled() // PR BP — still placeholder
   await expect(cineVideoBtn).toHaveAttribute(
     'data-render-target',
     'cinematic-video',
@@ -1194,6 +1199,19 @@ test('AdSpark Studio UX v2 SpokespersonStudio scaffold', async ({ page }) => {
     'data-render-target',
     'storyboard',
   )
+  // PR BP — Storyboard button carries source-ready + busy attrs.
+  // No active spokesperson → button stays disabled with
+  // source-ready="false".
+  await expect(cineStoryBtn).toHaveAttribute('data-busy', 'false')
+  const cineStoryReady = await cineStoryBtn.getAttribute(
+    'data-source-ready',
+  )
+  expect(['true', 'false']).toContain(cineStoryReady)
+  if (cineStoryReady === 'true') {
+    await expect(cineStoryBtn).toBeEnabled()
+  } else {
+    await expect(cineStoryBtn).toBeDisabled()
+  }
   // Voiced disjunction: enabled iff data-source-ready="true".
   // Smoke's v2 case never sets activeCharacterId so the lane
   // sees no linkedCampaigns → button stays disabled with
@@ -1241,6 +1259,10 @@ test('AdSpark Studio UX v2 SpokespersonStudio scaffold', async ({ page }) => {
   await expect(
     dialogueLane.getByTestId('dialogue-lane-step-lines'),
   ).toBeVisible()
+  // PR BP — all 3 dialogue buttons are now wired with their
+  // own source-ready / busy attrs. Smoke's v2 case has no
+  // active spokesperson so source-ready is always false →
+  // buttons disabled.
   for (const [tid, target] of [
     ['dialogue-lane-lines', 'dialogue-lines'],
     ['dialogue-lane-stitch', 'dialogue-stitch'],
@@ -1248,8 +1270,15 @@ test('AdSpark Studio UX v2 SpokespersonStudio scaffold', async ({ page }) => {
   ]) {
     const btn = dialogueLane.getByTestId(tid)
     await expect(btn).toBeVisible()
-    await expect(btn).toBeDisabled()
     await expect(btn).toHaveAttribute('data-render-target', target)
+    await expect(btn).toHaveAttribute('data-busy', 'false')
+    const ready = await btn.getAttribute('data-source-ready')
+    expect(['true', 'false']).toContain(ready)
+    if (ready === 'true') {
+      await expect(btn).toBeEnabled()
+    } else {
+      await expect(btn).toBeDisabled()
+    }
   }
 
   // Dismiss link clears the pill + the localStorage entry. The

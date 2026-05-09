@@ -1,23 +1,22 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after PR BO (Wire V2 Cinematic Lane Voiced
-Cinematic Action) on top of the PR AG–BN / SESSION 011 anchors.
-Backend route count is **68** application routes — PR BO wires
-the second v2 lane action. The CinematicLane "Voiced Cinematic"
-button now calls `POST /api/campaigns/{id}/commercial-with-voice`
-via `api.buildCommercialWithVoice`, mirroring v1's
-`commercialBuildable` gating exactly (`cached_video_url` AND
-either `host_status === "ok"` OR a usable avatar). Busy / error
-/ success states surface inline with fuchsia chrome; download
-link to the cached voiced commercial when set. ffmpeg-only — no
-Runway calls. Cinematic Video + Storyboard buttons stay
-disabled placeholders; Spokesperson lane keeps PR BN's
-Captioned Reels button wired; Dialogue lane untouched. With
-PR BN + PR BO, two of the nine lane render buttons fire
-production behaviour — proving the v2 architecture can wire
-multiple actions across multiple modes without redesigning
-CampaignGallery. **Real-mode credit-burn session preserved on disk:**
+context-kit refresh after PR BP (Wire V2 Real Runway Generation
+Buttons) on top of the PR AG–BO / SESSION 011 anchors. Backend
+route count is **68** application routes — PR BP brings the v2
+lane wiring count from 2 → 7 of 8 distinct lane actions:
+**Spokesperson Lane** Horizontal (real `avatar_videos`, burns
+credits) + Captioned Reels (PR BN); **Cinematic Lane** Voiced
+Cinematic (PR BO) + Storyboard Commercial (`stitchStoryboard`,
+ffmpeg-only); **Dialogue Lane** Plan Lines (`planDialogue`, no
+credits) + Stitch Scene (`stitchDialogue`, ffmpeg) + Captioned
+Reels (`buildDialogueSceneReels`, ffmpeg). Only the Cinematic
+Video button stays a disabled placeholder (async
+`image_to_video` polling deferred). Every credit-burning
+button carries `data-burns-credits="true"` + a rose-chrome
+warning + a "burns credits" caption. Real-mode validated: one
+fresh `avatar_videos` task on CEO Buzz / Brewster (task
+`cf7e6067-…`) confirms the Horizontal wiring end-to-end. **Real-mode credit-burn session preserved on disk:**
 Brewster / CEO Buzz spokesperson MP4 (1088×704, 18.4 s, 6.1 MB),
 captioned reels (720×1280), voiced cinematic mux (1280×720),
 real Runway grounding doc — all gitignored, served from cached
@@ -255,6 +254,7 @@ the line's own `avatar_id`).
 | PR BM | Lane Selection Regression Pass (test-only slice tracked in SESSION_044; strengthens smoke against v1 default leaks of v2 testids, v2 surface absence of legacy "+ Create Character", and a third Playwright case `AdSpark Studio footer UX toggle round-trip` that clicks the footer link to flip v1 → v2 → v1 with reload assertions; no production code changes; no backend changes) | (post-v13) |
 | PR BN | Wire V2 Spokesperson Lane Reels Action (gated v2 slice tracked in SESSION_045; first v2 lane action that fires real production behaviour — `POST /api/campaigns/{id}/spokesperson-ad/reels` — via `api.buildSpokespersonReels`; lane gates the button on `host_status === "ok"` AND `host_video_url` set; busy / error / success states surface inline with violet chrome to match v1 vocabulary; download link to cached reels when `spokesperson_reels_url` is set; no Runway calls — ffmpeg-only; Horizontal button stays disabled placeholder; Cinematic + Dialogue lanes untouched) | (post-v13) |
 | PR BO | Wire V2 Cinematic Lane Voiced Cinematic Action (gated v2 slice tracked in SESSION_046; second wired v2 lane action — `POST /api/campaigns/{id}/commercial-with-voice` — via `api.buildCommercialWithVoice`; CinematicLane gates the button on `cached_video_url` set AND (`host_video_url` + `host_status === "ok"` OR a usable avatar exists), mirrors v1 `commercialBuildable` exactly; busy / error / success states surface inline with fuchsia chrome; download link to cached voiced commercial when `voiced_commercial_url` is set; no Runway calls — ffmpeg-only; Cinematic Video + Storyboard buttons stay disabled placeholders; Spokesperson + Dialogue lanes untouched beyond PR BN) | (post-v13) |
+| PR BP | Wire V2 Real Runway Generation Buttons (gated v2 slice tracked in SESSION_047; wires 5 additional lane actions — Spokesperson Horizontal (real `avatar_videos`, burns credits, rose chrome + warning copy), Cinematic Storyboard Commercial (`stitchStoryboard`, ffmpeg-only, amber chrome), Dialogue Plan / Stitch / Captioned Reels (`planDialogue` + `stitchDialogue` + `buildDialogueSceneReels`, all ffmpeg or template-driven, sky chrome). Cinematic Video stays placeholder. Each new button carries `data-source-ready` + `data-busy` attrs; Horizontal also carries `data-burns-credits="true"`. Real-mode validation: one fresh real `avatar_videos` task `cf7e6067-…` on CEO Buzz / Brewster confirms the Horizontal wiring end-to-end — 1088×704, 18.25 s, 6.3 MB) | (post-v13) |
 
 ## Known limitations (current main)
 
