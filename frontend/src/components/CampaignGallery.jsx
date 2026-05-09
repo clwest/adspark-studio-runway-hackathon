@@ -128,6 +128,18 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
     isNewestSaved ? 'visuals' : 'overview',
   )
   const cardRef = useRef(null)
+  // PR Z2 — make the silent-vs-voiced distinction unmistakable. The
+  // voiced section gets a ref so the silent player's CTA can scroll
+  // there + the post-build success path can pulse a brief highlight.
+  const voicedSectionRef = useRef(null)
+  const [voicedHighlight, setVoicedHighlight] = useState(false)
+  const scrollToVoiced = () => {
+    const node = voicedSectionRef.current
+    if (!node) return
+    node.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    setVoicedHighlight(true)
+    window.setTimeout(() => setVoicedHighlight(false), 2200)
+  }
   // PR Y — scroll the just-saved card into view + clear the newest
   // marker after one frame so a later refresh doesn't re-scroll.
   useEffect(() => {
@@ -353,6 +365,14 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
     try {
       const updated = await api.buildCommercialWithVoice(c.id)
       onUpdated?.(updated)
+      // PR Z2 — when the build succeeds, pull focus to the voiced
+      // player so the user immediately sees + plays the audio version
+      // instead of the silent source above it.
+      if (updated && updated.voiced_commercial_status === 'ok') {
+        // setTimeout because onUpdated triggers a re-render and the
+        // ref node only exists in the next paint.
+        window.setTimeout(scrollToVoiced, 60)
+      }
     } catch (e) {
       setLocalError(`commercial: ${e}`)
     } finally {
@@ -597,13 +617,36 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
   const visualsBody = (
     <div className="space-y-3">
       {hasVideo ? (
-        <div className="space-y-2">
+        <div
+          className={
+            commercialReady
+              ? 'space-y-2 opacity-80'
+              : 'space-y-2'
+          }
+        >
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <span className="text-[11px] font-semibold text-zinc-400">
+              {commercialReady ? 'Source visual (silent)' : 'Source visual'}
+            </span>
+            {commercialReady && (
+              <span
+                className="text-[10px] text-zinc-500"
+                title="Voiced final ad rendered below. The silent source remains here for download / inspection."
+              >
+                final ad with sound is below ↓
+              </span>
+            )}
+          </div>
           <video
             key={videoSrc}
             src={videoSrc}
             controls
             preload="metadata"
-            className="w-full rounded-lg ring-1 ring-zinc-800"
+            className={
+              commercialReady
+                ? 'w-full max-w-md rounded-lg ring-1 ring-zinc-800'
+                : 'w-full rounded-lg ring-1 ring-zinc-800'
+            }
           />
           <div className="flex items-center justify-between text-xs gap-2 flex-wrap">
             <a
@@ -617,9 +660,9 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
             <div className="flex items-center gap-2 flex-wrap">
               <span
                 className="text-[10px] rounded-full bg-zinc-800 text-zinc-300 px-2 py-0.5 font-mono"
-                title="Runway gen4_turbo / gen4.5 produce the visual cut only. Spoken assets live in the Character + Voice tabs."
+                title="Runway gen4_turbo / gen4.5 produce the visual cut only. The Voiced Commercial below mixes in the spokesperson audio."
               >
-                visual-only · silent
+                source visual · silent
               </span>
               {cacheStatusLabel && (
                 <span
@@ -644,11 +687,21 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
             </div>
           </div>
           <p className="text-[10px] text-zinc-500 leading-relaxed">
-            Visual cut only — Runway gen4_turbo / gen4.5 output is silent.
-            Spoken assets live in the <span className="text-zinc-300">Character</span>{' '}
-            tab (host clip) and <span className="text-zinc-300">Voice</span> tab
-            (samples).
+            This is the raw Runway visual cut and{' '}
+            <span className="text-amber-300 font-semibold">has no audio</span>.
+            Build the <span className="text-zinc-300">Voiced Commercial</span>{' '}
+            below for the version with{' '}
+            {spokespersonName ? `${spokespersonName}'s` : "the spokesperson's"}{' '}
+            spoken pitch.
           </p>
+          <button
+            type="button"
+            onClick={scrollToVoiced}
+            className="text-[11px] text-spark hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-spark rounded"
+            title="Jump to the Voiced Commercial section"
+          >
+            Go to Voiced Commercial ↓
+          </button>
         </div>
       ) : (
         <p className="text-xs text-zinc-500 italic">
@@ -700,22 +753,44 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
           PR X auto-creates the Avatar Host Clip when missing if a
           spokesperson is ready, so the gating UX needs only "no
           campaign saved" or "no spokesperson at all" 409s. */}
-      <div className="space-y-2 rounded-lg ring-1 ring-spark/20 bg-spark/5 p-3">
+      <div
+        ref={voicedSectionRef}
+        className={
+          commercialReady
+            ? `space-y-2 rounded-lg ring-2 bg-spark/10 p-4 transition-shadow ${
+                voicedHighlight
+                  ? 'ring-spark shadow-[0_0_22px_rgba(255,139,61,0.45)]'
+                  : 'ring-spark/60'
+              }`
+            : `space-y-2 rounded-lg ring-1 ring-spark/20 bg-spark/5 p-3 transition-shadow ${
+                voicedHighlight ? 'ring-spark shadow-[0_0_18px_rgba(255,139,61,0.35)]' : ''
+              }`
+        }
+      >
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-zinc-200">
-              Voiced Commercial
+            <span
+              className={
+                commercialReady
+                  ? 'text-sm font-semibold text-zinc-100'
+                  : 'text-xs font-semibold text-zinc-200'
+              }
+            >
+              Final Voiced Ad
             </span>
             <span
               className="text-[10px] text-zinc-500 font-mono"
               title="Loops the visual cut while the Avatar Host Clip audio plays. AdSpark auto-creates the host clip first when missing."
             >
-              final ad MP4
+              looped visual + spokesperson audio
             </span>
           </div>
           {commercialReady && (
-            <span className="text-[10px] rounded-full bg-emerald-500/20 text-emerald-300 px-2 py-0.5 font-mono">
-              ready
+            <span
+              className="text-[10px] rounded-full bg-emerald-500/25 text-emerald-200 px-2 py-0.5 font-mono ring-1 ring-emerald-400/40"
+              title="MP4 export with sound"
+            >
+              with sound
             </span>
           )}
           {commercialStatus && commercialStatus !== 'ok' && !commercialBusy && (
@@ -727,33 +802,34 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
             </span>
           )}
         </div>
-        <p className="text-[10px] text-zinc-500 leading-relaxed">
-          Uses the selected spokesperson's spoken host clip as the voice
-          track. <span className="text-zinc-300">If the host clip is
+        <p className="text-[10px] text-zinc-400 leading-relaxed">
+          This is the export with sound: looped visual + spokesperson
+          audio. <span className="text-zinc-300">If the host clip is
           missing, AdSpark will create it first</span>, then loop the
           visual until the full pitch finishes — no early audio cutoff.
         </p>
         {commercialReady ? (
           <div className="space-y-1.5">
-            <div className="text-[11px] font-semibold text-emerald-300">
-              Final voiced ad
+            <div className="text-[11px] font-semibold text-emerald-300 flex items-center gap-1.5">
+              <span aria-hidden>▶</span> Final voiced ad — playable with sound
             </div>
             <video
               key={c.voiced_commercial_url}
               src={c.voiced_commercial_url}
               controls
               preload="metadata"
-              className="w-full max-w-md rounded-lg ring-1 ring-zinc-800"
+              autoPlay={voicedHighlight}
+              className="w-full rounded-lg ring-2 ring-spark/50 shadow-lg"
             />
             <div className="flex items-center gap-3 text-xs flex-wrap">
               <a
                 href={c.voiced_commercial_url}
                 target="_blank"
                 rel="noreferrer"
-                className="text-spark hover:underline"
+                className="text-spark hover:underline font-semibold"
                 download
               >
-                open voiced commercial ↗
+                download Final Voiced Ad ↗
               </a>
               <button
                 type="button"

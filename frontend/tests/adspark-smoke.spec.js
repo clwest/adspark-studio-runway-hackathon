@@ -270,9 +270,17 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
   //      cached) Campaign Pack 3-up. Network unreachable in CI is
   //      acceptable; "cache failed" still proves the pipeline ran.
   await newestCard.getByRole('tab', { name: 'Visuals' }).click()
-  await expect(newestCard.getByText(/^visual-only · silent$/)).toBeVisible()
+  // PR Z2 — silent source video chip + caption rewritten so users
+  // don't confuse it with the final voiced ad below.
+  await expect(newestCard.getByText(/^source visual · silent$/)).toBeVisible()
   await expect(
-    newestCard.getByText(/Visual cut only — Runway gen4_turbo/i),
+    newestCard.getByText(/This is the raw Runway visual cut/i),
+  ).toBeVisible()
+  // PR Z2 — explicit CTA next to the silent player that scrolls down
+  // to the voiced section. Only validates presence here; click +
+  // scroll behaviour is JS-only and stays out of the smoke.
+  await expect(
+    newestCard.getByRole('button', { name: /Go to Voiced Commercial/i }),
   ).toBeVisible()
   await expect(
     newestCard.getByText(/^(cached locally|cache failed|external URL may expire)$/i),
@@ -299,9 +307,13 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
   //         tab. PR X promoted the section header from "Commercial
   //         with Voice" to "Voiced Commercial" and the button label
   //         to "Build Voiced Commercial".
-  await expect(newestCard.getByText(/^Voiced Commercial$/)).toBeVisible()
+  // PR Z2 — Visuals-tab section now reads "Final Voiced Ad" so it
+  // visually outranks the silent source above. The Exports ledger row
+  // (asserted later) still uses the "Voiced Commercial" label so the
+  // CLI/file vocabulary stays consistent.
+  await expect(newestCard.getByText(/^Final Voiced Ad$/)).toBeVisible()
   await expect(
-    newestCard.getByText(/Uses the selected spokesperson's spoken host clip as the voice track/i),
+    newestCard.getByText(/This is the export with sound/i),
   ).toBeVisible()
   const buildCommercialBtn = newestCard.getByRole('button', {
     name: /^Build Voiced Commercial$/i,
