@@ -7,6 +7,8 @@ import {
   loadSettings,
   saveSettings,
 } from './settings'
+// PR T — structured Runway video prompt builder.
+import { simplifyFromConcept } from './promptBuilder'
 import CampaignForm from './components/CampaignForm.jsx'
 import ConceptCards from './components/ConceptCards.jsx'
 import PromptPreview from './components/PromptPreview.jsx'
@@ -80,8 +82,19 @@ export default function App() {
     try {
       const resp = await api.generateConcepts(formValue)
       setConceptResp(resp)
-      setSelectedIndex(resp.recommended_index ?? 0)
-      setPrompt(resp.runway_prompt || '')
+      const idx = resp.recommended_index ?? 0
+      setSelectedIndex(idx)
+      // PR T — convert the picked concept into a structured Runway
+      // prompt instead of using the dense single-shot prose the
+      // backend's mock concept_service emits. The user can still
+      // edit the textarea afterwards; this is just the seed.
+      setPrompt(
+        simplifyFromConcept({
+          concept: resp.concepts?.[idx] || resp.concepts?.[0],
+          form: formValue,
+          ratio,
+        }) || resp.runway_prompt || '',
+      )
     } catch (e) {
       setError(friendlyError(e, ERROR_HINTS.concepts))
     } finally {
@@ -354,7 +367,23 @@ export default function App() {
                 concepts={concepts}
                 recommendedIndex={conceptResp.recommended_index}
                 selectedIndex={selectedIndex}
-                onSelect={setSelectedIndex}
+                onSelect={(i) => {
+                  setSelectedIndex(i)
+                  // PR T — rebuild the structured prompt for the new
+                  // concept selection. Pre-PR-T, switching concepts
+                  // silently kept the previous prompt; this surfaced
+                  // as a UX bug ("I picked Daily Ritual but the
+                  // textarea still talks about the workshop").
+                  if (form && conceptResp?.concepts?.[i]) {
+                    setPrompt(
+                      simplifyFromConcept({
+                        concept: conceptResp.concepts[i],
+                        form,
+                        ratio,
+                      }) || prompt,
+                    )
+                  }
+                }}
               />
             )}
 
@@ -374,6 +403,20 @@ export default function App() {
                 onGenerate={handleGenerateVideo}
                 busy={busy.runway || (task && !['SUCCEEDED', 'FAILED', 'CANCELED'].includes(task.status))}
                 disabled={busy.runway}
+                // PR T — Simplify Prompt rebuilds the textarea from the
+                // currently selected concept + form + ratio. Disabled
+                // when there's no concept selected to derive from.
+                canSimplifyPrompt={Boolean(form && conceptResp?.concepts?.[selectedIndex])}
+                onSimplifyPrompt={() => {
+                  if (!form || !conceptResp?.concepts?.[selectedIndex]) return
+                  setPrompt(
+                    simplifyFromConcept({
+                      concept: conceptResp.concepts[selectedIndex],
+                      form,
+                      ratio,
+                    }) || prompt,
+                  )
+                }}
                 model={model}
                 onModelChange={(m) => {
                   setModel(m)

@@ -1,4 +1,7 @@
 import { useRef, useState, useEffect } from 'react'
+// PR T — quality hint copy.  Lives here in addition to promptBuilder.js
+// so the smoke can match either source; the strings are identical.
+import { PROMPT_QUALITY_HINT } from '../promptBuilder'
 
 // Mirror of backend GENERATION_POLICY (services/runway_client.py). Keep in
 // sync with the backend table — the backend is the source of truth, but the
@@ -57,6 +60,10 @@ export default function PromptPreview({
   onUploadImage,
   uploadBusy,
   characters = [],
+  // PR T — Simplify Prompt: parent rebuilds the textarea using
+  // simplifyFromConcept({selectedConcept, form, ratio}).
+  onSimplifyPrompt,
+  canSimplifyPrompt = false,
 }) {
   const trimmedImage = (imageUrl || '').trim()
   const textOnlyAllowed = model === 'gen4.5'
@@ -184,6 +191,32 @@ export default function PromptPreview({
         onChange={(e) => onChange(e.target.value)}
         className="w-full rounded-lg bg-zinc-950 border border-zinc-800 px-3 py-2 outline-none focus:border-spark text-sm"
       />
+      {/* PR T — Prompt Quality hint + Simplify-Prompt CTA. The hint
+          stays visible whenever the prompt panel is mounted; the
+          Simplify button is only useful when the user has a concept
+          to derive structure from. */}
+      <div className="flex items-center justify-between gap-2 flex-wrap text-[11px]">
+        <div className="flex items-center gap-1.5 text-zinc-500">
+          <span
+            className="rounded-full bg-spark/15 text-spark px-2 py-0.5 font-mono ring-1 ring-spark/30"
+            title="The structured Runway video prompt builder produced this text. Edit freely below."
+          >
+            structured prompt
+          </span>
+          <span className="leading-relaxed">{PROMPT_QUALITY_HINT}</span>
+        </div>
+        {onSimplifyPrompt && (
+          <button
+            type="button"
+            onClick={onSimplifyPrompt}
+            disabled={!canSimplifyPrompt}
+            className="rounded-md ring-1 ring-zinc-700 hover:ring-spark text-[11px] px-2 py-1 text-zinc-200 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-spark"
+            title="Re-derive a clean structured prompt from the selected concept and current campaign brief. Replaces whatever's in the textarea."
+          >
+            Simplify prompt
+          </button>
+        )}
+      </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
         <label className="text-sm text-zinc-300 flex flex-col gap-1">

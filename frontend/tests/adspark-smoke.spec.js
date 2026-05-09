@@ -89,6 +89,28 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
     visualSourceGroup.getByRole('radio', { name: /Generate image/i }),
   ).toHaveAttribute('aria-checked', 'true')
 
+  // 7a.3. PR T — structured prompt builder: hint chip + rules text +
+  //       Simplify Prompt button render once a concept is selected.
+  await expect(page.getByText(/^structured prompt$/i)).toBeVisible()
+  await expect(
+    page.getByText(/Best results: one character, one location, one action, one camera move/i),
+  ).toBeVisible()
+  await expect(
+    page.getByRole('button', { name: /^Simplify prompt$/i }),
+  ).toBeVisible()
+  // Prompt textarea must contain the structured-builder output rather
+  // than the backend's dense single-shot. The structured builder
+  // always opens with "A realistic ".
+  const promptTextarea = page.locator('textarea').first()
+  await expect(promptTextarea).toHaveValue(/^A realistic /i)
+  // ...and the textarea must remain editable. Append a marker, confirm
+  // it sticks, then revert so the rest of the smoke runs against a
+  // clean prompt.
+  const originalPrompt = await promptTextarea.inputValue()
+  await promptTextarea.fill(`${originalPrompt} TEST_EDIT`)
+  await expect(promptTextarea).toHaveValue(new RegExp('TEST_EDIT$'))
+  await promptTextarea.fill(originalPrompt)
+
   // 7b. PR C UI — source ratio + duration selectors with documented defaults.
   const ratioSelect = page.getByLabel('source ratio')
   const durationSelect = page.getByLabel('duration')
