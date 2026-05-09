@@ -147,17 +147,24 @@ class VideoFinisher:
         campaign_id: str,
         video_path: Path,
         host_path: Path,
-        timeout: float = 90.0,
+        *,
+        loop_visual: bool = True,
+        timeout: float = 120.0,
     ) -> CommercialResult:
         """Combine the silent campaign visual (input A) with the audio
         track from the Avatar Host Clip (input B) into a single MP4.
 
-        Strategy: ``-map 0:v -map 1:a -c:v copy -c:a aac -shortest``.
-        Visual stream is copied verbatim (no re-encode) so the visual
-        cut is preserved bit-for-bit; audio is re-encoded to AAC for
-        compatibility; ``-shortest`` trims to the shorter of the two
-        inputs (typically the 5-second visual cut), giving the user
-        the first beat of the host clip's pitch laid over the ad.
+        PR X — `loop_visual=True` (the default) loops the visual via
+        `-stream_loop -1` so the full host audio plays. ``-shortest``
+        with an infinite video stream means the output ends when the
+        host audio finishes (~11s on a real Brewster pitch instead of
+        the previous ~5s trim). Visual is re-encoded with libx264 in
+        this mode since `-stream_loop` doesn't compose with `-c:v copy`.
+
+        `loop_visual=False` falls back to PR S's original strategy:
+        ``-c:v copy -c:a aac -shortest`` — output trims to the visual
+        cut length. Faster (no re-encode) but the user only hears the
+        first ~5 s of the spoken pitch.
 
         Preconditions are caller-checked (router emits 409s); this
         method assumes both files exist + host has audio.
@@ -185,22 +192,52 @@ class VideoFinisher:
 
         target = self.commercial_path_for(campaign_id)
         tmp = target.with_suffix(".mp4.tmp")
-        cmd = [
-            "ffmpeg",
-            "-y",
-            "-loglevel", "error",
-            "-i", str(video_path),
-            "-i", str(host_path),
-            "-map", "0:v:0",
-            "-map", "1:a:0",
-            "-c:v", "copy",
-            "-c:a", "aac",
-            "-b:a", "192k",
-            "-shortest",
-            "-movflags", "+faststart",
-            "-f", "mp4",
-            str(tmp),
-        ]
+
+        if loop_visual:
+            # PR X — loop visual until host audio ends. Forces a video
+            # re-encode (libx264) since -stream_loop doesn't compose
+            # with -c:v copy. -shortest with an infinitely-looped video
+            # input means output duration = host audio duration.
+            cmd = [
+                "ffmpeg",
+                "-y",
+                "-loglevel", "error",
+                "-stream_loop", "-1",
+                "-i", str(video_path),
+                "-i", str(host_path),
+                "-map", "0:v:0",
+                "-map", "1:a:0",
+                "-c:v", "libx264",
+                "-preset", "veryfast",
+                "-crf", "23",
+                "-pix_fmt", "yuv420p",
+                "-c:a", "aac",
+                "-b:a", "192k",
+                "-shortest",
+                "-movflags", "+faststart",
+                "-f", "mp4",
+                str(tmp),
+            ]
+        else:
+            # PR S — copy visual stream verbatim, trim audio to visual
+            # length. Faster but the user only hears the first ~5 s of
+            # the spoken pitch.
+            cmd = [
+                "ffmpeg",
+                "-y",
+                "-loglevel", "error",
+                "-i", str(video_path),
+                "-i", str(host_path),
+                "-map", "0:v:0",
+                "-map", "1:a:0",
+                "-c:v", "copy",
+                "-c:a", "aac",
+                "-b:a", "192k",
+                "-shortest",
+                "-movflags", "+faststart",
+                "-f", "mp4",
+                str(tmp),
+            ]
         try:
             logger.info(
                 "running ffmpeg commercial-with-voice for campaign %s",
@@ -212,13 +249,16 @@ class VideoFinisher:
             if result.returncode != 0:
                 stderr = (result.stderr or "").strip()[-300:]
                 tmp.unlink(missing_ok=True)
-                # Some Runway visual MP4s have unusual codec parameters that
-                # libx264 -copy can't write back into MP4. Retry once with
-                # a re-encode pass — slower but more compatible.
-                cmd_reencode = [
-                    "ffmpeg",
-                    "-y",
-                    "-loglevel", "error",
+                # Re-encode fallback. PR X — when loop_visual=True the
+                # primary path already re-encodes, so this fallback
+                # mostly handles non-loop cases where -c:v copy fails on
+                # unusual codec parameters. Carry the loop flag through
+                # so the fallback's behaviour matches what the caller
+                # asked for.
+                reencode_cmd = ["ffmpeg", "-y", "-loglevel", "error"]
+                if loop_visual:
+                    reencode_cmd += ["-stream_loop", "-1"]
+                reencode_cmd += [
                     "-i", str(video_path),
                     "-i", str(host_path),
                     "-map", "0:v:0",
@@ -226,6 +266,7 @@ class VideoFinisher:
                     "-c:v", "libx264",
                     "-preset", "veryfast",
                     "-crf", "23",
+                    "-pix_fmt", "yuv420p",
                     "-c:a", "aac",
                     "-b:a", "192k",
                     "-shortest",
@@ -234,7 +275,7 @@ class VideoFinisher:
                     str(tmp),
                 ]
                 result = subprocess.run(
-                    cmd_reencode, capture_output=True, text=True, timeout=timeout * 2,
+                    reencode_cmd, capture_output=True, text=True, timeout=timeout * 2,
                 )
                 if result.returncode != 0:
                     stderr = (result.stderr or "").strip()[-300:]

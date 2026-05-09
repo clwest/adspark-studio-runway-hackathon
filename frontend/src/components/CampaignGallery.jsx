@@ -191,10 +191,22 @@ function CampaignCard({ c, onUpdated, onDeleted }) {
   const finishUnavailable = c.finish_status === 'unavailable'
   const finishedCount = PACK_FORMATS.filter((f) => Boolean(finishedUrlFor(c, f.key))).length
 
-  // PR S — Commercial with Voice derivations.
+  // PR S + PR X — Voiced Commercial derivations. PR X auto-generates
+  // the Avatar Host Clip when missing if a Brand Spokesperson Avatar
+  // is ready, so the gating UX needs to know about avatar availability,
+  // not just host-clip availability.
   const commercialReady = c.voiced_commercial_status === 'ok' && Boolean(c.voiced_commercial_url)
   const commercialStatus = c.voiced_commercial_status || null
   const hostReadyForCommercial = c.host_status === 'ok' && Boolean(c.host_video_url)
+  // Avatar resolution chain: character > selected > host_avatar_id.
+  // PR X uses this to decide whether the Build Voiced Commercial
+  // button is enabled (true if EITHER a host clip exists OR an avatar
+  // exists that we can use to auto-create one).
+  const hasUsableAvatar = Boolean(
+    c.character_id || c.selected_avatar_id ||
+    (c.host_avatar_id && ['ready', 'mock'].includes(c.host_avatar_status || '')),
+  )
+  const commercialBuildable = isCached && (hostReadyForCommercial || hasUsableAvatar)
 
   const handleBuild = async (fmt) => {
     setLocalError('')
@@ -379,16 +391,23 @@ function CampaignCard({ c, onUpdated, onDeleted }) {
       : 'spokesperson required'
 
   // Single suggested next-action — drives the user across stages.
+  // PR X — voiced-commercial CTA promoted ahead of Pack + Brand Voice
+  // since the voiced ad is now the headline final artefact and PR X's
+  // auto-host means the user can build it without first manually
+  // generating the host clip.
   let nextActionLabel = null
   let nextActionTab = null
   if (!hasVideo) {
     nextActionLabel = 'Generate the visual ad first (Stage 2)'
+  } else if (!hasUsableAvatar) {
+    nextActionLabel = 'Choose spokesperson →'
+    nextActionTab = 'character'
+  } else if (!commercialReady) {
+    nextActionLabel = 'Build voiced commercial →'
+    nextActionTab = 'visuals'
   } else if (finishedCount < 3) {
     nextActionLabel = 'Build Campaign Pack →'
     nextActionTab = 'visuals'
-  } else if (!avatarReady) {
-    nextActionLabel = 'Pick or create a Brand Spokesperson →'
-    nextActionTab = 'character'
   } else if (!hostReady) {
     nextActionLabel = 'Record Avatar Host Clip →'
     nextActionTab = 'character'
@@ -564,20 +583,23 @@ function CampaignCard({ c, onUpdated, onDeleted }) {
         </div>
       )}
 
-      {/* PR S — Commercial with Voice. Always rendered when the visual
-          tab is open so the user understands the artefact exists; the
-          body adapts based on which preconditions are met. */}
+      {/* PR S + PR X — Voiced Commercial. Always rendered when the
+          Visuals tab is open so the user understands the artefact
+          exists; the body adapts based on which preconditions are met.
+          PR X auto-creates the Avatar Host Clip when missing if a
+          spokesperson is ready, so the gating UX needs only "no
+          campaign saved" or "no spokesperson at all" 409s. */}
       <div className="space-y-2 rounded-lg ring-1 ring-spark/20 bg-spark/5 p-3">
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="flex items-center gap-2">
             <span className="text-xs font-semibold text-zinc-200">
-              Commercial with Voice
+              Voiced Commercial
             </span>
             <span
               className="text-[10px] text-zinc-500 font-mono"
-              title="Combines the silent visual cut with the Avatar Host Clip audio via local ffmpeg."
+              title="Loops the visual cut while the Avatar Host Clip audio plays. AdSpark auto-creates the host clip first when missing."
             >
-              voiced MP4
+              final ad MP4
             </span>
           </div>
           {commercialReady && (
@@ -595,13 +617,16 @@ function CampaignCard({ c, onUpdated, onDeleted }) {
           )}
         </div>
         <p className="text-[10px] text-zinc-500 leading-relaxed">
-          Combines the silent visual cut with the Avatar Host Clip
-          audio to create a voiced MP4. <span className="text-zinc-300">
-          The clearest "final ad" artefact — visual + spoken pitch in
-          one file.</span>
+          Uses the selected spokesperson's spoken host clip as the voice
+          track. <span className="text-zinc-300">If the host clip is
+          missing, AdSpark will create it first</span>, then loop the
+          visual until the full pitch finishes — no early audio cutoff.
         </p>
         {commercialReady ? (
           <div className="space-y-1.5">
+            <div className="text-[11px] font-semibold text-emerald-300">
+              Final voiced ad
+            </div>
             <video
               key={c.voiced_commercial_url}
               src={c.voiced_commercial_url}
@@ -637,23 +662,30 @@ function CampaignCard({ c, onUpdated, onDeleted }) {
                 Save the campaign first — the cached visual MP4 is the input.
               </p>
             )}
-            {isCached && !hostReadyForCommercial && (
+            {isCached && !hasUsableAvatar && (
               <p className="text-[10px] text-amber-300">
-                Generate the Avatar Host Clip first (Character tab).
-                Its audio is the voice track.
+                Attach or create a spokesperson first (Character tab).
+                The voiced commercial uses the spokesperson's host clip
+                audio as its voice track.
+              </p>
+            )}
+            {isCached && hasUsableAvatar && !hostReadyForCommercial && (
+              <p className="text-[10px] text-zinc-500">
+                AdSpark will auto-generate the Avatar Host Clip on the
+                first build (~10 s in real mode).
               </p>
             )}
             <button
               type="button"
               onClick={handleBuildCommercial}
-              disabled={commercialBusy || !isCached || !hostReadyForCommercial}
+              disabled={commercialBusy || !commercialBuildable}
               className="rounded-md bg-spark/80 hover:bg-spark text-ink text-xs font-semibold px-3 py-1.5 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-spark"
             >
               {commercialBusy
-                ? 'Building Commercial with Voice…'
+                ? 'Building Voiced Commercial…'
                 : commercialStatus && commercialStatus !== 'ok'
-                ? 'Retry Commercial with Voice'
-                : 'Build Commercial with Voice'}
+                ? 'Retry Voiced Commercial'
+                : 'Build Voiced Commercial'}
             </button>
             {c.voiced_commercial_error && commercialStatus !== 'ok' && (
               <p className="text-[10px] text-rose-300" title={c.voiced_commercial_error}>
@@ -1201,12 +1233,13 @@ function CampaignCard({ c, onUpdated, onDeleted }) {
       url: finishedUrlFor(c, f.key),
       meta: 'local ffmpeg output',
     })),
-    // PR S — voiced final ad. Sits between the Pack outputs and the
-    // host clip in the ledger so it reads as the main "final" artefact.
+    // PR S + PR X — voiced final ad. Sits between the Pack outputs
+    // and the host clip in the ledger so it reads as the main "final"
+    // artefact.
     {
-      label: 'Commercial with Voice',
+      label: 'Voiced Commercial',
       url: commercialReady ? c.voiced_commercial_url : null,
-      meta: 'visual cut + host clip audio (ffmpeg)',
+      meta: 'looped visual + host clip audio (ffmpeg)',
     },
     {
       label: 'Avatar Host Clip',

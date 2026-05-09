@@ -285,22 +285,25 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
     ).toBeVisible()
   }
 
-  // 13a.2 — PR S — Commercial with Voice section in the Visuals tab.
-  //         The smoke saves a campaign without a host clip so the
-  //         gated path renders: section header + button is disabled +
-  //         the explanatory amber line points the user at the
-  //         Character tab.
-  await expect(newestCard.getByText(/^Commercial with Voice$/)).toBeVisible()
+  // 13a.2 — PR S + PR X — Voiced Commercial section in the Visuals
+  //         tab. The smoke saves a campaign without an attached
+  //         spokesperson, so the gated path renders: section header +
+  //         button is disabled + the amber "Attach or create a
+  //         spokesperson first" line points the user at the Character
+  //         tab. PR X promoted the section header from "Commercial
+  //         with Voice" to "Voiced Commercial" and the button label
+  //         to "Build Voiced Commercial".
+  await expect(newestCard.getByText(/^Voiced Commercial$/)).toBeVisible()
   await expect(
-    newestCard.getByText(/Combines the silent visual cut with the Avatar Host Clip audio/i),
+    newestCard.getByText(/Uses the selected spokesperson's spoken host clip as the voice track/i),
   ).toBeVisible()
   const buildCommercialBtn = newestCard.getByRole('button', {
-    name: /^Build Commercial with Voice$/i,
+    name: /^Build Voiced Commercial$/i,
   })
   await expect(buildCommercialBtn).toBeVisible()
   await expect(buildCommercialBtn).toBeDisabled()
   await expect(
-    newestCard.getByText(/Generate the Avatar Host Clip first/i),
+    newestCard.getByText(/Attach or create a spokesperson first/i),
   ).toBeVisible()
 
   // 13b. Character tab — Brand Spokesperson section + Avatar Picker.
@@ -354,12 +357,14 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
 
   // 13e. Exports tab — file-ledger renders, with at least the visual
   //      ad row present (every saved campaign has a video URL or a
-  //      "not generated yet" placeholder for it). PR S — also asserts
-  //      the Commercial with Voice row is in the ledger; gated state
-  //      shows "not generated yet" since the smoke didn't build it.
+  //      "not generated yet" placeholder for it). PR S + PR X — also
+  //      asserts the Voiced Commercial row is in the ledger; gated
+  //      state shows "not generated yet" since the smoke didn't
+  //      build it. PR X renamed the row from "Commercial with Voice"
+  //      to "Voiced Commercial".
   await newestCard.getByRole('tab', { name: 'Exports' }).click()
   await expect(newestCard.getByText(/Visual ad \(silent cut\)/i)).toBeVisible()
-  await expect(newestCard.getByText(/^Commercial with Voice$/)).toBeVisible()
+  await expect(newestCard.getByText(/^Voiced Commercial$/)).toBeVisible()
 
   // 13. Console / page errors — page errors are always fatal; console errors
   //     are filtered to drop video-network noise.

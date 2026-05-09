@@ -290,28 +290,64 @@ def get_finished_video_format(
     )
 
 
-# ---- PR S — Commercial with Voice -----------------------------------
+# ---- PR S + PR X — Commercial with Voice ----------------------------
+
+
+class CommercialWithVoiceBody(BaseModel):
+    """PR X — optional knobs on the voiced-commercial route. Defaults
+    cover the user-spec happy path: auto-create the Avatar Host Clip
+    when missing + loop the visual until the host pitch finishes.
+    """
+
+    auto_generate_host: bool = Field(
+        default=True,
+        description=(
+            "When True (default), create the Avatar Host Clip on the "
+            "fly if it doesn't exist yet AND a Brand Spokesperson "
+            "Avatar (custom / selected / via attached Character) is "
+            "already ready. Lets the user click one button and end "
+            "up with a voiced commercial."
+        ),
+    )
+    loop_visual: bool = Field(
+        default=True,
+        description=(
+            "When True (default), loop the visual video while the "
+            "host audio plays so the full spoken pitch lands. When "
+            "False, trim audio to the visual's length (PR S "
+            "original behaviour)."
+        ),
+    )
 
 
 @router.post("/{campaign_id}/commercial-with-voice", response_model=Campaign)
 def post_commercial_with_voice(
     campaign_id: str,
+    body: Optional[CommercialWithVoiceBody] = None,
     settings: Settings = Depends(get_settings),
     store: CampaignStore = Depends(_store),
     cache: VideoCache = Depends(_video_cache),
     finisher: VideoFinisher = Depends(_finisher),
 ) -> Campaign:
-    """PR S — combine the silent visual cut + Avatar Host Clip audio
-    into a single voiced MP4 via local ffmpeg. No new Runway calls.
+    """PR S + PR X — combine the silent visual cut + Avatar Host Clip
+    audio into a single voiced MP4 via local ffmpeg. No new Runway
+    image_to_video calls. PR X auto-generates the host clip when
+    missing (one Runway avatar_videos call) and loops the visual so
+    the full spoken pitch lands.
 
     Preconditions (all surface as 409 Conflict so the UI can display
     actionable copy without retrying):
-      - cached visual video exists (Save the campaign first).
-      - Avatar Host Clip exists (Generate the host clip first).
+      - cached visual video exists (Save the campaign first)
       - host clip has at least one audio track (mock placeholders may
         be silent — the user gets an honest message rather than a
-        muted output).
+        muted output)
+      - if host clip is missing AND auto_generate_host is True, a
+        Brand Spokesperson Avatar (custom, selected, or via attached
+        Character) must be ready — otherwise we can't create a host
+        clip to take audio from
     """
+    opts = body or CommercialWithVoiceBody()
+
     record = store.get(campaign_id)
     if not record:
         raise HTTPException(status_code=404, detail="campaign not found")
@@ -321,25 +357,6 @@ def post_commercial_with_voice(
         raise HTTPException(
             status_code=409,
             detail="Save the visual video first. The cached MP4 is the input for the voiced commercial.",
-        )
-
-    # Avatar Host Clip path matches character_host_client.path_for —
-    # data/host/<id>.mp4. Computed inline to avoid a circular import
-    # since character_host_client also imports from this router's tree.
-    host_path = settings.data_path / "host" / f"{campaign_id}.mp4"
-    if not host_path.exists():
-        raise HTTPException(
-            status_code=409,
-            detail="Generate the Avatar Host Clip first. Its audio is the voice track for the commercial.",
-        )
-    if not has_audio_stream(host_path):
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                "Host clip has no audio to mix. Mock-mode placeholders "
-                "may be silent — re-record with a real Runway key to get "
-                "a voiced clip."
-            ),
         )
 
     if not is_ffmpeg_available():
@@ -356,14 +373,104 @@ def post_commercial_with_voice(
             detail="ffmpeg is not installed on the server",
         )
 
+    # Avatar Host Clip path matches character_host_client.path_for —
+    # data/host/<id>.mp4. Computed inline to avoid a circular import.
+    host_path = settings.data_path / "host" / f"{campaign_id}.mp4"
+
+    # PR X — auto-create the host clip when missing if the user opted in
+    # and a Brand Spokesperson Avatar is ready. Refusing here lets the
+    # frontend route the user to the Character tab to attach/create one.
+    if not host_path.exists():
+        if not opts.auto_generate_host:
+            raise HTTPException(
+                status_code=409,
+                detail="Generate the Avatar Host Clip first. Its audio is the voice track for the commercial.",
+            )
+        if (
+            not host_active_avatar_id(record, settings)
+            or host_active_avatar_status(record, settings) not in {"ready", "mock"}
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Create or attach a spokesperson first. The voiced "
+                    "commercial uses the Avatar Host Clip's audio — "
+                    "which needs a ready Brand Spokesperson Avatar to "
+                    "exist."
+                ),
+            )
+        # Fire generate_host_video in-place. Mirrors the persistence the
+        # standalone /host-video route does so the gallery card opens
+        # with the clip visible afterwards.
+        logger.info(
+            "commercial-with-voice campaign=%s — auto-generating host clip",
+            campaign_id,
+        )
+        host_result = generate_host_video(record, settings)
+        if host_result.status == "ok":
+            updated_host = store.update_host_video_fields(
+                campaign_id,
+                host_video_url=f"/api/campaigns/{campaign_id}/host-video",
+                host_status="ok",
+                host_error=None,
+                host_task_id=host_result.task_id,
+                host_mock_mode=host_result.mock_mode,
+            )
+            if updated_host:
+                record = updated_host
+        else:
+            store.update_host_video_fields(
+                campaign_id,
+                host_video_url=None,
+                host_status=host_result.status,
+                host_error=host_result.error,
+                host_task_id=host_result.task_id,
+                host_mock_mode=host_result.mock_mode,
+            )
+            store.update_voiced_commercial_fields(
+                campaign_id,
+                voiced_commercial_url=None,
+                voiced_commercial_status="failed",
+                voiced_commercial_error=(
+                    f"auto-host failed: {host_result.error or host_result.status}"
+                ),
+            )
+            raise HTTPException(
+                status_code=502,
+                detail=(
+                    "Failed to auto-generate the Avatar Host Clip. "
+                    "Try the Character tab → Present Campaign manually, "
+                    "then retry this build. "
+                    f"({host_result.error or host_result.status})"
+                ),
+            )
+        # host_path should now exist. Defensive re-check below covers
+        # the rare case of a successful result but missing file.
+        if not host_path.exists():
+            raise HTTPException(
+                status_code=502,
+                detail="Avatar Host Clip generation reported success but no file was written.",
+            )
+
+    if not has_audio_stream(host_path):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Host clip has no audio to mix. Mock-mode placeholders "
+                "may be silent — re-record with a real Runway key to get "
+                "a voiced clip."
+            ),
+        )
+
     result = finisher.build_commercial_with_voice(
         campaign_id, video_path, host_path,
+        loop_visual=opts.loop_visual,
     )
 
     if result.status == "ok":
         logger.info(
-            "commercial-with-voice ok campaign=%s -> %s",
-            campaign_id, result.output_path,
+            "commercial-with-voice ok campaign=%s loop=%s -> %s",
+            campaign_id, opts.loop_visual, result.output_path,
         )
         updated = store.update_voiced_commercial_fields(
             campaign_id,

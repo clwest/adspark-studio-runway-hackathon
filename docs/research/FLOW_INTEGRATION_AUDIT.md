@@ -902,3 +902,78 @@ plumbing, so this is mostly a default-path swap.
 Neither is shipped here. Commercial with Voice today is the
 clearest "final ad" artefact AdSpark can produce without crossing
 those scope lines.
+
+---
+
+## PR X — Auto-voiced commercial — implemented (2026-05-08)
+
+The "next polish" callout above is now closed. Two upgrades to the
+Commercial with Voice route:
+
+### Loop visual until host audio finishes (default)
+
+`finisher_service.build_commercial_with_voice` now takes a
+`loop_visual=True` kwarg (default). When set, ffmpeg uses
+`-stream_loop -1 -i <video>` + `-map 0:v:0 -map 1:a:0 -c:v libx264
+-c:a aac -shortest`. The video stream loops infinitely, so
+`-shortest` ends the output when the host audio finishes — the user
+hears the full hook + caption + CTA instead of just the opening
+beat. Visual is re-encoded with libx264 (since `-stream_loop`
+doesn't compose with `-c:v copy`) but the loop is invisible to the
+viewer at 5 s ↻ ~10 s.
+
+`loop_visual=False` keeps PR S's original strategy for backward
+compatibility — `-c:v copy -shortest` trims audio to the visual cut.
+
+### Auto-generate the Avatar Host Clip when missing
+
+`POST /api/campaigns/{id}/commercial-with-voice` now accepts an
+optional body `{auto_generate_host: true, loop_visual: true}`.
+When the host clip is missing AND `auto_generate_host` is true:
+
+- If a Brand Spokesperson Avatar is ready (character / selected /
+  custom), the route fires `generate_host_video()` in-place,
+  persists the host_video_* fields the same way the standalone
+  `/host-video` route does, then proceeds to build the voiced
+  commercial.
+- If no avatar exists, returns **HTTP 409** with the friendly
+  *"Create or attach a spokesperson first."* copy.
+- Mock mode: same flow with the lavfi-anullsrc placeholder host
+  clip; the resulting commercial has a silent audio track but a
+  real audio stream so the pipeline doesn't 409 on
+  `has_audio_stream`.
+
+### Frontend UX
+
+- "Build Commercial with Voice" → **"Build Voiced Commercial"**.
+- Subcopy: *"Uses the selected spokesperson's spoken host clip as
+  the voice track. If the host clip is missing, AdSpark will create
+  it first."*
+- Gated copy when no spokesperson: *"Attach or create a spokesperson
+  first (Character tab)."*
+- Gated copy when avatar exists but no host clip: *"AdSpark will
+  auto-generate the Avatar Host Clip on the first build (~10 s in
+  real mode)."*
+- Overview "Next:" CTA promoted: when video is cached + a
+  spokesperson exists, the suggested next action is *"Build voiced
+  commercial →"* before Pack / Brand Voice.
+- Exports row label: "Commercial with Voice" → **"Voiced
+  Commercial"**.
+
+### Verification
+
+- ffprobe on real-mode output of campaign `9a717c675ec6`
+  (Brewster):
+  - Pre-PR-X: video 5.04 s + AAC audio 5.03 s (audio cut off
+    mid-sentence)
+  - Post-PR-X: video **9.79 s** + AAC audio **9.81 s** at 48 kHz
+    (full pitch lands)
+- Mock-mode preconditions verified via curl:
+  - 409 *"Create or attach a spokesperson first"* on a campaign
+    without character/avatar
+  - 409 *"Save the visual video first"* on a campaign without
+    cached video
+- Real-mode auto-host path is the same code path as the standalone
+  `/host-video` route — already verified end-to-end by SESSION_008's
+  Brewster hero-run.
+
