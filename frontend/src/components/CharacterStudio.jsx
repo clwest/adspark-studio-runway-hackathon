@@ -145,7 +145,7 @@ export default function CharacterStudio({ onCharactersChanged }) {
   }
 
   return (
-    <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5 space-y-3">
+    <div className="rounded-2xl ring-1 ring-pink-400/15 bg-studio-900/60 p-5 space-y-3 shadow-panel">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div>
           <h3 className="font-semibold flex items-center gap-2">
@@ -165,7 +165,7 @@ export default function CharacterStudio({ onCharactersChanged }) {
         <button
           type="button"
           onClick={() => setShowCreate((s) => !s)}
-          className="rounded-md bg-pink-500/80 hover:bg-pink-500 text-zinc-100 text-xs px-3 py-1.5"
+          className="rounded-md bg-pink-500/80 hover:bg-pink-500 text-zinc-100 text-xs px-3 py-1.5 transition-colors"
         >
           {showCreate ? 'Cancel' : '+ Create Character'}
         </button>
@@ -174,7 +174,7 @@ export default function CharacterStudio({ onCharactersChanged }) {
       {showCreate && (
         <form
           onSubmit={handleCreate}
-          className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-3 space-y-2"
+          className="rounded-lg ring-1 ring-zinc-800 bg-zinc-950/60 p-3 space-y-2"
         >
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <label className="text-xs text-zinc-300 flex flex-col gap-1">
@@ -271,12 +271,17 @@ export default function CharacterStudio({ onCharactersChanged }) {
       {loading ? (
         <p className="text-xs text-zinc-500 italic">Loading characters…</p>
       ) : characters.length === 0 ? (
-        <p className="text-xs text-zinc-500">
-          No characters yet. Click <span className="text-pink-300">+ Create Character</span>{' '}
-          to build a reusable brand identity in ~1 minute.
-        </p>
+        <div className="rounded-lg ring-1 ring-pink-400/20 bg-pink-500/5 px-3 py-4 text-center">
+          <p className="text-xs text-zinc-300">
+            No characters yet.
+          </p>
+          <p className="text-[11px] text-zinc-500 mt-0.5">
+            Click <span className="text-pink-300 font-semibold">+ Create Character</span>{' '}
+            to build a reusable brand identity in ~1 minute.
+          </p>
+        </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
           {characters.map((c) => (
             <CharacterCard
               key={c.id}

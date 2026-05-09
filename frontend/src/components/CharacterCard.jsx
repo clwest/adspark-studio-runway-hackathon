@@ -29,8 +29,10 @@ export default function CharacterCard({
 
   return (
     <div
-      className={`rounded-md border p-2 space-y-1.5 bg-zinc-950/40 ${
-        attachedHere ? 'border-pink-400 bg-pink-500/5' : 'border-zinc-800'
+      className={`rounded-lg p-2 space-y-1.5 transition-all duration-150 ${
+        attachedHere
+          ? 'ring-2 ring-pink-400 bg-pink-500/10 shadow-[0_0_0_1px_rgba(236,72,153,0.15)]'
+          : 'ring-1 ring-zinc-800 bg-zinc-950/50 hover:ring-pink-400/40 hover:bg-pink-500/5'
       } ${compact ? 'text-[10px]' : 'text-xs'}`}
     >
       {/* Portrait */}

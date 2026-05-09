@@ -23,6 +23,20 @@ const DUB_LANGS = [
   { code: 'it', label: 'Italian' },
 ]
 
+// PR P — UI Phase 2 — six tabs per saved-campaign card. Default is
+// Overview. Order is locked: each tab body is rendered only when the
+// tab is active (lazy in the sense that tab content lives inside an
+// `&&` gate; React still re-renders the whole card tree, just doesn't
+// mount the inactive bodies).
+const TABS = [
+  { key: 'overview', label: 'Overview' },
+  { key: 'visuals', label: 'Visuals' },
+  { key: 'character', label: 'Character' },
+  { key: 'voice', label: 'Voice' },
+  { key: 'realtime', label: 'Realtime' },
+  { key: 'exports', label: 'Exports' },
+]
+
 function finishedUrlFor(c, fmt) {
   // Prefer the per-format dict introduced in PR B; fall back to the legacy
   // single-URL field for landscape only so old saves still display correctly.
@@ -37,7 +51,7 @@ function PackEntry({ c, fmt, label, dims, hint, onClick, busyFormat }) {
   const ready = Boolean(url)
   const isBusy = busyFormat === fmt
   return (
-    <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-2 flex flex-col gap-1.5">
+    <div className="rounded-lg ring-1 ring-zinc-800/80 bg-zinc-950/50 p-2 flex flex-col gap-1.5">
       <div className="flex items-center justify-between">
         <span className="text-xs font-semibold text-zinc-200">{label}</span>
         <span className="text-[10px] text-zinc-500 font-mono">{dims}</span>
@@ -72,6 +86,30 @@ function PackEntry({ c, fmt, label, dims, hint, onClick, busyFormat }) {
   )
 }
 
+/**
+ * Status chip used by the Overview dashboard. Green when ready, amber
+ * for partial / mock, neutral for "not yet". Single line of metadata
+ * underneath. Replaces the wall of inline pills the pre-Phase-2 card
+ * showed in its body.
+ */
+function OverviewChip({ label, status, hint }) {
+  const tone =
+    status === 'ready'
+      ? 'bg-emerald-500/15 text-emerald-300 ring-emerald-500/40'
+      : status === 'partial' || status === 'mock'
+      ? 'bg-amber-500/15 text-amber-300 ring-amber-500/40'
+      : 'bg-zinc-800 text-zinc-500 ring-zinc-700'
+  return (
+    <div
+      className={`rounded-lg ring-1 px-2.5 py-1.5 text-[11px] flex flex-col gap-0.5 ${tone}`}
+      title={hint || ''}
+    >
+      <span className="font-semibold">{label}</span>
+      {hint && <span className="text-[10px] opacity-80 truncate">{hint}</span>}
+    </div>
+  )
+}
+
 function CampaignCard({ c, onUpdated, onDeleted }) {
   const concept = c.selected_concept || {}
   // Preview preference: any finished format → cached → original presigned URL.
@@ -84,6 +122,7 @@ function CampaignCard({ c, onUpdated, onDeleted }) {
   const hasVideo = Boolean(videoSrc)
   const cacheFailed = c.cache_status === 'failed'
 
+  const [activeTab, setActiveTab] = useState('overview')
   const [busyFormat, setBusyFormat] = useState(null) // null | "landscape" | "reels" | "square"
   const [avatarBusy, setAvatarBusy] = useState(false)
   const [hostBusy, setHostBusy] = useState(false)
@@ -149,6 +188,7 @@ function CampaignCard({ c, onUpdated, onDeleted }) {
     : null
 
   const finishUnavailable = c.finish_status === 'unavailable'
+  const finishedCount = PACK_FORMATS.filter((f) => Boolean(finishedUrlFor(c, f.key))).length
 
   const handleBuild = async (fmt) => {
     setLocalError('')
@@ -276,10 +316,806 @@ function CampaignCard({ c, onUpdated, onDeleted }) {
     }
   }
 
-  const finishedCount = PACK_FORMATS.filter((f) => Boolean(finishedUrlFor(c, f.key))).length
+  // ---- Overview dashboard helpers ----------------------------------
+
+  const spokespersonHint = hasCharacter && character
+    ? `${character.name} · ${character.template}`
+    : hasSelection
+    ? c.selected_avatar_name || 'Selected avatar'
+    : customReady
+    ? 'Custom Brand Spokesperson'
+    : 'no spokesperson yet'
+  const spokespersonStatus = avatarReady
+    ? avatarMock
+      ? 'mock'
+      : 'ready'
+    : 'idle'
+
+  const packStatus =
+    finishedCount === 0 ? 'idle' : finishedCount < 3 ? 'partial' : 'ready'
+  const packHint =
+    finishedCount === 0
+      ? 'no formats built yet'
+      : `${finishedCount}/3 formats ready`
+
+  const voiceStatus = voiceReady ? (voiceMock ? 'mock' : 'ready') : voiceFailed ? 'idle' : 'idle'
+  const voiceHint = voiceReady
+    ? voiceMock
+      ? 'mock voice sample'
+      : 'voice identity ready'
+    : 'no voice identity yet'
+
+  const realtimeStatus =
+    avatarReady && !avatarMock ? 'ready' : avatarReady && avatarMock ? 'mock' : 'idle'
+  const realtimeHint =
+    avatarReady && !avatarMock
+      ? 'session available'
+      : avatarReady
+      ? 'mock — real key required'
+      : 'spokesperson required'
+
+  // Single suggested next-action — drives the user across stages.
+  let nextActionLabel = null
+  let nextActionTab = null
+  if (!hasVideo) {
+    nextActionLabel = 'Generate the visual ad first (Stage 2)'
+  } else if (finishedCount < 3) {
+    nextActionLabel = 'Build Campaign Pack →'
+    nextActionTab = 'visuals'
+  } else if (!avatarReady) {
+    nextActionLabel = 'Pick or create a Brand Spokesperson →'
+    nextActionTab = 'character'
+  } else if (!hostReady) {
+    nextActionLabel = 'Record Avatar Host Clip →'
+    nextActionTab = 'character'
+  } else if (!voiceReady) {
+    nextActionLabel = 'Design Brand Voice Identity →'
+    nextActionTab = 'voice'
+  } else {
+    nextActionLabel = null // all primary deliverables ready
+  }
+
+  // ---- Tab body builders -------------------------------------------
+
+  const overviewBody = (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+        <OverviewChip
+          label="Visual"
+          status={hasVideo ? 'ready' : 'idle'}
+          hint={hasVideo ? 'silent · cached' : 'no video yet'}
+        />
+        <OverviewChip
+          label="Pack"
+          status={packStatus}
+          hint={packHint}
+        />
+        <OverviewChip
+          label="Spokesperson"
+          status={spokespersonStatus}
+          hint={spokespersonHint}
+        />
+        <OverviewChip
+          label="Host clip"
+          status={hostReady ? (c.host_mock_mode ? 'mock' : 'ready') : 'idle'}
+          hint={hostReady ? (c.host_mock_mode ? 'mock placeholder' : 'recorded') : 'not recorded'}
+        />
+        <OverviewChip
+          label="Voice"
+          status={voiceStatus}
+          hint={voiceHint}
+        />
+        <OverviewChip
+          label="Realtime"
+          status={realtimeStatus}
+          hint={realtimeHint}
+        />
+      </div>
+
+      {nextActionLabel && (
+        <div className="rounded-lg ring-1 ring-spark/30 bg-spark/5 p-2 text-xs flex items-center justify-between gap-2">
+          <span className="text-zinc-300">
+            <span className="text-spark font-semibold">Next:</span>{' '}
+            {nextActionLabel}
+          </span>
+          {nextActionTab && (
+            <button
+              type="button"
+              onClick={() => setActiveTab(nextActionTab)}
+              className="rounded-md bg-spark/80 hover:bg-spark text-ink text-[11px] font-semibold px-2 py-0.5"
+            >
+              go
+            </button>
+          )}
+        </div>
+      )}
+
+      {!nextActionLabel && (
+        <p className="text-[11px] text-zinc-500 italic">
+          All primary deliverables ready — Pack, Spokesperson, Host
+          Clip, Voice. Realtime conversation available in real mode.
+        </p>
+      )}
+    </div>
+  )
+
+  const visualsBody = (
+    <div className="space-y-3">
+      {hasVideo ? (
+        <div className="space-y-2">
+          <video
+            key={videoSrc}
+            src={videoSrc}
+            controls
+            preload="metadata"
+            className="w-full rounded-lg ring-1 ring-zinc-800"
+          />
+          <div className="flex items-center justify-between text-xs gap-2 flex-wrap">
+            <a
+              href={videoSrc}
+              target="_blank"
+              rel="noreferrer"
+              className="text-spark hover:underline"
+            >
+              open video ↗
+            </a>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span
+                className="text-[10px] rounded-full bg-zinc-800 text-zinc-300 px-2 py-0.5 font-mono"
+                title="Runway gen4_turbo / gen4.5 produce the visual cut only. Spoken assets live in the Character + Voice tabs."
+              >
+                visual-only · silent
+              </span>
+              {cacheStatusLabel && (
+                <span
+                  className={
+                    isCached
+                      ? 'text-emerald-300'
+                      : cacheFailed
+                      ? 'text-rose-300'
+                      : 'text-zinc-500'
+                  }
+                  title={
+                    isCached
+                      ? 'Backend cached the video at backend/data/videos and serves it from /api/campaigns/{id}/video. Stable forever.'
+                      : cacheFailed
+                      ? `Caching failed: ${c.cache_error || 'unknown error'}. Falling back to the original Runway URL, which expires in ~days.`
+                      : 'Runway artifact URLs are presigned and expire (~days). Cache skipped — fallback to the original URL.'
+                  }
+                >
+                  {cacheStatusLabel}
+                </span>
+              )}
+            </div>
+          </div>
+          <p className="text-[10px] text-zinc-500 leading-relaxed">
+            Visual cut only — Runway gen4_turbo / gen4.5 output is silent.
+            Spoken assets live in the <span className="text-zinc-300">Character</span>{' '}
+            tab (host clip) and <span className="text-zinc-300">Voice</span> tab
+            (samples).
+          </p>
+        </div>
+      ) : (
+        <p className="text-xs text-zinc-500 italic">
+          No cached video yet. Save a campaign in Stage 2 first.
+        </p>
+      )}
+
+      {/* Campaign Pack — only meaningful once we have a cached video. */}
+      {isCached && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-zinc-300">Campaign Pack</span>
+              <span className="text-[10px] text-zinc-500" title="Each format runs a local ffmpeg pass — no extra Runway calls.">
+                {finishedCount}/3 formats ready
+              </span>
+            </div>
+            {finishUnavailable && (
+              <span className="text-[10px] text-amber-300">
+                ffmpeg unavailable — install via `brew install ffmpeg`
+              </span>
+            )}
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            {PACK_FORMATS.map((f) => (
+              <PackEntry
+                key={f.key}
+                c={c}
+                fmt={f.key}
+                label={f.label}
+                dims={f.dims}
+                hint={f.hint}
+                onClick={handleBuild}
+                busyFormat={busyFormat}
+              />
+            ))}
+          </div>
+          {c.finish_status === 'failed' && c.finish_error && (
+            <p className="text-[10px] text-rose-300" title={c.finish_error}>
+              last finish attempt failed — see backend log
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  )
+
+  const characterBody = (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-zinc-300">
+            Brand Spokesperson
+          </span>
+          <span
+            className="text-[10px] text-zinc-500 font-mono"
+            title="Runway Avatar created from this campaign's reference image (or a stock portrait fallback)."
+          >
+            Runway Avatar
+          </span>
+        </div>
+        {avatarReady && (
+          <span
+            className={`text-[10px] rounded-full px-2 py-0.5 font-mono ${
+              avatarMock
+                ? 'bg-amber-500/20 text-amber-300'
+                : 'bg-emerald-500/20 text-emerald-300'
+            }`}
+            title={avatarMock ? 'mock avatar (no real Runway call)' : 'Avatar processed and READY'}
+          >
+            {hasSelection ? (avatarMock ? 'selected · mock' : 'selected · ready') : (avatarMock ? 'mock ready' : 'ready')}
+          </span>
+        )}
+        {avatarFailed && (
+          <span className="text-[10px] rounded-full bg-rose-500/20 text-rose-300 px-2 py-0.5 font-mono">
+            failed
+          </span>
+        )}
+      </div>
+
+      {/* PR K — Character attachment. Wins over picker + custom. */}
+      {hasCharacter && character && (
+        <div className="rounded-md ring-1 ring-pink-400/40 bg-pink-500/5 p-2 space-y-1.5">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[11px] font-semibold text-pink-300">
+              Attached Character
+            </span>
+            <button
+              type="button"
+              onClick={handleDetachCharacter}
+              className="text-[10px] text-zinc-500 hover:text-pink-300"
+              title="Detach the character — falls back to selected avatar / custom Brand Spokesperson"
+            >
+              detach
+            </button>
+          </div>
+          <div className="flex items-start gap-2">
+            {character.portrait_url && (
+              <img
+                src={character.portrait_url}
+                alt={character.name}
+                className="w-12 h-12 rounded-md ring-1 ring-pink-400/40 object-cover bg-zinc-950"
+              />
+            )}
+            <div className="text-[11px] text-zinc-300 min-w-0">
+              <div className="font-medium truncate">{character.name}</div>
+              <div className="text-zinc-500 font-mono text-[9px]">
+                {character.template} · {character.voice_preset} ·
+                avatar {character.runway_avatar_status || 'pending'}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PR K — Attach-character affordance. Always available when
+          no character is currently attached to this campaign. */}
+      {!hasCharacter && (
+        <div className="space-y-1">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[11px] text-zinc-400">
+              <span className="text-pink-300">Attach Character</span>
+              {' — '}reuse a Character Studio identity for Host Clip + Realtime
+            </span>
+            <button
+              type="button"
+              onClick={() => attachPickerOpen ? setAttachPickerOpen(false) : openAttachPicker()}
+              className="text-[10px] text-zinc-500 hover:text-pink-300"
+            >
+              {attachPickerOpen ? 'cancel' : 'attach character'}
+            </button>
+          </div>
+          {attachPickerOpen && (
+            <div>
+              {characterLibrary.length === 0 ? (
+                <p className="text-[10px] text-zinc-500 italic py-2">
+                  {characterLibraryLoaded
+                    ? 'No characters yet. Use Character Studio above to create one.'
+                    : 'Loading…'}
+                </p>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {characterLibrary.map((ch) => (
+                    <CharacterCard
+                      key={ch.id}
+                      character={ch}
+                      compact
+                      onAttach={handleAttachCharacter}
+                      busyAction={attachBusyId === ch.id ? 'attach' : null}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* PR I+ — Picker. If you select an existing avatar here, the
+          "Create Custom Brand Spokesperson" flow below becomes
+          optional — selected_avatar_id wins downstream.  Only
+          show the picker when no character is attached (character
+          is the higher-precedence pin). */}
+      {!hasCharacter && <AvatarPicker campaign={c} onUpdated={onUpdated} />}
+
+      {/* Phase 1 visual — current avatar identity (only shown when
+          no Character is attached; the Character block above is the
+          primary identity surface in that case) */}
+      {!hasCharacter && avatarReady ? (
+        <div className="flex items-start gap-3">
+          {(hasSelection ? c.selected_avatar_thumbnail_url : c.host_avatar_image_url) && (
+            <img
+              src={hasSelection ? c.selected_avatar_thumbnail_url : c.host_avatar_image_url}
+              alt={hasSelection ? c.selected_avatar_name || 'Selected Runway avatar' : 'Brand spokesperson avatar'}
+              className="w-16 h-16 rounded-md ring-1 ring-zinc-800 object-cover bg-zinc-950"
+            />
+          )}
+          <div className="text-[11px] text-zinc-400 space-y-0.5 min-w-0">
+            {hasSelection ? (
+              <>
+                <div className="font-mono text-zinc-200 truncate" title={c.selected_avatar_id || ''}>
+                  {c.selected_avatar_name || 'Selected Runway Avatar'}
+                </div>
+                <div>
+                  source:{' '}
+                  <span className="text-zinc-300">
+                    {c.selected_avatar_source === 'preset'
+                      ? 'Preset Character'
+                      : c.selected_avatar_source === 'custom'
+                      ? 'Custom Avatar'
+                      : c.selected_avatar_source || 'unknown'}
+                  </span>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="font-mono text-zinc-200 truncate" title={c.host_avatar_id || ''}>
+                  avatar id: {String(c.host_avatar_id).slice(0, 12)}…
+                </div>
+                <div>
+                  source:{' '}
+                  <span className="text-zinc-300">
+                    {c.host_avatar_image_source === 'campaign'
+                      ? 'this campaign’s reference image'
+                      : c.host_avatar_image_source === 'override'
+                      ? 'user-provided image'
+                      : 'stock portrait'}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleCreateSpokesperson({ force_recreate: true })}
+                  disabled={avatarBusy}
+                  className="text-[10px] text-zinc-500 hover:text-zinc-300 disabled:opacity-50"
+                  title="Discard the cached avatar and create a fresh one"
+                >
+                  {avatarBusy ? 'Re-creating…' : 'Re-create spokesperson'}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      ) : !hasCharacter ? (
+        <div className="space-y-1.5">
+          <p className="text-[10px] text-zinc-500 leading-relaxed">
+            Creates a reusable Runway Avatar from this campaign’s reference
+            image (or a stock portrait fallback when the campaign image
+            has no recognisable face).{' '}
+            <span className="text-pink-300">
+              Or attach a Character from Character Studio above.
+            </span>
+          </p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => handleCreateSpokesperson()}
+              disabled={avatarBusy}
+              className="rounded-md bg-sky-500/80 hover:bg-sky-500 text-zinc-100 text-xs px-2 py-1 disabled:opacity-50"
+            >
+              {avatarBusy
+                ? 'Creating Brand Spokesperson…'
+                : avatarFailed
+                ? 'Retry Create Brand Spokesperson'
+                : 'Create Brand Spokesperson'}
+            </button>
+            {avatarFailed && (
+              <button
+                type="button"
+                onClick={() =>
+                  handleCreateSpokesperson({
+                    force_recreate: true,
+                    image_source: 'stock',
+                  })
+                }
+                disabled={avatarBusy}
+                className="rounded-md ring-1 ring-zinc-700 hover:ring-spark text-[10px] px-2 py-1 text-zinc-300 disabled:opacity-50"
+                title="Try again using the configured stock portrait instead"
+              >
+                Retry with stock portrait
+              </button>
+            )}
+          </div>
+          {avatarFailed && c.host_avatar_error && (
+            <p className="text-[10px] text-rose-300" title={c.host_avatar_error}>
+              {c.host_avatar_error}
+            </p>
+          )}
+        </div>
+      ) : null}
+
+      {/* Phase 2 — Avatar Host Clip — only available once Phase 1 is ready. */}
+      {avatarReady && (
+        <div className="border-t border-zinc-800/60 pt-2 space-y-1.5">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-semibold text-zinc-300">
+              Avatar Host Clip
+            </span>
+            {hostReady && (
+              <span
+                className={`text-[10px] rounded-full px-2 py-0.5 font-mono ${
+                  c.host_mock_mode
+                    ? 'bg-amber-500/20 text-amber-300'
+                    : 'bg-violet-500/20 text-violet-300'
+                }`}
+              >
+                {c.host_mock_mode ? 'mock ready' : 'ready'}
+              </span>
+            )}
+            {hostUnavailable && (
+              <span className="text-[10px] text-amber-300">
+                ffmpeg unavailable
+              </span>
+            )}
+          </div>
+          {hostReady ? (
+            <div className="space-y-1.5">
+              <video
+                key={c.host_video_url}
+                src={c.host_video_url}
+                controls
+                preload="metadata"
+                className="w-full max-w-xs rounded-lg ring-1 ring-zinc-800"
+              />
+              <div className="flex items-center gap-3 text-xs">
+                <a
+                  href={c.host_video_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-spark hover:underline"
+                >
+                  open host clip ↗
+                </a>
+                <button
+                  type="button"
+                  onClick={handlePresent}
+                  disabled={hostBusy}
+                  className="text-[10px] text-zinc-500 hover:text-zinc-300 disabled:opacity-50"
+                  title="Generate a fresh clip with the same Brand Spokesperson"
+                >
+                  {hostBusy ? 'Recording…' : 'regenerate'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-1">
+              <p className="text-[10px] text-zinc-500">
+                Uses the Brand Spokesperson Avatar above to record a short
+                campaign pitch.
+              </p>
+              <button
+                type="button"
+                onClick={handlePresent}
+                disabled={hostBusy}
+                className="rounded-md bg-violet-500/80 hover:bg-violet-500 text-zinc-100 text-xs px-2 py-1 disabled:opacity-50"
+              >
+                {hostBusy
+                  ? 'Recording Host Clip…'
+                  : hostFailed
+                  ? 'Retry Present Campaign'
+                  : 'Present Campaign'}
+              </button>
+              {hostFailed && c.host_error && (
+                <p className="text-[10px] text-rose-300" title={c.host_error}>
+                  {c.host_error}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+
+  const voiceBody = (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-zinc-300">Audio Pack</span>
+          <span
+            className="text-[10px] text-zinc-500 font-mono"
+            title="Brand Voice Identity (Runway /v1/voices) + multilingual voice samples (Runway voice_dubbing). These are voice samples, not full ad narration — commercial narration mixing is future work."
+          >
+            Brand Voice Identity
+          </span>
+        </div>
+        {voiceReady && (
+          <span
+            className={`text-[10px] rounded-full px-2 py-0.5 font-mono ${
+              voiceMock
+                ? 'bg-amber-500/20 text-amber-300'
+                : 'bg-teal-500/20 text-teal-300'
+            }`}
+          >
+            {voiceMock ? 'mock voice' : 'voice ready'}
+          </span>
+        )}
+        {voiceFailed && (
+          <span className="text-[10px] rounded-full bg-rose-500/20 text-rose-300 px-2 py-0.5 font-mono">
+            voice failed
+          </span>
+        )}
+      </div>
+
+      <p className="text-[10px] text-zinc-500 leading-relaxed">
+        Voice samples, not full ad narration.{' '}
+        <span className="text-zinc-300">
+          The spoken pitch lives in the Avatar Host Clip (Character tab)
+        </span>{' '}
+        — that's the avatar speaking the campaign hook + caption + CTA.
+        Commercial narration / mixing into the visual cut is future work.
+      </p>
+
+      {/* Phase 1 — Brand Voice Identity */}
+      {voiceReady ? (
+        <div className="space-y-1.5">
+          <div className="text-[11px] font-semibold text-zinc-300">
+            Voice Sample
+          </div>
+          <div className="flex items-start gap-3">
+            <audio
+              key={c.brand_voice_preview_url}
+              src={c.brand_voice_preview_url}
+              controls
+              preload="metadata"
+              className="w-full max-w-xs"
+            />
+            <div className="text-[11px] text-zinc-400 space-y-0.5 min-w-0">
+              <div className="font-mono text-zinc-200 truncate" title={c.brand_voice_id || ''}>
+                voice id: {String(c.brand_voice_id).slice(0, 12)}…
+              </div>
+              <button
+                type="button"
+                onClick={() => handleDesignVoice({ force_recreate: true })}
+                disabled={voiceBusy}
+                className="text-[10px] text-zinc-500 hover:text-zinc-300 disabled:opacity-50"
+                title="Discard the cached voice identity and design a fresh one"
+              >
+                {voiceBusy ? 'Re-designing…' : 'Re-design voice identity'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-1.5">
+          <p className="text-[10px] text-zinc-500 leading-relaxed">
+            Designs a reusable Runway voice that matches this campaign's
+            tone + audience. The cached preview is Runway's generic voice
+            sample — not the ad copy — and seeds the multilingual samples
+            below.
+          </p>
+          <button
+            type="button"
+            onClick={() => handleDesignVoice()}
+            disabled={voiceBusy}
+            className="rounded-md bg-teal-500/80 hover:bg-teal-500 text-zinc-100 text-xs px-2 py-1 disabled:opacity-50"
+          >
+            {voiceBusy
+              ? 'Designing Brand Voice…'
+              : voiceFailed
+              ? 'Retry Design Brand Voice'
+              : 'Design Brand Voice'}
+          </button>
+          {voiceFailed && c.brand_voice_error && (
+            <p className="text-[10px] text-rose-300" title={c.brand_voice_error}>
+              {c.brand_voice_error}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Phase 2 — Multilingual Voice Samples — only meaningful with a ready voice */}
+      {voiceReady && (
+        <div className="border-t border-zinc-800/60 pt-2 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-semibold text-zinc-300">
+              Voice Samples — Multilingual
+            </span>
+            <span
+              className="text-[10px] text-zinc-500"
+              title="Runway voice_dubbing dubs the Brand Voice sample above into the chosen language. The output is a voice sample in that language — not the campaign ad in that language."
+            >
+              Runway voice_dubbing
+            </span>
+          </div>
+          <p className="text-[10px] text-zinc-500 leading-relaxed">
+            Each language re-voices the Voice Sample above —{' '}
+            <span className="text-zinc-300">not the ad itself</span>. Tap to
+            hear how the brand voice sounds in that language.
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+            {DUB_LANGS.map((d) => {
+              const url = (c.dubbed_audio_urls || {})[d.code]
+              const status = (c.dub_statuses || {})[d.code]
+              const error = (c.dub_errors || {})[d.code]
+              const ready = status === 'ok' && Boolean(url)
+              const isBusy = busyDubLang === d.code
+              const failed = status === 'failed'
+              return (
+                <div
+                  key={d.code}
+                  className="rounded-md ring-1 ring-zinc-800 bg-zinc-950/40 p-1.5 text-[11px] flex flex-col gap-1"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-zinc-200">{d.label}</span>
+                    <span className="text-[10px] text-zinc-500 font-mono">{d.code}</span>
+                  </div>
+                  {ready ? (
+                    <audio src={url} controls preload="none" className="w-full" />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleDub(d.code)}
+                      disabled={isBusy || Boolean(busyDubLang)}
+                      className="rounded bg-teal-500/70 hover:bg-teal-500 text-zinc-100 text-[10px] px-1.5 py-0.5 disabled:opacity-50"
+                      title={`Generate a ${d.label} voice sample from the Brand Voice above`}
+                    >
+                      {isBusy ? 'Sampling…' : failed ? `Retry ${d.label}` : `Sample ${d.label}`}
+                    </button>
+                  )}
+                  {failed && error && (
+                    <span
+                      className="text-[10px] text-rose-300 truncate"
+                      title={error}
+                    >
+                      {error}
+                    </span>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+
+  const realtimeBody = (
+    <div className="space-y-2">
+      {avatarReady ? (
+        <RealtimeSpokesperson
+          campaign={c}
+          gateReason={
+            avatarMock
+              ? 'Realtime requires a real Runway key — running in mock mode.'
+              : null
+          }
+        />
+      ) : (
+        <div className="rounded-md ring-1 ring-zinc-800 bg-zinc-950/40 p-3 space-y-1.5">
+          <div className="text-xs font-semibold text-zinc-300">
+            Brand Spokesperson required
+          </div>
+          <p className="text-[11px] text-zinc-500 leading-relaxed">
+            Realtime conversations need a ready Runway Avatar. Pick or
+            attach one in the <span className="text-zinc-300">Character</span>{' '}
+            tab first, then come back here.
+          </p>
+          <button
+            type="button"
+            onClick={() => setActiveTab('character')}
+            className="rounded-md bg-fuchsia-500/30 hover:bg-fuchsia-500/50 text-zinc-100 text-xs px-2 py-1"
+          >
+            Open Character tab →
+          </button>
+        </div>
+      )}
+    </div>
+  )
+
+  // Exports — flat list of every cached/derived artefact with a
+  // download link or a "not generated yet" placeholder. Saved as a
+  // ledger view rather than a player so users can hand off URLs.
+  const exportRows = [
+    {
+      label: 'Visual ad (silent cut)',
+      url: c.cached_video_url || c.video_url,
+      meta: isCached ? 'cached locally' : 'external Runway URL',
+    },
+    ...PACK_FORMATS.map((f) => ({
+      label: `Campaign Pack — ${f.label} (${f.dims})`,
+      url: finishedUrlFor(c, f.key),
+      meta: 'local ffmpeg output',
+    })),
+    {
+      label: 'Avatar Host Clip',
+      url: hostReady ? c.host_video_url : null,
+      meta: c.host_mock_mode ? 'ffmpeg mock placeholder' : 'Runway avatar_videos',
+    },
+    {
+      label: 'Brand Voice Sample',
+      url: voiceReady ? c.brand_voice_preview_url : null,
+      meta: voiceMock ? 'ffmpeg lavfi placeholder' : 'Runway voices preview',
+    },
+    ...DUB_LANGS.filter((d) => (c.dubbed_audio_urls || {})[d.code]).map((d) => ({
+      label: `Voice Sample — ${d.label} (${d.code})`,
+      url: (c.dubbed_audio_urls || {})[d.code],
+      meta: 'Runway voice_dubbing',
+    })),
+  ]
+
+  const exportsBody = (
+    <div className="space-y-1.5">
+      <p className="text-[10px] text-zinc-500 leading-relaxed">
+        Every cached artefact for this campaign. Files served by the
+        FastAPI backend stay reachable as long as the campaign exists.
+        Use <span className="text-rose-300">delete</span> in the card
+        header to clean everything up.
+      </p>
+      <ul className="divide-y divide-zinc-800/60 ring-1 ring-zinc-800/60 rounded-md">
+        {exportRows.map((row, i) => (
+          <li
+            key={`${row.label}-${i}`}
+            className="px-2.5 py-1.5 text-[11px] flex items-center justify-between gap-3"
+          >
+            <div className="min-w-0">
+              <div className="text-zinc-200 truncate">{row.label}</div>
+              <div className="text-[10px] text-zinc-500">{row.meta}</div>
+            </div>
+            {row.url ? (
+              <a
+                href={row.url}
+                target="_blank"
+                rel="noreferrer"
+                className="text-spark hover:underline shrink-0"
+                download
+              >
+                download ↓
+              </a>
+            ) : (
+              <span className="text-[10px] text-zinc-600 italic shrink-0">
+                not generated yet
+              </span>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
 
   return (
-    <li className="rounded-xl border border-zinc-800 p-4 bg-zinc-950/40 space-y-3">
+    <li className="rounded-xl ring-1 ring-zinc-800 p-4 bg-studio-900/60 space-y-3 shadow-panel">
+      {/* ---- Card header ------------------------------------------- */}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="font-medium text-zinc-100 truncate">{c.business}</div>
@@ -326,6 +1162,7 @@ function CampaignCard({ c, onUpdated, onDeleted }) {
         </div>
       </div>
 
+      {/* ---- Concept summary --------------------------------------- */}
       <div>
         <div className="text-sm text-zinc-200 font-medium">
           {concept.title || 'Untitled concept'}
@@ -333,593 +1170,59 @@ function CampaignCard({ c, onUpdated, onDeleted }) {
         {concept.caption && (
           <div className="text-xs text-zinc-400 mt-0.5">{concept.caption}</div>
         )}
-      </div>
-
-      {c.runway_prompt && (
-        <details className="text-xs text-zinc-500">
-          <summary className="cursor-pointer hover:text-zinc-300">prompt</summary>
-          <p className="mt-1 text-zinc-400 whitespace-pre-wrap leading-relaxed">
-            {c.runway_prompt}
-          </p>
-        </details>
-      )}
-
-      {hasVideo && (
-        <div className="space-y-2">
-          <video
-            key={videoSrc}
-            src={videoSrc}
-            controls
-            preload="metadata"
-            className="w-full rounded-lg border border-zinc-800"
-          />
-          <div className="flex items-center justify-between text-xs gap-2 flex-wrap">
-            <a
-              href={videoSrc}
-              target="_blank"
-              rel="noreferrer"
-              className="text-spark hover:underline"
-            >
-              open video ↗
-            </a>
-            <div className="flex items-center gap-2 flex-wrap">
-              <span
-                className="text-[10px] rounded-full bg-zinc-800 text-zinc-300 px-2 py-0.5 font-mono"
-                title="Runway gen4_turbo / gen4.5 produce the visual cut only. Spoken assets live in the Avatar Host Clip and Audio Pack sections below."
-              >
-                visual-only · silent
-              </span>
-              {cacheStatusLabel && (
-                <span
-                  className={
-                    isCached
-                      ? 'text-emerald-300'
-                      : cacheFailed
-                      ? 'text-rose-300'
-                      : 'text-zinc-500'
-                  }
-                  title={
-                    isCached
-                      ? 'Backend cached the video at backend/data/videos and serves it from /api/campaigns/{id}/video. Stable forever.'
-                      : cacheFailed
-                      ? `Caching failed: ${c.cache_error || 'unknown error'}. Falling back to the original Runway URL, which expires in ~days.`
-                      : 'Runway artifact URLs are presigned and expire (~days). Cache skipped — fallback to the original URL.'
-                  }
-                >
-                  {cacheStatusLabel}
-                </span>
-              )}
-            </div>
-          </div>
-          <p className="text-[10px] text-zinc-500 leading-relaxed">
-            Visual cut only — Runway gen4_turbo / gen4.5 output is silent.
-            Spoken assets live in the <span className="text-zinc-300">Avatar Host Clip</span>{' '}
-            and <span className="text-zinc-300">Audio Pack</span> sections below.
-          </p>
-        </div>
-      )}
-
-      {/* Campaign Pack — only meaningful once we have a cached video. */}
-      {isCached && (
-        <div className="border-t border-zinc-800 pt-3 space-y-2">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-zinc-300">Campaign Pack</span>
-              <span className="text-[10px] text-zinc-500" title="Each format runs a local ffmpeg pass — no extra Runway calls.">
-                {finishedCount}/3 formats ready
-              </span>
-            </div>
-            {finishUnavailable && (
-              <span className="text-[10px] text-amber-300">
-                ffmpeg unavailable — install via `brew install ffmpeg`
-              </span>
-            )}
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-            {PACK_FORMATS.map((f) => (
-              <PackEntry
-                key={f.key}
-                c={c}
-                fmt={f.key}
-                label={f.label}
-                dims={f.dims}
-                hint={f.hint}
-                onClick={handleBuild}
-                busyFormat={busyFormat}
-              />
-            ))}
-          </div>
-          {c.finish_status === 'failed' && c.finish_error && (
-            <p
-              className="text-[10px] text-rose-300"
-              title={c.finish_error}
-            >
-              last finish attempt failed — see backend log
+        {c.runway_prompt && (
+          <details className="text-xs text-zinc-500 mt-1">
+            <summary className="cursor-pointer hover:text-zinc-300">
+              prompt
+            </summary>
+            <p className="mt-1 text-zinc-400 whitespace-pre-wrap leading-relaxed">
+              {c.runway_prompt}
             </p>
-          )}
-        </div>
-      )}
-
-      {/* PR F — Brand Spokesperson Avatar (Phase 1) + Avatar Host Clip (Phase 2). */}
-      <div className="border-t border-zinc-800 pt-3 space-y-3">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-zinc-300">
-              Brand Spokesperson
-            </span>
-            <span
-              className="text-[10px] text-zinc-500 font-mono"
-              title="Runway Avatar created from this campaign's reference image (or a stock portrait fallback)."
-            >
-              Runway Avatar
-            </span>
-          </div>
-          {avatarReady && (
-            <span
-              className={`text-[10px] rounded-full px-2 py-0.5 font-mono ${
-                avatarMock
-                  ? 'bg-amber-500/20 text-amber-300'
-                  : 'bg-emerald-500/20 text-emerald-300'
-              }`}
-              title={avatarMock ? 'mock avatar (no real Runway call)' : 'Avatar processed and READY'}
-            >
-              {hasSelection ? (avatarMock ? 'selected · mock' : 'selected · ready') : (avatarMock ? 'mock ready' : 'ready')}
-            </span>
-          )}
-          {avatarFailed && (
-            <span className="text-[10px] rounded-full bg-rose-500/20 text-rose-300 px-2 py-0.5 font-mono">
-              failed
-            </span>
-          )}
-        </div>
-
-        {/* PR K — Character attachment. Wins over picker + custom. */}
-        {hasCharacter && character && (
-          <div className="rounded-md border border-pink-400/40 bg-pink-500/5 p-2 space-y-1.5">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[11px] font-semibold text-pink-300">
-                Attached Character
-              </span>
-              <button
-                type="button"
-                onClick={handleDetachCharacter}
-                className="text-[10px] text-zinc-500 hover:text-pink-300"
-                title="Detach the character — falls back to selected avatar / custom Brand Spokesperson"
-              >
-                detach
-              </button>
-            </div>
-            <div className="flex items-start gap-2">
-              {character.portrait_url && (
-                <img
-                  src={character.portrait_url}
-                  alt={character.name}
-                  className="w-12 h-12 rounded-md border border-pink-400/40 object-cover bg-zinc-950"
-                />
-              )}
-              <div className="text-[11px] text-zinc-300 min-w-0">
-                <div className="font-medium truncate">{character.name}</div>
-                <div className="text-zinc-500 font-mono text-[9px]">
-                  {character.template} · {character.voice_preset} ·
-                  avatar {character.runway_avatar_status || 'pending'}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* PR K — Attach-character affordance. Always available when
-            no character is currently attached to this campaign. */}
-        {!hasCharacter && (
-          <div className="space-y-1">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[11px] text-zinc-400">
-                <span className="text-pink-300">Attach Character</span>
-                {' — '}reuse a Character Studio identity for Host Clip + Realtime
-              </span>
-              <button
-                type="button"
-                onClick={() => attachPickerOpen ? setAttachPickerOpen(false) : openAttachPicker()}
-                className="text-[10px] text-zinc-500 hover:text-pink-300"
-              >
-                {attachPickerOpen ? 'cancel' : 'attach character'}
-              </button>
-            </div>
-            {attachPickerOpen && (
-              <div>
-                {characterLibrary.length === 0 ? (
-                  <p className="text-[10px] text-zinc-500 italic py-2">
-                    {characterLibraryLoaded
-                      ? 'No characters yet. Use Character Studio above to create one.'
-                      : 'Loading…'}
-                  </p>
-                ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    {characterLibrary.map((ch) => (
-                      <CharacterCard
-                        key={ch.id}
-                        character={ch}
-                        compact
-                        onAttach={handleAttachCharacter}
-                        busyAction={attachBusyId === ch.id ? 'attach' : null}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* PR I+ — Picker. If you select an existing avatar here, the
-            "Create Custom Brand Spokesperson" flow below becomes
-            optional — selected_avatar_id wins downstream.  Only
-            show the picker when no character is attached (character
-            is the higher-precedence pin). */}
-        {!hasCharacter && <AvatarPicker campaign={c} onUpdated={onUpdated} />}
-
-        {/* Phase 1 visual — current avatar identity (only shown when
-            no Character is attached; the Character block above is the
-            primary identity surface in that case) */}
-        {!hasCharacter && avatarReady ? (
-          <div className="flex items-start gap-3">
-            {(hasSelection ? c.selected_avatar_thumbnail_url : c.host_avatar_image_url) && (
-              <img
-                src={hasSelection ? c.selected_avatar_thumbnail_url : c.host_avatar_image_url}
-                alt={hasSelection ? c.selected_avatar_name || 'Selected Runway avatar' : 'Brand spokesperson avatar'}
-                className="w-16 h-16 rounded-md border border-zinc-800 object-cover bg-zinc-950"
-              />
-            )}
-            <div className="text-[11px] text-zinc-400 space-y-0.5 min-w-0">
-              {hasSelection ? (
-                <>
-                  <div className="font-mono text-zinc-200 truncate" title={c.selected_avatar_id || ''}>
-                    {c.selected_avatar_name || 'Selected Runway Avatar'}
-                  </div>
-                  <div>
-                    source:{' '}
-                    <span className="text-zinc-300">
-                      {c.selected_avatar_source === 'preset'
-                        ? 'Preset Character'
-                        : c.selected_avatar_source === 'custom'
-                        ? 'Custom Avatar'
-                        : c.selected_avatar_source || 'unknown'}
-                    </span>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="font-mono text-zinc-200 truncate" title={c.host_avatar_id || ''}>
-                    avatar id: {String(c.host_avatar_id).slice(0, 12)}…
-                  </div>
-                  <div>
-                    source:{' '}
-                    <span className="text-zinc-300">
-                      {c.host_avatar_image_source === 'campaign'
-                        ? 'this campaign’s reference image'
-                        : c.host_avatar_image_source === 'override'
-                        ? 'user-provided image'
-                        : 'stock portrait'}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleCreateSpokesperson({ force_recreate: true })}
-                    disabled={avatarBusy}
-                    className="text-[10px] text-zinc-500 hover:text-zinc-300 disabled:opacity-50"
-                    title="Discard the cached avatar and create a fresh one"
-                  >
-                    {avatarBusy ? 'Re-creating…' : 'Re-create spokesperson'}
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-        ) : !hasCharacter ? (
-          <div className="space-y-1.5">
-            <p className="text-[10px] text-zinc-500 leading-relaxed">
-              Creates a reusable Runway Avatar from this campaign’s reference
-              image (or a stock portrait fallback when the campaign image
-              has no recognisable face).{' '}
-              <span className="text-pink-300">
-                Or attach a Character from Character Studio above.
-              </span>
-            </p>
-            <div className="flex items-center gap-2 flex-wrap">
-              <button
-                type="button"
-                onClick={() => handleCreateSpokesperson()}
-                disabled={avatarBusy}
-                className="rounded-md bg-sky-500/80 hover:bg-sky-500 text-zinc-100 text-xs px-2 py-1 disabled:opacity-50"
-              >
-                {avatarBusy
-                  ? 'Creating Brand Spokesperson…'
-                  : avatarFailed
-                  ? 'Retry Create Brand Spokesperson'
-                  : 'Create Brand Spokesperson'}
-              </button>
-              {avatarFailed && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    handleCreateSpokesperson({
-                      force_recreate: true,
-                      image_source: 'stock',
-                    })
-                  }
-                  disabled={avatarBusy}
-                  className="rounded-md border border-zinc-700 hover:border-spark text-[10px] px-2 py-1 text-zinc-300 disabled:opacity-50"
-                  title="Try again using the configured stock portrait instead"
-                >
-                  Retry with stock portrait
-                </button>
-              )}
-            </div>
-            {avatarFailed && c.host_avatar_error && (
-              <p className="text-[10px] text-rose-300" title={c.host_avatar_error}>
-                {c.host_avatar_error}
-              </p>
-            )}
-          </div>
-        ) : null}
-
-        {/* Phase 2 — Avatar Host Clip — only available once Phase 1 is ready. */}
-        {avatarReady && (
-          <div className="border-t border-zinc-800/60 pt-2 space-y-1.5">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-semibold text-zinc-300">
-                Avatar Host Clip
-              </span>
-              {hostReady && (
-                <span
-                  className={`text-[10px] rounded-full px-2 py-0.5 font-mono ${
-                    c.host_mock_mode
-                      ? 'bg-amber-500/20 text-amber-300'
-                      : 'bg-violet-500/20 text-violet-300'
-                  }`}
-                >
-                  {c.host_mock_mode ? 'mock ready' : 'ready'}
-                </span>
-              )}
-              {hostUnavailable && (
-                <span className="text-[10px] text-amber-300">
-                  ffmpeg unavailable
-                </span>
-              )}
-            </div>
-            {hostReady ? (
-              <div className="space-y-1.5">
-                <video
-                  key={c.host_video_url}
-                  src={c.host_video_url}
-                  controls
-                  preload="metadata"
-                  className="w-full max-w-xs rounded-lg border border-zinc-800"
-                />
-                <div className="flex items-center gap-3 text-xs">
-                  <a
-                    href={c.host_video_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-spark hover:underline"
-                  >
-                    open host clip ↗
-                  </a>
-                  <button
-                    type="button"
-                    onClick={handlePresent}
-                    disabled={hostBusy}
-                    className="text-[10px] text-zinc-500 hover:text-zinc-300 disabled:opacity-50"
-                    title="Generate a fresh clip with the same Brand Spokesperson"
-                  >
-                    {hostBusy ? 'Recording…' : 'regenerate'}
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-1">
-                <p className="text-[10px] text-zinc-500">
-                  Uses the Brand Spokesperson Avatar above to record a short
-                  campaign pitch.
-                </p>
-                <button
-                  type="button"
-                  onClick={handlePresent}
-                  disabled={hostBusy}
-                  className="rounded-md bg-violet-500/80 hover:bg-violet-500 text-zinc-100 text-xs px-2 py-1 disabled:opacity-50"
-                >
-                  {hostBusy
-                    ? 'Recording Host Clip…'
-                    : hostFailed
-                    ? 'Retry Present Campaign'
-                    : 'Present Campaign'}
-                </button>
-                {hostFailed && c.host_error && (
-                  <p className="text-[10px] text-rose-300" title={c.host_error}>
-                    {c.host_error}
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* PR I — Talk to Brand Spokesperson (realtime).  Strictly
-            additive layer, gated to real-mode ready avatars only.  In
-            mock mode we render the section disabled with a clear
-            reason so the demo story stays honest. */}
-        {avatarReady && (
-          <RealtimeSpokesperson
-            campaign={c}
-            gateReason={
-              avatarMock
-                ? 'Realtime requires a real Runway key — running in mock mode.'
-                : null
-            }
-          />
+          </details>
         )}
       </div>
 
-      {/* PR H — Audio Pack: Brand Voice Identity (Phase 1) + Voice Samples (Phase 2) */}
-      <div className="border-t border-zinc-800 pt-3 space-y-3">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-zinc-300">Audio Pack</span>
-            <span
-              className="text-[10px] text-zinc-500 font-mono"
-              title="Brand Voice Identity (Runway /v1/voices) + multilingual voice samples (Runway voice_dubbing). These are voice samples, not full ad narration — commercial narration mixing is future work."
-            >
-              Brand Voice Identity
-            </span>
-          </div>
-          {voiceReady && (
-            <span
-              className={`text-[10px] rounded-full px-2 py-0.5 font-mono ${
-                voiceMock
-                  ? 'bg-amber-500/20 text-amber-300'
-                  : 'bg-teal-500/20 text-teal-300'
-              }`}
-            >
-              {voiceMock ? 'mock voice' : 'voice ready'}
-            </span>
-          )}
-          {voiceFailed && (
-            <span className="text-[10px] rounded-full bg-rose-500/20 text-rose-300 px-2 py-0.5 font-mono">
-              voice failed
-            </span>
-          )}
-        </div>
-
-        <p className="text-[10px] text-zinc-500 leading-relaxed">
-          Voice samples, not full ad narration.{' '}
-          <span className="text-zinc-300">
-            The spoken pitch lives in the Avatar Host Clip above
-          </span>{' '}
-          — that's the avatar speaking the campaign hook + caption + CTA.
-          Commercial narration / mixing into the visual cut is future work.
-        </p>
-
-        {/* Phase 1 — Brand Voice Identity */}
-        {voiceReady ? (
-          <div className="space-y-1.5">
-            <div className="text-[11px] font-semibold text-zinc-300">
-              Voice Sample
-            </div>
-            <div className="flex items-start gap-3">
-              <audio
-                key={c.brand_voice_preview_url}
-                src={c.brand_voice_preview_url}
-                controls
-                preload="metadata"
-                className="w-full max-w-xs"
-              />
-              <div className="text-[11px] text-zinc-400 space-y-0.5 min-w-0">
-                <div className="font-mono text-zinc-200 truncate" title={c.brand_voice_id || ''}>
-                  voice id: {String(c.brand_voice_id).slice(0, 12)}…
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleDesignVoice({ force_recreate: true })}
-                  disabled={voiceBusy}
-                  className="text-[10px] text-zinc-500 hover:text-zinc-300 disabled:opacity-50"
-                  title="Discard the cached voice identity and design a fresh one"
-                >
-                  {voiceBusy ? 'Re-designing…' : 'Re-design voice identity'}
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-1.5">
-            <p className="text-[10px] text-zinc-500 leading-relaxed">
-              Designs a reusable Runway voice that matches this campaign's
-              tone + audience. The cached preview is Runway's generic voice
-              sample — not the ad copy — and seeds the multilingual samples
-              below.
-            </p>
+      {/* ---- Tab row ----------------------------------------------- */}
+      <div
+        role="tablist"
+        aria-label={`campaign ${c.business || c.id} tabs`}
+        className="flex flex-wrap gap-1 border-b border-zinc-800/60 pb-1"
+      >
+        {TABS.map((t) => {
+          const active = activeTab === t.key
+          return (
             <button
+              key={t.key}
               type="button"
-              onClick={() => handleDesignVoice()}
-              disabled={voiceBusy}
-              className="rounded-md bg-teal-500/80 hover:bg-teal-500 text-zinc-100 text-xs px-2 py-1 disabled:opacity-50"
+              role="tab"
+              aria-selected={active}
+              aria-controls={`tabpanel-${c.id}-${t.key}`}
+              id={`tab-${c.id}-${t.key}`}
+              onClick={() => setActiveTab(t.key)}
+              className={`text-[11px] px-2.5 py-1 rounded-md transition-colors ${
+                active
+                  ? 'bg-spark/20 text-spark ring-1 ring-spark/40 font-semibold'
+                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'
+              }`}
             >
-              {voiceBusy
-                ? 'Designing Brand Voice…'
-                : voiceFailed
-                ? 'Retry Design Brand Voice'
-                : 'Design Brand Voice'}
+              {t.label}
             </button>
-            {voiceFailed && c.brand_voice_error && (
-              <p className="text-[10px] text-rose-300" title={c.brand_voice_error}>
-                {c.brand_voice_error}
-              </p>
-            )}
-          </div>
-        )}
+          )
+        })}
+      </div>
 
-        {/* Phase 2 — Multilingual Voice Samples — only meaningful with a ready voice */}
-        {voiceReady && (
-          <div className="border-t border-zinc-800/60 pt-2 space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-semibold text-zinc-300">
-                Voice Samples — Multilingual
-              </span>
-              <span
-                className="text-[10px] text-zinc-500"
-                title="Runway voice_dubbing dubs the Brand Voice sample above into the chosen language. The output is a voice sample in that language — not the campaign ad in that language."
-              >
-                Runway voice_dubbing
-              </span>
-            </div>
-            <p className="text-[10px] text-zinc-500 leading-relaxed">
-              Each language re-voices the Voice Sample above —{' '}
-              <span className="text-zinc-300">not the ad itself</span>. Tap to
-              hear how the brand voice sounds in that language.
-            </p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-              {DUB_LANGS.map((d) => {
-                const url = (c.dubbed_audio_urls || {})[d.code]
-                const status = (c.dub_statuses || {})[d.code]
-                const error = (c.dub_errors || {})[d.code]
-                const ready = status === 'ok' && Boolean(url)
-                const isBusy = busyDubLang === d.code
-                const failed = status === 'failed'
-                return (
-                  <div
-                    key={d.code}
-                    className="rounded-md border border-zinc-800 bg-zinc-950/40 p-1.5 text-[11px] flex flex-col gap-1"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-zinc-200">{d.label}</span>
-                      <span className="text-[10px] text-zinc-500 font-mono">{d.code}</span>
-                    </div>
-                    {ready ? (
-                      <audio src={url} controls preload="none" className="w-full" />
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => handleDub(d.code)}
-                        disabled={isBusy || Boolean(busyDubLang)}
-                        className="rounded bg-teal-500/70 hover:bg-teal-500 text-zinc-100 text-[10px] px-1.5 py-0.5 disabled:opacity-50"
-                        title={`Generate a ${d.label} voice sample from the Brand Voice above`}
-                      >
-                        {isBusy ? 'Sampling…' : failed ? `Retry ${d.label}` : `Sample ${d.label}`}
-                      </button>
-                    )}
-                    {failed && error && (
-                      <span
-                        className="text-[10px] text-rose-300 truncate"
-                        title={error}
-                      >
-                        {error}
-                      </span>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        )}
+      {/* ---- Active tab body --------------------------------------- */}
+      <div
+        role="tabpanel"
+        id={`tabpanel-${c.id}-${activeTab}`}
+        aria-labelledby={`tab-${c.id}-${activeTab}`}
+      >
+        {activeTab === 'overview' && overviewBody}
+        {activeTab === 'visuals' && visualsBody}
+        {activeTab === 'character' && characterBody}
+        {activeTab === 'voice' && voiceBody}
+        {activeTab === 'realtime' && realtimeBody}
+        {activeTab === 'exports' && exportsBody}
       </div>
 
       {localError && (
@@ -950,7 +1253,10 @@ export default function CampaignGallery({ campaigns, onRefresh }) {
     .map((c) => overrides[c.id] || c)
 
   return (
-    <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5">
+    // `rounded-2xl` is also applied by the `studio-panel` utility via
+    // @apply, but kept as a literal class here for the Playwright
+    // smoke selector (`div.rounded-2xl` filtering by heading).
+    <div className="rounded-2xl studio-panel p-5">
       <div className="flex items-center justify-between mb-3">
         <h3 className="font-semibold">Saved campaigns</h3>
         <button

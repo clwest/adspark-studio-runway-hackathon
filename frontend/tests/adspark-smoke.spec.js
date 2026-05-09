@@ -154,17 +154,31 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
     .filter({ has: page.getByRole('heading', { name: /Saved campaigns/i }) })
     .first()
   const newestCard = galleryCard.locator('ul > li').first()
+  // Card header (always visible regardless of active tab) — business
+  // name + video-ready chip.
   await expect(newestCard.getByText('Local coffee shop', { exact: true })).toBeVisible()
   await expect(newestCard.getByText(/^video ready$/i)).toBeVisible()
-  // Cache pipeline must report a known status. Network unreachable in CI is
-  // acceptable; "cache failed" still proves the pipeline ran end-to-end.
+
+  // 12a. PR P — UI Phase 2: tab row renders six tabs and Overview is
+  //       active by default.
+  for (const name of ['Overview', 'Visuals', 'Character', 'Voice', 'Realtime', 'Exports']) {
+    await expect(newestCard.getByRole('tab', { name })).toBeVisible()
+  }
+  await expect(
+    newestCard.getByRole('tab', { name: 'Overview' }),
+  ).toHaveAttribute('aria-selected', 'true')
+
+  // 13a. Visuals tab — silent visual-cut copy + cache status + (when
+  //      cached) Campaign Pack 3-up. Network unreachable in CI is
+  //      acceptable; "cache failed" still proves the pipeline ran.
+  await newestCard.getByRole('tab', { name: 'Visuals' }).click()
+  await expect(newestCard.getByText(/^visual-only · silent$/)).toBeVisible()
+  await expect(
+    newestCard.getByText(/Visual cut only — Runway gen4_turbo/i),
+  ).toBeVisible()
   await expect(
     newestCard.getByText(/^(cached locally|cache failed|external URL may expire)$/i),
   ).toBeVisible()
-  // 13a. The Campaign Pack only appears when caching succeeded; if the mock
-  //      URL was reachable in this run, assert all three per-format Build
-  //      buttons render. Otherwise it's expected to be absent — that's still
-  //      a valid path.
   const isCached = await newestCard.getByText(/^cached locally$/i).isVisible()
   if (isCached) {
     await expect(newestCard.getByText(/^Campaign Pack$/)).toBeVisible()
@@ -179,29 +193,22 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
     ).toBeVisible()
   }
 
-  // 13b. PR F — Brand Spokesperson section + Runway Avatar label.
+  // 13b. Character tab — Brand Spokesperson section + Avatar Picker.
+  await newestCard.getByRole('tab', { name: 'Character' }).click()
   await expect(newestCard.getByText(/^Brand Spokesperson$/)).toBeVisible()
   await expect(newestCard.getByText(/^Runway Avatar$/)).toBeVisible()
   await expect(
     newestCard.getByRole('button', { name: /^Create Brand Spokesperson$/i }),
   ).toBeVisible()
-
-  // 13b.2 — Avatar picker (PR I+) renders with the four mock presets.
   await expect(newestCard.getByText(/^Choose Existing Runway Avatar$/)).toBeVisible()
   await expect(newestCard.getByText(/^mock presets$/)).toBeVisible()
   await expect(
     newestCard.getByRole('button', { name: /Music Superstar/i }),
   ).toBeVisible()
 
-  // 13c. PR H — Audio Pack section + honest labels (PR M).
-  //      Header still reads "Audio Pack" but the explanatory pill is
-  //      now "Brand Voice Identity" (used to read "Runway Voices"),
-  //      and the section copy explicitly disclaims that the samples
-  //      are not full ad narration. Note: "Audio Pack" appears twice
-  //      now — once in the section header, once in the visual-only
-  //      caption above ("…Avatar Host Clip and Audio Pack sections
-  //      below"). `.first()` targets the section header.
-  await expect(newestCard.getByText(/^Audio Pack$/).first()).toBeVisible()
+  // 13c. Voice tab — Audio Pack with PR M honest labels.
+  await newestCard.getByRole('tab', { name: 'Voice' }).click()
+  await expect(newestCard.getByText(/^Audio Pack$/)).toBeVisible()
   await expect(newestCard.getByText(/^Brand Voice Identity$/)).toBeVisible()
   await expect(
     newestCard.getByText(/Voice samples, not full ad narration/i),
@@ -210,37 +217,36 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
     newestCard.getByRole('button', { name: /^Design Brand Voice$/i }),
   ).toBeVisible()
 
-  // 13c.2 — PR M visual-only video chip + caption render once the
-  //         campaign has a saved/cached video.
-  await expect(newestCard.getByText(/^visual-only · silent$/)).toBeVisible()
-  await expect(
-    newestCard.getByText(/Visual cut only — Runway gen4_turbo/i),
-  ).toBeVisible()
-
-  // 13d. PR I — Talk to Brand Spokesperson realtime section. Only
-  //      renders once the avatar is in {ready, mock} state. The mock
-  //      smoke run never creates the avatar (timing-sensitive), so we
-  //      assert non-strictly: if the section is present, the start
-  //      button must be in the disabled "unavailable" state in mock,
-  //      and the PR M suggested-prompt chips render with at least
-  //      one campaign-grounded chip.
+  // 13d. Realtime tab — gated. The mock smoke run never creates an
+  //      avatar (timing-sensitive), so we expect the "Brand
+  //      Spokesperson required" gate copy. On a stale account where
+  //      the avatar is already ready, the RealtimeSpokesperson
+  //      component renders + suggested prompt chips appear; assert
+  //      conditionally so both paths pass.
+  await newestCard.getByRole('tab', { name: 'Realtime' }).click()
   const realtimeSection = newestCard.getByText(/^Talk to Brand Spokesperson$/)
   if (await realtimeSection.isVisible().catch(() => false)) {
     await expect(newestCard.getByText(/^Realtime Runway Avatar$/)).toBeVisible()
     await expect(
       newestCard.getByRole('button', { name: /Start Conversation \(unavailable\)/i }),
     ).toBeDisabled()
-    // Suggested-prompt chips: PR M / P1 #6. The exact subject in the
-    // first chip depends on campaign fields ("Local coffee shop" /
-    // "Morning blend"); assert on the static "Who is this campaign
-    // for?" chip which always renders.
     await expect(
       newestCard.getByRole('button', { name: /Who is this campaign for/i }),
     ).toBeVisible()
     await expect(
       newestCard.getByRole('button', { name: /Make this pitch funnier/i }),
     ).toBeVisible()
+  } else {
+    await expect(
+      newestCard.getByText(/Brand Spokesperson required/i),
+    ).toBeVisible()
   }
+
+  // 13e. Exports tab — file-ledger renders, with at least the visual
+  //      ad row present (every saved campaign has a video URL or a
+  //      "not generated yet" placeholder for it).
+  await newestCard.getByRole('tab', { name: 'Exports' }).click()
+  await expect(newestCard.getByText(/Visual ad \(silent cut\)/i)).toBeVisible()
 
   // 13. Console / page errors — page errors are always fatal; console errors
   //     are filtered to drop video-network noise.
