@@ -60,6 +60,11 @@ export default function App() {
     setActiveCharacterIdState(id)
   }
   const [savedId, setSavedId] = useState(null)
+  // PR Y — newest saved campaign id. Drives the "just saved" pill +
+  // ring/glow + auto-scroll + Visuals-tab default in CampaignGallery,
+  // so demos no longer target the wrong card when several saved
+  // campaigns share the same business name.
+  const [newestSavedId, setNewestSavedId] = useState(null)
   const [busy, setBusy] = useState({ concepts: false, runway: false, image: false, upload: false })
   const [error, setError] = useState('')
   const pollRef = useRef({ active: false, attempts: 0 })
@@ -273,6 +278,9 @@ export default function App() {
         }
       }
       setSavedId(saved.id)
+      // PR Y — mark this id as the newest saved campaign so the gallery
+      // can highlight, scroll-into-view, and pre-open Visuals on it.
+      setNewestSavedId(saved.id)
       refreshCampaigns()
     } catch (e) {
       setError(friendlyError(e, ERROR_HINTS.save))
@@ -569,7 +577,12 @@ export default function App() {
           title="Saved Campaigns"
           meta="Pack outputs · Brand Spokesperson · Voice Identity · Realtime"
         >
-          <CampaignGallery campaigns={campaigns} onRefresh={refreshCampaigns} />
+          <CampaignGallery
+            campaigns={campaigns}
+            onRefresh={refreshCampaigns}
+            newestSavedId={newestSavedId}
+            onClearNewest={() => setNewestSavedId(null)}
+          />
         </Stage>
 
         <footer className="text-xs text-zinc-600 pt-6 border-t border-zinc-900/60">

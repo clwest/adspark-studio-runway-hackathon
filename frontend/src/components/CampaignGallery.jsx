@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '../api'
 import AvatarPicker from './AvatarPicker.jsx'
 import CharacterCard from './CharacterCard.jsx'
@@ -110,7 +110,7 @@ function OverviewChip({ label, status, hint }) {
   )
 }
 
-function CampaignCard({ c, onUpdated, onDeleted }) {
+function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest }) {
   const concept = c.selected_concept || {}
   // Preview preference: any finished format → cached → original presigned URL.
   const finishedAnyUrl =
@@ -122,7 +122,19 @@ function CampaignCard({ c, onUpdated, onDeleted }) {
   const hasVideo = Boolean(videoSrc)
   const cacheFailed = c.cache_status === 'failed'
 
-  const [activeTab, setActiveTab] = useState('overview')
+  // PR Y — the just-saved card opens on Visuals so the user lands on
+  // the cached video + Voiced Commercial CTAs, not the dashboard.
+  const [activeTab, setActiveTab] = useState(() =>
+    isNewestSaved ? 'visuals' : 'overview',
+  )
+  const cardRef = useRef(null)
+  // PR Y — scroll the just-saved card into view + clear the newest
+  // marker after one frame so a later refresh doesn't re-scroll.
+  useEffect(() => {
+    if (!isNewestSaved || !cardRef.current) return
+    cardRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const [busyFormat, setBusyFormat] = useState(null) // null | "landscape" | "reels" | "square"
   const [avatarBusy, setAvatarBusy] = useState(false)
   const [hostBusy, setHostBusy] = useState(false)
@@ -420,8 +432,36 @@ function CampaignCard({ c, onUpdated, onDeleted }) {
 
   // ---- Tab body builders -------------------------------------------
 
+  // PR Y — short prompt preview surfaces what the user actually
+  // generated so cards with the same business name stay distinguishable.
+  const promptPreview = (c.runway_prompt || '').trim()
+  const promptShort = promptPreview.length > 80
+    ? `${promptPreview.slice(0, 80).trimEnd()}…`
+    : promptPreview
+  const spokespersonName = (hasCharacter && character && character.name) ||
+    c.selected_avatar_name ||
+    null
+
   const overviewBody = (
     <div className="space-y-3">
+      {(promptShort || spokespersonName) && (
+        <div className="rounded-md ring-1 ring-zinc-800/60 bg-zinc-950/40 px-2.5 py-1.5 text-[11px] space-y-0.5">
+          {spokespersonName && (
+            <div className="text-zinc-300">
+              <span className="text-zinc-500">spokesperson:</span>{' '}
+              <span className="text-pink-300">{spokespersonName}</span>
+            </div>
+          )}
+          {promptShort && (
+            <div
+              className="text-zinc-400 leading-snug"
+              title={promptPreview}
+            >
+              <span className="text-zinc-500">prompt:</span> {promptShort}
+            </div>
+          )}
+        </div>
+      )}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
         <OverviewChip
           label="Visual"
@@ -1298,13 +1338,25 @@ function CampaignCard({ c, onUpdated, onDeleted }) {
   )
 
   return (
-    <li className="rounded-xl ring-1 ring-zinc-800 p-4 bg-studio-900/60 space-y-3 shadow-panel">
+    <li
+      ref={cardRef}
+      className={`rounded-xl ring-1 p-4 bg-studio-900/60 space-y-3 shadow-panel transition-shadow ${
+        isNewestSaved
+          ? 'ring-spark/60 shadow-[0_0_0_2px_rgba(56,189,248,0.15),0_0_24px_rgba(56,189,248,0.18)]'
+          : 'ring-zinc-800'
+      }`}
+      aria-current={isNewestSaved ? 'true' : undefined}
+    >
       {/* ---- Card header ------------------------------------------- */}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="font-medium text-zinc-100 truncate">{c.business}</div>
           <div className="text-xs text-zinc-500">
             {new Date(c.created_at).toLocaleString()}
+            {' · '}
+            <span className="font-mono" title="Campaign id">
+              id {String(c.id).slice(0, 8)}
+            </span>
             {c.runway_task_id && (
               <>
                 {' · '}
@@ -1316,6 +1368,15 @@ function CampaignCard({ c, onUpdated, onDeleted }) {
           </div>
         </div>
         <div className="flex items-center gap-1 shrink-0">
+          {isNewestSaved && (
+            <span
+              className="text-xs rounded-full px-2 py-0.5 bg-spark/25 text-spark ring-1 ring-spark/40 font-semibold"
+              title="Newest saved this session"
+              aria-label="just saved"
+            >
+              just saved
+            </span>
+          )}
           {finishedCount > 0 && (
             <span
               className="text-xs rounded-full px-2 py-0.5 bg-violet-500/20 text-violet-300"
@@ -1439,7 +1500,7 @@ function CampaignCard({ c, onUpdated, onDeleted }) {
   )
 }
 
-export default function CampaignGallery({ campaigns, onRefresh }) {
+export default function CampaignGallery({ campaigns, onRefresh, newestSavedId, onClearNewest }) {
   const [overrides, setOverrides] = useState({})
   const [deletedIds, setDeletedIds] = useState(new Set())
   const handleUpdated = (updated) => {
@@ -1490,6 +1551,8 @@ export default function CampaignGallery({ campaigns, onRefresh }) {
               c={c}
               onUpdated={handleUpdated}
               onDeleted={handleDeleted}
+              isNewestSaved={c.id === newestSavedId}
+              onClearNewest={onClearNewest}
             />
           ))}
         </ul>

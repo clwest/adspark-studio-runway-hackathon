@@ -251,14 +251,20 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
   await expect(newestCard.getByText('Local coffee shop', { exact: true })).toBeVisible()
   await expect(newestCard.getByText(/^video ready$/i)).toBeVisible()
 
-  // 12a. PR P — UI Phase 2: tab row renders six tabs and Overview is
-  //       active by default.
+  // 12a. PR P — UI Phase 2: tab row renders six tabs. PR Y — the newest
+  //       saved card now opens on Visuals (not Overview) so the user
+  //       lands on the cached video + Voiced Commercial CTAs they just
+  //       earned with the save click.
   for (const name of ['Overview', 'Visuals', 'Character', 'Voice', 'Realtime', 'Exports']) {
     await expect(newestCard.getByRole('tab', { name })).toBeVisible()
   }
   await expect(
-    newestCard.getByRole('tab', { name: 'Overview' }),
+    newestCard.getByRole('tab', { name: 'Visuals' }),
   ).toHaveAttribute('aria-selected', 'true')
+
+  // 12b. PR Y — "just saved" pill highlights the newly created card so
+  //       multi-card demos don't target the wrong campaign.
+  await expect(newestCard.getByText(/^just saved$/i)).toBeVisible()
 
   // 13a. Visuals tab — silent visual-cut copy + cache status + (when
   //      cached) Campaign Pack 3-up. Network unreachable in CI is
