@@ -5,35 +5,41 @@
 PR AM `3e12d27`; PR AN `f255c22`; PR AO `5bca7c4`; PR AP
 `3c6483e`; PR AQ `ec35c0e`; PR AR `5aa5579`; PR AS `2321fd7`;
 PR AT `632b696`; PR AU `485310a`; PR AV `b9b7fee`; PR AW
-`555ebf9`; PR AX `9d86f2e`; PR AY `0a93c79 feat: live mic
-level meter for voice recording`; PR AZ Voice Verification
-Auto-Tick in flight on top — SESSION_012–SESSION_031
-handoffs added).
+`555ebf9`; PR AX `9d86f2e`; PR AY `0a93c79`; PR AZ
+`2c16d30 feat: auto-tick verify freshness caption`; PR BA
+Character Library Refresh All in flight on top —
+SESSION_012–SESSION_032 handoffs added).
 
 ## Where things stand
 
-- **Branch:** `main` at `0a93c79` (`feat: live mic level meter
-  for voice recording`) on `origin/main`. PR AZ patch in
-  flight on top — no new commit / tag yet, both pending
-  explicit user approval.
+- **Branch:** `main` at `2c16d30` (`feat: auto-tick verify
+  freshness caption`) on `origin/main`. PR BA patch in flight
+  on top — no new commit / tag yet, both pending explicit user
+  approval.
 - **Latest tag:** still **`hackathon-submission-v13`** at `ec446e4`
-  (PR AF). PR AG–AY shipped the full voice arc + recording
-  feedback. PR AZ adds the smallest possible polish: the
-  PR AW freshness caption now ticks itself every 60 s without
-  an operator action.
+  (PR AF). PR AG–AZ shipped the full voice arc + recording
+  feedback + auto-tick. PR BA adds a library-level
+  "Refresh all voice statuses" button on the Character Studio
+  header that fans out the per-character PR AV + PR AX routes
+  in one click.
 - **Backend routes:** **68** application + FastAPI built-ins
-  (unchanged from PR AY; PR AZ is frontend-only and adds no
-  endpoints).
-- **Frontend build:** 326.48 KB initial JS / 91.65 KB gzip +
-  561.97 KB lazy `@runwayml/avatars-react` chunk (≈ +0.21 KB
-  initial / +0.04 KB gzip vs PR AY — PR AZ only adds a state
-  ref + setInterval).
-- **Playwright smoke:** `1 passed (~21.5 s)` against the mock
-  backend; existing PR AY assertions still pass. PR AZ
-  doesn't add new assertions because the auto-tick is
-  invisible to a single-shot smoke run; bucket-transition
-  coverage is via a 9-case Node probe (helper deterministic
-  with explicit `nowMs`).
+  (unchanged from PR AZ; PR BA is frontend-only and adds no
+  endpoints — it reuses the per-character refresh routes).
+- **Frontend build:** 328.38 KB initial JS / 92.21 KB gzip +
+  561.97 KB lazy `@runwayml/avatars-react` chunk (+1.90 KB
+  initial / +0.56 KB gzip vs PR AZ — PR BA adds the bulk
+  handler + button + caption to CharacterStudio.jsx).
+- **Playwright smoke:** `1 passed (~21.2 s)` against the mock
+  backend; existing PR AZ assertions still pass. PR BA adds
+  three new assertions for the bulk-refresh button presence,
+  default copy, and absence of the post-run status caption in
+  the idle state.
+- **Targeted probes:** 5/5 handler-logic counter scenarios pass
+  (no eligible / mixed / preview failure / avatar failure /
+  empty library); backend probe confirms 200 / 409 / 404
+  responses on the per-character routes match the bulk
+  handler's eligibility branching; 3 back-to-back bulk
+  refreshes leave PR AQ patch fields byte-identical.
 - **Repo:** https://github.com/clwest/adspark-studio-runway-hackathon
   (private). Pushes happen on explicit user approval.
 - **Stale local feature branches:** 22 left over from PR A through
@@ -178,6 +184,20 @@ handoffs added).
   on unmount and whenever the visibility gate flips. Helper-
   level coverage: 9/9 bucket transitions verified by a Node
   probe.
+- **Library-level "Refresh all voice statuses"** (PR BA) — a
+  single button on the Character Studio header runs the
+  per-character PR AV refresh-avatar-voice and PR AX
+  refresh-voice-preview routes for every eligible character
+  in the library. Skips characters with no cloned voice; only
+  fires the avatar refresh for characters with a bound avatar
+  (matches the backend's 409 gate); catches per-call errors
+  so one failure never aborts the loop. Compact status
+  caption beside the button reads `Refreshing X/Y…` while
+  running and `Refreshed N, skipped M, failed K` when
+  complete. Frontend-only; no new backend route, no
+  background jobs, no polling. data-testid:
+  `custom-voice-refresh-all`,
+  `custom-voice-refresh-all-status`.
 - New backend route: `POST /api/characters/{id}/clone-voice`
   (multipart form with `audio` + optional `name`). The route
   validates mime + size (cap 15 MB locally; Runway docs say

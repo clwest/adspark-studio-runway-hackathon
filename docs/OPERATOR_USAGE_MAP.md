@@ -400,6 +400,73 @@ refreshes preserve those three fields exactly).
 `custom-voice-refresh-preview-status` (busy / error /
 informational row).
 
+#### Library-level refresh-all (PR BA)
+
+The Character Studio header carries a single library-wide
+**`Refresh all voice statuses`** button (zinc / pink ring,
+neutral colour) that fans out the per-character PR AV + PR AX
+routes for every eligible character in the library. Useful
+right before a demo so every tile's verify pill, drift state,
+and cloned-voice preview reflect the freshest Runway state in
+one click — no need to walk down the grid clicking refresh on
+each card.
+
+Per-character behavior inside the loop:
+
+- **No cloned voice.** Tile is skipped; no HTTP call is made.
+- **Cloned voice + avatar bound.** Calls
+  `POST /api/characters/{id}/refresh-avatar-voice` (PR AV) and
+  then `POST /api/characters/{id}/refresh-voice-preview`
+  (PR AX). Tile's record is replaced in the library state on
+  each successful response so the verify pill, drift pill,
+  freshness caption, and preview audio all re-render
+  immediately.
+- **Cloned voice but no avatar.** Calls only
+  refresh-voice-preview; the avatar refresh is gated client-
+  side (matches the backend's 409 behavior so we never fire a
+  request that's guaranteed to fail).
+- **Per-call error.** Caught locally; the loop continues with
+  the next character. Any failure marks that single character
+  as failed without aborting the rest of the library.
+
+Compact status caption sits beside the button:
+
+| Phase | Caption |
+|---|---|
+| `idle` (button has never been clicked) | *(no caption rendered)* |
+| `running` | *Refreshing X/Y…* |
+| `complete` | *Refreshed N, skipped M, failed K* |
+
+The button is disabled while the bulk loop runs but stays
+enabled when there are zero eligible characters — clicking
+in that state simply produces *Refreshed 0, skipped N, failed 0*
+where `N` is the library size.
+
+No backend route was added; everything goes through the two
+existing per-character endpoints. No background jobs, no
+polling, no toast spam — the inline caption is the entire UX
+surface.
+
+Targeted probe coverage (PR BA verification):
+
+- 5/5 handler-logic counter scenarios pass (no eligible /
+  mixed eligible+ineligible / one mid-loop preview failure /
+  one mid-loop avatar failure / empty library) using the same
+  branching logic as `handleRefreshAllVoiceStatuses`.
+- Backend probe confirmed each route returns `200` on
+  eligible characters, `409` on ineligible (which the
+  frontend short-circuits before issuing the HTTP call), and
+  `404` on bogus ids — all caught and counted as `failed`
+  without aborting the loop.
+- Read-only proof carries forward: 3 back-to-back bulk
+  refreshes leave `custom_voice_avatar_patch_status` and
+  `custom_voice_avatar_patched_at` byte-identical on the
+  eligible character.
+
+`data-testid` hooks: `custom-voice-refresh-all` (the button),
+`custom-voice-refresh-all-status` (the inline caption — only
+present once the bulk action has run at least once).
+
 #### Recording in-browser (PR AO)
 
 Below the file picker on each library tile sits a small

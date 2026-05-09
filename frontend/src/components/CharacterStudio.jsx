@@ -62,6 +62,18 @@ export default function CharacterStudio({
   const [creating, setCreating] = useState(false)
   const [busyByChar, setBusyByChar] = useState({}) // { charId: 'portrait'|'avatar'|'delete' }
   const [showCreate, setShowCreate] = useState(false)
+  // PR BA — Library-level "Refresh all voice statuses" action. One
+  // shared status object so the operator can see live progress while
+  // the bulk loop iterates per-character refresh-avatar-voice +
+  // refresh-voice-preview calls. ``phase`` ∈ idle | running | complete.
+  const [refreshAllStatus, setRefreshAllStatus] = useState({
+    phase: 'idle',
+    current: 0,
+    total: 0,
+    refreshed: 0,
+    skipped: 0,
+    failed: 0,
+  })
 
   const refresh = async () => {
     try {
@@ -264,6 +276,105 @@ export default function CharacterStudio({
     }
   }
 
+  // PR BA — Library-level bulk refresh. Iterates the current
+  // character list and re-runs the existing PR AV refresh-avatar-voice
+  // + PR AX refresh-voice-preview routes for every character with a
+  // cloned voice. Reuses both API helpers + the in-place state-update
+  // pattern so each card re-renders with the freshly returned record
+  // as soon as a call lands. No new backend route, no polling, no
+  // background jobs.
+  //
+  // Eligibility:
+  //   - Skip when ``custom_voice_id`` is not set (nothing to refresh).
+  //   - Always call refresh-voice-preview when a cloned voice exists.
+  //   - Also call refresh-avatar-voice only when the character also
+  //     has an avatar bound (``runway_avatar_id`` set + status in
+  //     {ready, mock}); the backend route 409s otherwise.
+  //
+  // Counters:
+  //   - refreshed: at least one op completed without throwing
+  //   - skipped: characters with no cloned voice
+  //   - failed: any per-call exception (loop continues either way)
+  const handleRefreshAllVoiceStatuses = async () => {
+    if (refreshAllStatus.phase === 'running') return
+    const snapshot = characters.slice()
+    const total = snapshot.length
+    let current = 0
+    let refreshed = 0
+    let skipped = 0
+    let failed = 0
+    setRefreshAllStatus({
+      phase: 'running',
+      current: 0,
+      total,
+      refreshed: 0,
+      skipped: 0,
+      failed: 0,
+    })
+    for (const c of snapshot) {
+      current += 1
+      const hasVoice = Boolean(
+        c.custom_voice_id &&
+          ['ready', 'mock'].includes(c.custom_voice_status || ''),
+      )
+      const hasAvatar = Boolean(
+        c.runway_avatar_id &&
+          ['ready', 'mock'].includes(c.runway_avatar_status || ''),
+      )
+      if (!hasVoice) {
+        skipped += 1
+        setRefreshAllStatus((s) => ({
+          ...s,
+          current,
+          skipped,
+        }))
+        continue
+      }
+      let opOk = true
+      // Avatar verify only when the character actually has an avatar.
+      if (hasAvatar) {
+        try {
+          const updated = await api.refreshCharacterAvatarVoice(c.id)
+          setCharacters((cs) =>
+            cs.map((x) => (x.id === c.id ? updated : x)),
+          )
+        } catch (e) {
+          opOk = false
+        }
+      }
+      // Preview refresh runs whenever a voice exists; the route is
+      // tolerant of mock-mode + missing previews (200 with unchanged
+      // record) so this rarely throws in practice.
+      try {
+        const updated = await api.refreshCharacterVoicePreview(c.id)
+        setCharacters((cs) =>
+          cs.map((x) => (x.id === c.id ? updated : x)),
+        )
+      } catch (e) {
+        opOk = false
+      }
+      if (opOk) refreshed += 1
+      else failed += 1
+      setRefreshAllStatus((s) => ({
+        ...s,
+        current,
+        refreshed,
+        failed,
+      }))
+    }
+    setRefreshAllStatus({
+      phase: 'complete',
+      current: total,
+      total,
+      refreshed,
+      skipped,
+      failed,
+    })
+    if (refreshed > 0 || failed > 0) {
+      onCharactersChanged?.()
+    }
+  }
+
   const handleDelete = async (c) => {
     if (!confirm(`Delete character "${c.name}"? This is local only — the Runway avatar is not removed.`)) return
     setBusy(c.id, 'delete')
@@ -296,13 +407,50 @@ export default function CharacterStudio({
             host clips, and live conversations.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setShowCreate((s) => !s)}
-          className="rounded-md bg-pink-500/80 hover:bg-pink-500 text-zinc-100 text-xs px-3 py-1.5 transition-colors"
-        >
-          {showCreate ? 'Cancel' : '+ Create Character'}
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* PR BA — Library-level bulk "Refresh all voice statuses"
+              action. Renders any time the library has at least one
+              character; wires through the per-character PR AV +
+              PR AX routes already present on the API helper. */}
+          {characters.length > 0 && (
+            <div className="flex flex-col items-end gap-0.5">
+              <button
+                type="button"
+                onClick={handleRefreshAllVoiceStatuses}
+                disabled={refreshAllStatus.phase === 'running'}
+                data-testid="custom-voice-refresh-all"
+                className="rounded-md ring-1 ring-pink-400/30 hover:ring-pink-300 hover:bg-pink-500/10 text-pink-200 text-[11px] px-2 py-1 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                title="Re-run avatar verification + voice preview fetch for every character with a cloned voice"
+              >
+                {refreshAllStatus.phase === 'running'
+                  ? 'Refreshing…'
+                  : 'Refresh all voice statuses'}
+              </button>
+              {refreshAllStatus.phase !== 'idle' && (
+                <span
+                  data-testid="custom-voice-refresh-all-status"
+                  className="text-[10px] text-zinc-400 leading-snug"
+                  title={
+                    refreshAllStatus.phase === 'complete'
+                      ? `Last bulk refresh: refreshed ${refreshAllStatus.refreshed}, skipped ${refreshAllStatus.skipped}, failed ${refreshAllStatus.failed}.`
+                      : undefined
+                  }
+                >
+                  {refreshAllStatus.phase === 'running'
+                    ? `Refreshing ${refreshAllStatus.current}/${refreshAllStatus.total}…`
+                    : `Refreshed ${refreshAllStatus.refreshed}, skipped ${refreshAllStatus.skipped}, failed ${refreshAllStatus.failed}`}
+                </span>
+              )}
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => setShowCreate((s) => !s)}
+            className="rounded-md bg-pink-500/80 hover:bg-pink-500 text-zinc-100 text-xs px-3 py-1.5 transition-colors"
+          >
+            {showCreate ? 'Cancel' : '+ Create Character'}
+          </button>
+        </div>
       </div>
 
       {showCreate && (

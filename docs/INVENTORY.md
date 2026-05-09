@@ -1,12 +1,15 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after PR AZ (Voice Verification Auto-Tick
-Freshness Caption) on top of the PR AG–AY / SESSION 011 anchors.
-Backend route count is **68** application routes — PR AZ is a
-frontend-only slice that adds a 60-second timer to the PR AW
-freshness caption so it advances buckets ("4m ago" → "5m ago")
-without an operator action and without any backend round-trip.
+context-kit refresh after PR BA (Character Library Refresh All) on
+top of the PR AG–AZ / SESSION 011 anchors. Backend route count is
+**68** application routes — PR BA is a frontend-only slice that
+adds a library-level "Refresh all voice statuses" button on the
+Character Studio header. The button reuses the existing
+`POST /api/characters/{id}/refresh-avatar-voice` (PR AV) and
+`POST /api/characters/{id}/refresh-voice-preview` (PR AX) routes
+per-character; no new backend route is added and no polling /
+background jobs are introduced.
 
 ## Backend (`backend/`)
 
@@ -64,7 +67,7 @@ without an operator action and without any backend round-trip.
 | `src/components/CampaignGallery.jsx` | real | The big one. Per-card render of: header + creative-director breadcrumb (Script → Storyboard → Video → Final Ad) + tab row (Overview, Visuals, Character, Voice, **Dialogue**, Realtime, Exports). Overview body owns the **3-card "Pick your ad mode" picker** (Cinematic / Spokesperson / Dialogue). Visuals body renders silent source video + Voiced Commercial section + Storyboard subsection + Voiced Storyboard. Character body renders Brand Spokesperson + Avatar Host Clip → **Spokesperson Ad** (PR AB rename). Voice body renders **Ad Mode primer card** + **Commercial Script editor** + Audio Pack. Dialogue body owns plan/edit/generate/stitch state machine. Exports body renders the per-output ledger including all stitched + voiced outputs. |
 | `src/components/AvatarPicker.jsx` | real | PR I+ — fetches `/api/runway/avatars`; 4-up grid; click → `POST /select-avatar` |
 | `src/components/RealtimeSpokesperson.jsx` | real | PR I — lazy-loaded `<AvatarCall>` wrapper; **PR AE caption update** ("This avatar knows the campaign brief and saved script…") + chip tooltip + aria-label reframed as starter questions |
-| `src/components/CharacterStudio.jsx` | real | **PR K + V + AA** — top-level studio panel with editable Portrait Prompt textarea + voice preset dropdown with **PR AA description chip** + create form + character library |
+| `src/components/CharacterStudio.jsx` | real | **PR K + V + AA + BA** — top-level studio panel with editable Portrait Prompt textarea + voice preset dropdown with **PR AA description chip** + create form + character library + **PR BA** library-level "Refresh all voice statuses" button + compact `idle / refreshing X/Y / refreshed N skipped M failed K` status caption that reuses the per-character PR AV refresh-avatar-voice + PR AX refresh-voice-preview routes |
 | `src/components/CharacterCard.jsx` | real | Single tile component reused in studio library and per-campaign attach picker |
 | `src/components/ModeBanner.jsx` | real | Readiness chip, per-provider pills, optional credits/cap chip |
 | `tests/adspark-smoke.spec.js` | real | Playwright single-shot mock-mode end-to-end; covers PR A through PR AW (Stage-3 Commercial Script + breadcrumb, Storyboard subsection, Ad Mode picker w/ 3 cards, Spokesperson Ad rename, Dialogue tab + Plan button, all Exports rows + the captioned reels labels, Realtime grounding card + Conversation transcript card with **export button assertions: copy-markdown, download-txt, post-fetch enable + status banner**, brand colour control, Character custom-voice section + **MediaRecorder Start recording button** + **negative assertions for the PR AP preview audio + helper text in idle state** + **PR AS/AT/AU/AV/AW resilient assertions for resolved/drift/unverified pills, repair button, refresh button, and freshness label**) |
@@ -219,6 +222,7 @@ the line's own `avatar_id`).
 | PR AX | Refresh Missing Cloned Voice Preview (POST /refresh-voice-preview wires existing fetch_voice_preview helper to a Refresh preview button; preserves existing URL when fetch returns nothing) | (post-v13) |
 | PR AY | Live Mic Level Meter for Voice Recording (frontend-only AnalyserNode hooked into the PR AO MediaStream; RAF-driven horizontal bar with direct DOM mutation; full lifecycle teardown on stop / discard / clone / unmount / error; graceful "Mic level unavailable" fallback) | (post-v13) |
 | PR AZ | Voice Verification Auto-Tick Freshness Caption (frontend-only 60-s setInterval bumps a per-tile nowMs state so PR AW's caption advances buckets without polling; gated on caption visibility; cleanup on unmount + visibility change) | (post-v13) |
+| PR BA | Character Library Refresh All (frontend-only library-level "Refresh all voice statuses" button on the Character Studio header; iterates the library and reuses the per-character PR AV refresh-avatar-voice + PR AX refresh-voice-preview routes; compact status caption reports refreshed/skipped/failed; one failure does not abort the loop) | (post-v13) |
 
 ## Known limitations (current main)
 

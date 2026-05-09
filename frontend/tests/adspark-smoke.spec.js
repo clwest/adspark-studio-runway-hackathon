@@ -332,6 +332,19 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
     await expect(
       page.getByTestId('custom-voice-mic-level-bar'),
     ).toHaveCount(0)
+    // PR BA — Library-level "Refresh all voice statuses" button
+    // renders any time the library has at least one character. The
+    // status caption is gated on the bulk action having run at least
+    // once; in the default idle smoke run it must be absent.
+    await expect(
+      page.getByTestId('custom-voice-refresh-all'),
+    ).toBeVisible()
+    await expect(
+      page.getByTestId('custom-voice-refresh-all'),
+    ).toHaveText(/^Refresh all voice statuses$/i)
+    await expect(
+      page.getByTestId('custom-voice-refresh-all-status'),
+    ).toHaveCount(0)
   }
 
   // 7b.6. PR U — stage order: Spokesperson leads, Campaign Brief
