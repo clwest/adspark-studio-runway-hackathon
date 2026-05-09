@@ -2,35 +2,33 @@
 
 **Last touched:** 2026-05-09 (PR AG/AH `6157512`; PR AI
 `108ca3b`; PR AJ `444cb6a`; PR AK `c59251a`; PR AL `8a43af2`;
-PR AM `3e12d27 feat: contrast-aware reels caption styling`;
-PR AN Custom Voice Cloning Foundation in flight on top —
-SESSION_012–SESSION_019 handoffs added).
+PR AM `3e12d27`; PR AN `f255c22 feat: clone custom voices for
+characters`; PR AO In-Browser Audio Recording in flight on top —
+SESSION_012–SESSION_020 handoffs added).
 
 ## Where things stand
 
-- **Branch:** `main` at `3e12d27` (`feat: contrast-aware reels
-  caption styling`) on `origin/main`. PR AN patch in flight on
-  top — no new commit / tag yet, both pending explicit user
-  approval.
+- **Branch:** `main` at `f255c22` (`feat: clone custom voices for
+  characters`) on `origin/main`. PR AO patch in flight on top —
+  no new commit / tag yet, both pending explicit user approval.
 - **Latest tag:** still **`hackathon-submission-v13`** at `ec446e4`
-  (PR AF). PR AG–AM shipped the funnel + polish stack; PR AN
-  starts the persistent-voice-identity arc by letting brands
-  clone a founder / mascot voice and bind it to new avatars.
+  (PR AF). PR AG–AN shipped the funnel + polish + persistent-
+  voice-identity stack; PR AO closes the friction gap by letting
+  operators record a voice sample directly in the browser.
 - **Backend routes:** **65** application + FastAPI built-ins
-  (was 64 at PR AM). PR AN adds one new endpoint:
-  `POST /api/characters/{id}/clone-voice`.
-- **Frontend build:** 308.74 KB initial JS / 87.34 KB gzip +
-  561.97 KB lazy `@runwayml/avatars-react` chunk (≈ +3.3 KB
-  initial / +0.8 KB gzip vs PR AL — PR AN added the upload + clone
-  affordance on each Character Studio library tile).
-- **Playwright smoke:** `1 passed (~23.5 s)` against the mock
-  backend; new assertions verify each existing CharacterCard
-  exposes the upload input, clone button, and status pill via
-  `data-testid` hooks (`custom-voice-section`,
-  `custom-voice-upload`, `custom-voice-create`,
-  `custom-voice-status`). The smoke is conditional on the
-  library having any pre-existing characters so a freshly-clean
-  data dir still passes.
+  (unchanged from PR AN; PR AO is frontend-only and reuses the
+  existing `/clone-voice` route).
+- **Frontend build:** 314.33 KB initial JS / 88.70 KB gzip +
+  561.97 KB lazy `@runwayml/avatars-react` chunk (≈ +5.6 KB
+  initial / +1.4 KB gzip vs PR AN — PR AO added the recording
+  state machine + Start/Stop/Use/Discard controls on each
+  Character Studio library tile).
+- **Playwright smoke:** `1 passed (~23.8 s)` against the mock
+  backend; the existing custom-voice-section assertions now also
+  cover the new MediaRecorder controls (`custom-voice-record-status`,
+  `custom-voice-record-start`). Headless Chromium ships
+  MediaRecorder, so the start button renders rather than the
+  unsupported-browser fallback message.
 - **Repo:** https://github.com/clwest/adspark-studio-runway-hackathon
   (private). Pushes happen on explicit user approval.
 - **Stale local feature branches:** 22 left over from PR A through
@@ -39,13 +37,24 @@ SESSION_012–SESSION_019 handoffs added).
 
 ## What's implemented (full feature stack on `main`)
 
-### Character layer (PR AN — Custom Voice Cloning Foundation)
+### Character layer (PR AN — Custom Voice Cloning Foundation · PR AO — In-Browser Recording)
 
 - **Custom voice cloning** on every Character Studio library tile
   (PR AN). Compact upload + clone affordance under the portrait /
   status pill: native `<input type="file" accept="audio/*">` +
   `Clone voice` button + colour-coded status pill (`preset · …`,
   `cloned`, `cloned · mock`, `clone failed`).
+- **In-browser recording** (PR AO) sits below the file picker on
+  the same tile: MediaRecorder-driven Start / Stop / Clone-from-
+  recording / discard controls + a live `recording · Ns` counter.
+  Codec preference: `audio/webm;codecs=opus → audio/webm →
+  audio/ogg;codecs=opus → audio/mp4`. Captured Blob is wrapped
+  as `adspark-voice-sample-<slug>.webm` and POSTed through the
+  existing PR AN clone route — no new backend surface. Falls
+  back to a one-line *"Recording unavailable — upload an audio
+  file instead."* message when MediaRecorder / mic is missing
+  or the user denies permission. Existing upload path stays
+  fully functional in every fallback state.
 - New backend route: `POST /api/characters/{id}/clone-voice`
   (multipart form with `audio` + optional `name`). The route
   validates mime + size (cap 15 MB locally; Runway docs say

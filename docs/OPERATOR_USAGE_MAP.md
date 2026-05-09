@@ -148,6 +148,46 @@ sees `character.custom_voice_id` and posts
 the clone keep their preset; the operator can re-create the
 avatar to pick up the cloned voice (no avatar PATCH today).
 
+#### Recording in-browser (PR AO)
+
+Below the file picker on each library tile sits a small
+**Or record** row that captures audio straight from the
+operator's microphone via `MediaRecorder` — no separate audio
+editor needed.
+
+State machine + buttons:
+
+- **`idle`** (zinc pill) — `Start recording` (rose) is enabled.
+- **`recording`** (rose pill, animate-pulse) — shows live
+  `recording · Ns` counter; `Stop` button replaces start.
+- **`recorded`** (emerald pill) — `Clone from recording`
+  (emerald) + `discard` link.
+- **`cloning`** (emerald pill, animate-pulse) — POST in flight
+  to `/v1/voices`.
+
+Codec preference: the recorder picks the first supported mime
+from
+`audio/webm;codecs=opus → audio/webm → audio/ogg;codecs=opus → audio/mp4`.
+The captured `Blob` is wrapped in a `File` named
+`adspark-voice-sample-<character-slug>.webm` (or `.m4a` when the
+fallback Safari mp4 codec was selected) and POSTed through the
+existing PR AN clone route — no new backend surface.
+
+Fallback: when `MediaRecorder` or `navigator.mediaDevices.getUserMedia`
+is unavailable (older browsers, insecure contexts), the row
+collapses to a single helper line:
+
+> *Recording unavailable — upload an audio file instead.*
+
+Microphone-permission denial surfaces inline with
+*Microphone permission denied — upload an audio file instead.*
+The file upload path stays fully functional in every fallback
+state.
+
+`data-testid` hooks (for the smoke + future tests):
+`custom-voice-record-status`, `custom-voice-record-start`,
+`custom-voice-record-stop`, `custom-voice-record-use`.
+
 ### Where this maps to backend
 - `POST /api/characters` (record), `POST /api/characters/{id}/generate-portrait`,
   `POST /api/characters/{id}/create-avatar`, `GET /api/characters`,

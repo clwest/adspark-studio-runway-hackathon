@@ -207,6 +207,17 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
     await expect(
       voiceSections.first().getByTestId('custom-voice-status'),
     ).toBeVisible()
+    // PR AO — In-browser recording controls. The status pill always
+    // renders inside the voice section; on supported browsers the
+    // Start recording button shows in the idle state. Headless
+    // Chromium ships MediaRecorder, so we expect the buttons rather
+    // than the unsupported-browser fallback message.
+    await expect(
+      voiceSections.first().getByTestId('custom-voice-record-status'),
+    ).toBeVisible()
+    await expect(
+      voiceSections.first().getByTestId('custom-voice-record-start'),
+    ).toBeVisible()
   }
 
   // 7b.6. PR U — stage order: Spokesperson leads, Campaign Brief

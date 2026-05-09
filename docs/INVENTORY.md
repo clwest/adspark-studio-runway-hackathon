@@ -1,11 +1,13 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after PR AN (Custom Voice Cloning Foundation)
-on top of the PR AG–AM / SESSION 011 anchors. Backend route count
-is **65** application routes — PR AN adds one new endpoint
-(`POST /api/characters/{id}/clone-voice`) on top of the 64 routes
-from PR AM.
+context-kit refresh after PR AO (In-Browser Audio Recording for
+Custom Voice Cloning) on top of the PR AG–AN / SESSION 011
+anchors. Backend route count is **65** application routes — PR AO
+is a frontend-only slice that reuses PR AN's existing
+`POST /api/characters/{id}/clone-voice` route via a
+`MediaRecorder` capture flow that emits an `audio/webm` Blob
+straight into the multipart upload.
 
 ## Backend (`backend/`)
 
@@ -66,7 +68,7 @@ from PR AM.
 | `src/components/CharacterStudio.jsx` | real | **PR K + V + AA** — top-level studio panel with editable Portrait Prompt textarea + voice preset dropdown with **PR AA description chip** + create form + character library |
 | `src/components/CharacterCard.jsx` | real | Single tile component reused in studio library and per-campaign attach picker |
 | `src/components/ModeBanner.jsx` | real | Readiness chip, per-provider pills, optional credits/cap chip |
-| `tests/adspark-smoke.spec.js` | real | Playwright single-shot mock-mode end-to-end; covers PR A through PR AL (Stage-3 Commercial Script + breadcrumb, Storyboard subsection, Ad Mode picker w/ 3 cards, Spokesperson Ad rename, Dialogue tab + Plan button, all Exports rows + the captioned reels labels, Realtime grounding card + Conversation transcript card with **export button assertions: copy-markdown, download-txt, post-fetch enable + status banner**, brand colour control) |
+| `tests/adspark-smoke.spec.js` | real | Playwright single-shot mock-mode end-to-end; covers PR A through PR AO (Stage-3 Commercial Script + breadcrumb, Storyboard subsection, Ad Mode picker w/ 3 cards, Spokesperson Ad rename, Dialogue tab + Plan button, all Exports rows + the captioned reels labels, Realtime grounding card + Conversation transcript card with **export button assertions: copy-markdown, download-txt, post-fetch enable + status banner**, brand colour control, Character custom-voice section + **MediaRecorder Start recording button**) |
 | `src/transcriptExport.js` | real | **PR AL** — pure helpers `buildTranscriptMarkdown`, `buildTranscriptText`, `transcriptFilename`, `copyToClipboard`, `downloadTextFile`. No backend round-trip — operates on the turns persisted by PR AJ on the Campaign payload. Markdown output uses bold-speaker syntax + the campaign / conversation-id / fetched-at preamble; text output is plain ASCII with `Speaker:` prefixes |
 
 ## Key-dependent behavior
@@ -203,6 +205,7 @@ the line's own `avatar_id`).
 | PR AL | Transcript Export / Share (frontend-only Copy Markdown + Download TXT on the PR AJ replay card; navigator.clipboard + Blob/object-URL with safe textarea fallback) | (post-v13) |
 | PR AM | Caption Contrast Polish for Brand-Coloured Reels (WCAG luminance threshold flips drawtext fontcolor + boxcolor + alpha so captions stay readable on light brand backdrops) | (post-v13) |
 | PR AN | Custom Voice Cloning Foundation (POST /v1/voices from.type=audio, multipart upload UI on the Character Studio library tile, persisted on Character, used at Avatar create time) | (post-v13) |
+| PR AO | In-Browser Audio Recording for Custom Voice Cloning (frontend-only MediaRecorder capture → audio/webm Blob → reuses the PR AN clone route, with graceful fallback when MediaRecorder/microphone unavailable) | (post-v13) |
 
 ## Known limitations (current main)
 

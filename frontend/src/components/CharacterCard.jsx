@@ -1,4 +1,44 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+
+// PR AO — In-browser MediaRecorder support detection. Computed once at
+// module load; the recording UI hides itself + falls back to upload-only
+// when the surface is missing (older browsers, insecure contexts, etc).
+function _detectRecordingSupport() {
+  if (typeof window === 'undefined') return false
+  if (typeof window.MediaRecorder === 'undefined') return false
+  if (!navigator?.mediaDevices?.getUserMedia) return false
+  return true
+}
+const RECORDING_SUPPORTED = _detectRecordingSupport()
+
+// Pick the best webm-flavoured mimetype the browser supports. The clone
+// route accepts plain "audio/webm"; the codec hint helps Chrome / Firefox
+// pick a sensible default. Fall through to undefined ⇒ MediaRecorder
+// uses its own default (which the route's allowlist still accepts —
+// we coerce on the way out).
+const _PREFERRED_MIME_CANDIDATES = [
+  'audio/webm;codecs=opus',
+  'audio/webm',
+  'audio/ogg;codecs=opus',
+  'audio/mp4',
+]
+function pickRecorderMime() {
+  if (!RECORDING_SUPPORTED) return ''
+  for (const m of _PREFERRED_MIME_CANDIDATES) {
+    if (window.MediaRecorder.isTypeSupported?.(m)) return m
+  }
+  return ''  // empty string = let MediaRecorder choose
+}
+
+// Slugify a character name for the suggested voice-sample filename.
+function _slug(name) {
+  return (name || 'character')
+    .toString()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '')
+    || 'character'
+}
 
 /**
  * Single character tile used by CharacterStudio (library grid) and the
@@ -55,6 +95,149 @@ export default function CharacterCard({
     } finally {
       setVoiceClonePending(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
+  // PR AO — In-browser audio recording. State machine:
+  //   idle → recording → recorded → cloning → idle (after success/error)
+  // Stream + recorder live in refs so React re-renders never disturb the
+  // ongoing capture; chunks accumulate on a ref so the closures the
+  // browser hands to ondataavailable/onstop don't go stale.
+  const [recordState, setRecordState] = useState('idle')
+  const [recordError, setRecordError] = useState('')
+  const [elapsedSeconds, setElapsedSeconds] = useState(0)
+  const recorderRef = useRef(null)
+  const streamRef = useRef(null)
+  const chunksRef = useRef([])
+  const recordedBlobRef = useRef(null)
+  const recordedMimeRef = useRef('audio/webm')
+  const tickRef = useRef(null)
+
+  // Always-on cleanup so we never leak the mic stream when the tile
+  // unmounts mid-record.
+  useEffect(() => {
+    return () => {
+      if (tickRef.current) clearInterval(tickRef.current)
+      try { recorderRef.current?.stop() } catch { /* ignore */ }
+      streamRef.current?.getTracks?.().forEach((t) => t.stop())
+    }
+  }, [])
+
+  const _stopMicTracks = () => {
+    streamRef.current?.getTracks?.().forEach((t) => t.stop())
+    streamRef.current = null
+  }
+
+  const handleStartRecord = async () => {
+    if (!onCloneVoice || !RECORDING_SUPPORTED) return
+    setRecordError('')
+    chunksRef.current = []
+    recordedBlobRef.current = null
+    setElapsedSeconds(0)
+    let stream
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    } catch (e) {
+      setRecordError(
+        e?.name === 'NotAllowedError'
+          ? 'Microphone permission denied — upload an audio file instead.'
+          : 'Could not access microphone — upload an audio file instead.',
+      )
+      return
+    }
+    streamRef.current = stream
+    const mime = pickRecorderMime()
+    recordedMimeRef.current = mime || 'audio/webm'
+    let recorder
+    try {
+      recorder = mime
+        ? new MediaRecorder(stream, { mimeType: mime })
+        : new MediaRecorder(stream)
+    } catch (e) {
+      _stopMicTracks()
+      setRecordError(`Recording unavailable — upload an audio file instead.`)
+      return
+    }
+    recorder.ondataavailable = (ev) => {
+      if (ev.data && ev.data.size > 0) chunksRef.current.push(ev.data)
+    }
+    recorder.onstop = () => {
+      const type = recordedMimeRef.current?.split(';')[0] || 'audio/webm'
+      const blob = new Blob(chunksRef.current, { type })
+      recordedBlobRef.current = blob
+      _stopMicTracks()
+      if (tickRef.current) {
+        clearInterval(tickRef.current)
+        tickRef.current = null
+      }
+      // Empty blob (mic produced no audio) — drop back to idle with
+      // a soft message rather than letting the user "use" silence.
+      if (!blob || blob.size < 1024) {
+        setRecordError(
+          'Recording was empty — try again or upload an audio file instead.',
+        )
+        setRecordState('idle')
+        return
+      }
+      setRecordState('recorded')
+    }
+    recorder.onerror = (ev) => {
+      setRecordError(
+        `Recording error: ${ev?.error?.message || 'unknown'} — upload instead.`,
+      )
+      _stopMicTracks()
+      if (tickRef.current) clearInterval(tickRef.current)
+      setRecordState('idle')
+    }
+    recorderRef.current = recorder
+    try {
+      recorder.start()
+    } catch (e) {
+      _stopMicTracks()
+      setRecordError('Could not start recording — upload instead.')
+      return
+    }
+    setRecordState('recording')
+    const startedAt = Date.now()
+    tickRef.current = setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000))
+    }, 250)
+  }
+
+  const handleStopRecord = () => {
+    if (recordState !== 'recording') return
+    try {
+      recorderRef.current?.stop()
+    } catch { /* onstop runs the cleanup */ }
+  }
+
+  const handleDiscardRecording = () => {
+    chunksRef.current = []
+    recordedBlobRef.current = null
+    setElapsedSeconds(0)
+    setRecordError('')
+    setRecordState('idle')
+  }
+
+  const handleUseRecording = async () => {
+    const blob = recordedBlobRef.current
+    if (!blob || !onCloneVoice) return
+    const ext = (recordedMimeRef.current?.includes('mp4')) ? 'm4a' : 'webm'
+    const file = new File(
+      [blob],
+      `adspark-voice-sample-${_slug(c.name)}.${ext}`,
+      { type: blob.type || 'audio/webm' },
+    )
+    setRecordState('cloning')
+    setRecordError('')
+    try {
+      await onCloneVoice(c, file)
+      // Clear the recording surface now that the clone landed; the
+      // status pill renders from the persisted character record.
+      handleDiscardRecording()
+    } catch (e) {
+      setRecordError(`Clone failed: ${e?.message || e}`)
+      setRecordState('recorded')
     }
   }
 
@@ -230,6 +413,118 @@ export default function CharacterCard({
           {customVoiceReady && !avatarReady && (
             <p className="text-[9px] text-emerald-300">
               Voice ready — Create Runway Avatar to bind it.
+            </p>
+          )}
+
+          {/* PR AO — In-browser audio recording. Sits below the file
+              picker so the upload path stays the obvious primary
+              affordance; the recording row is a faster shortcut when
+              the operator has a mic. Falls back to a one-line message
+              when MediaRecorder / mic is unavailable. */}
+          {RECORDING_SUPPORTED ? (
+            <div className="space-y-1 pt-1 border-t border-zinc-800/40">
+              <div className="flex items-center gap-1 flex-wrap">
+                <span className="text-[9px] uppercase tracking-wide text-zinc-500 font-mono">
+                  Or record
+                </span>
+                {recordState === 'recording' && (
+                  <span
+                    data-testid="custom-voice-record-status"
+                    className="text-[9px] rounded-full bg-rose-500/25 text-rose-100 ring-1 ring-rose-400/40 px-1.5 py-0.5 font-mono animate-pulse"
+                    aria-live="polite"
+                  >
+                    recording · {elapsedSeconds}s
+                  </span>
+                )}
+                {recordState === 'recorded' && (
+                  <span
+                    data-testid="custom-voice-record-status"
+                    className="text-[9px] rounded-full bg-emerald-500/25 text-emerald-100 ring-1 ring-emerald-400/40 px-1.5 py-0.5 font-mono"
+                  >
+                    sample ready · {elapsedSeconds}s
+                  </span>
+                )}
+                {recordState === 'cloning' && (
+                  <span
+                    data-testid="custom-voice-record-status"
+                    className="text-[9px] rounded-full bg-emerald-500/25 text-emerald-100 ring-1 ring-emerald-400/40 px-1.5 py-0.5 font-mono animate-pulse"
+                  >
+                    cloning…
+                  </span>
+                )}
+                {recordState === 'idle' && (
+                  <span
+                    data-testid="custom-voice-record-status"
+                    className="text-[9px] rounded-full bg-zinc-800 text-zinc-300 ring-1 ring-zinc-700 px-1.5 py-0.5 font-mono"
+                  >
+                    idle
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-1 flex-wrap">
+                {recordState === 'idle' && (
+                  <button
+                    type="button"
+                    data-testid="custom-voice-record-start"
+                    onClick={handleStartRecord}
+                    disabled={voiceClonePending || Boolean(busyAction)}
+                    className="text-[9px] rounded bg-rose-500/30 hover:bg-rose-500/45 text-rose-100 ring-1 ring-rose-400/40 px-2 py-0.5 font-semibold disabled:opacity-50"
+                    title="Record a 10-30 s sample with your mic"
+                  >
+                    Start recording
+                  </button>
+                )}
+                {recordState === 'recording' && (
+                  <button
+                    type="button"
+                    data-testid="custom-voice-record-stop"
+                    onClick={handleStopRecord}
+                    className="text-[9px] rounded bg-zinc-700 hover:bg-zinc-600 text-zinc-100 ring-1 ring-zinc-500 px-2 py-0.5 font-semibold"
+                    title="Stop recording"
+                  >
+                    Stop
+                  </button>
+                )}
+                {recordState === 'recorded' && (
+                  <>
+                    <button
+                      type="button"
+                      data-testid="custom-voice-record-use"
+                      onClick={handleUseRecording}
+                      disabled={voiceClonePending || Boolean(busyAction)}
+                      className="text-[9px] rounded bg-emerald-500/30 hover:bg-emerald-500/45 text-emerald-100 ring-1 ring-emerald-400/40 px-2 py-0.5 font-semibold disabled:opacity-50"
+                      title="Send this recording to /v1/voices for cloning"
+                    >
+                      Clone from recording
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDiscardRecording}
+                      className="text-[9px] text-zinc-500 hover:text-zinc-300"
+                      title="Discard this take and record again"
+                    >
+                      discard
+                    </button>
+                  </>
+                )}
+                {recordState === 'cloning' && (
+                  <span className="text-[9px] text-zinc-500">
+                    posting to /v1/voices…
+                  </span>
+                )}
+              </div>
+              {recordError && (
+                <p className="text-[9px] text-rose-300" title={recordError}>
+                  {recordError}
+                </p>
+              )}
+            </div>
+          ) : (
+            <p
+              className="text-[9px] text-zinc-500 pt-1 border-t border-zinc-800/40"
+              data-testid="custom-voice-record-status"
+            >
+              Recording unavailable — upload an audio file instead.
             </p>
           )}
         </div>
