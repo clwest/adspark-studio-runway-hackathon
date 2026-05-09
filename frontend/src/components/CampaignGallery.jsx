@@ -339,10 +339,13 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
     setLocalError('')
     setHostBusy(true)
     try {
-      const updated = await api.presentCampaign(c.id)
+      // PR AB — call the Spokesperson Ad alias. Same artefact and
+      // persisted fields as presentCampaign; the new endpoint exists
+      // so the API vocabulary matches the UI.
+      const updated = await api.generateSpokespersonAd(c.id)
       onUpdated?.(updated)
     } catch (e) {
-      setLocalError(`host: ${e}`)
+      setLocalError(`spokesperson ad: ${e}`)
     } finally {
       setHostBusy(false)
     }
@@ -572,10 +575,13 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
     nextActionLabel = 'Write commercial script →'
     nextActionTab = 'voice'
   } else if (!hostReady) {
-    nextActionLabel = 'Record spokesperson voice →'
-    nextActionTab = 'voice'
+    // PR AB — surface the Spokesperson Ad as the next-step deliverable.
+    // The host clip already IS the talking-to-camera ad; we just use
+    // the new label so users find it without scrolling Voice tab tools.
+    nextActionLabel = 'Generate spokesperson ad →'
+    nextActionTab = 'character'
   } else if (!commercialReady) {
-    nextActionLabel = 'Build final voiced ad →'
+    nextActionLabel = 'Build cinematic voiced ad →'
     nextActionTab = 'visuals'
   } else if (finishedCount < 3) {
     nextActionLabel = 'Build Campaign Pack →'
@@ -636,9 +642,15 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
           hint={spokespersonHint}
         />
         <OverviewChip
-          label="Host clip"
+          label="Spokesperson Ad"
           status={hostReady ? (c.host_mock_mode ? 'mock' : 'ready') : 'idle'}
-          hint={hostReady ? (c.host_mock_mode ? 'mock placeholder' : 'recorded') : 'not recorded'}
+          hint={
+            hostReady
+              ? c.host_mock_mode
+                ? 'mock placeholder'
+                : 'lip synced + audio'
+              : 'not recorded'
+          }
         />
         <OverviewChip
           label="Voice"
@@ -869,8 +881,9 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
           )}
         </div>
         <p className="text-[10px] text-zinc-400 leading-relaxed">
-          This is the export with sound: looped visual + spokesperson
-          audio. {c.commercial_script ? (
+          This is the <span className="text-zinc-300">Cinematic Ad</span>:
+          looped Runway visual cut + spokesperson voiceover.{' '}
+          {c.commercial_script ? (
             <span className="text-zinc-300">
               Uses the saved Commercial Script
             </span>
@@ -880,9 +893,18 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
               is saved
             </span>
           )}{' '}
-          spoken by the selected spokesperson. If the host clip is
-          missing, AdSpark will create it first, then loop the visual
-          until the full pitch finishes — no early audio cutoff.
+          spoken by the selected spokesperson. The voiced visual is
+          <span className="text-zinc-500"> not lip-synced</span>{' '}
+          — for a talking-to-camera ad, use{' '}
+          <button
+            type="button"
+            onClick={() => setActiveTab('character')}
+            className="text-violet-300 hover:underline"
+            title="Open the Character tab to render the lip-synced Spokesperson Ad"
+          >
+            Spokesperson Ad ↗
+          </button>{' '}
+          in the Character tab.
         </p>
         {commercialReady ? (
           <div className="space-y-1.5">
@@ -1467,22 +1489,36 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
         </div>
       ) : null}
 
-      {/* Phase 2 — Avatar Host Clip — only available once Phase 1 is ready. */}
+      {/* PR AB — Spokesperson Ad (formerly "Avatar Host Clip"). Same
+          Runway avatar_videos artefact, surfaced as a first-class
+          talking-to-camera commercial instead of just an audio source.
+          The technical "Avatar Host Clip" wording sticks around as a
+          small footnote so people who knew the old surface can still
+          orient themselves. */}
       {avatarReady && (
         <div className="border-t border-zinc-800/60 pt-2 space-y-1.5">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-xs font-semibold text-zinc-300">
-              Avatar Host Clip
-            </span>
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-semibold text-zinc-100">
+                Spokesperson Ad
+              </span>
+              <span
+                className="text-[10px] text-zinc-500 font-mono"
+                title="Powered by Runway avatar_videos. The selected avatar speaks the saved Commercial Script with synced mouth movement."
+              >
+                talking-to-camera · lip synced
+              </span>
+            </div>
             {hostReady && (
               <span
                 className={`text-[10px] rounded-full px-2 py-0.5 font-mono ${
                   c.host_mock_mode
                     ? 'bg-amber-500/20 text-amber-300'
-                    : 'bg-violet-500/20 text-violet-300'
+                    : 'bg-violet-500/25 text-violet-200 ring-1 ring-violet-400/40'
                 }`}
+                title={c.host_mock_mode ? 'mock placeholder MP4' : 'lip synced + audio'}
               >
-                {c.host_mock_mode ? 'mock ready' : 'ready'}
+                {c.host_mock_mode ? 'mock · lip sync' : 'lip synced + audio'}
               </span>
             )}
             {hostUnavailable && (
@@ -1491,23 +1527,32 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
               </span>
             )}
           </div>
+          <p className="text-[10px] text-zinc-500 leading-relaxed">
+            Your selected character speaks the saved commercial script
+            directly to camera with synced mouth movement.{' '}
+            <span className="text-zinc-400">Powered by Runway avatar_videos.</span>
+          </p>
           {hostReady ? (
             <div className="space-y-1.5">
+              <div className="text-[11px] font-semibold text-violet-200 flex items-center gap-1.5">
+                <span aria-hidden>▶</span> Talking ad ready — playable with audio
+              </div>
               <video
                 key={c.host_video_url}
                 src={c.host_video_url}
                 controls
                 preload="metadata"
-                className="w-full max-w-xs rounded-lg ring-1 ring-zinc-800"
+                className="w-full rounded-lg ring-2 ring-violet-400/40 shadow"
               />
-              <div className="flex items-center gap-3 text-xs">
+              <div className="flex items-center gap-3 text-xs flex-wrap">
                 <a
                   href={c.host_video_url}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-spark hover:underline"
+                  className="text-spark hover:underline font-semibold"
+                  download
                 >
-                  open host clip ↗
+                  download Spokesperson Ad ↗
                 </a>
                 <button
                   type="button"
@@ -1548,13 +1593,13 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
           ) : (
             <div className="space-y-1">
               <p className="text-[10px] text-zinc-500">
-                Records the Brand Spokesperson Avatar speaking the{' '}
+                Renders your selected character speaking the{' '}
                 {c.commercial_script ? (
                   <span className="text-zinc-300">saved Commercial Script</span>
                 ) : (
                   <span className="text-zinc-300">templated campaign pitch</span>
-                )}.
-                {' '}
+                )}{' '}
+                directly to camera.{' '}
                 <button
                   type="button"
                   onClick={() => setActiveTab('voice')}
@@ -1568,13 +1613,13 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
                 type="button"
                 onClick={handlePresent}
                 disabled={hostBusy}
-                className="rounded-md bg-violet-500/80 hover:bg-violet-500 text-zinc-100 text-xs px-2 py-1 disabled:opacity-50"
+                className="rounded-md bg-violet-500/80 hover:bg-violet-500 text-zinc-100 text-xs font-semibold px-3 py-1.5 disabled:opacity-50"
               >
                 {hostBusy
-                  ? 'Recording Host Clip…'
+                  ? 'Generating Spokesperson Ad…'
                   : hostFailed
-                  ? 'Retry Present Campaign'
-                  : 'Present Campaign'}
+                  ? 'Retry Spokesperson Ad'
+                  : 'Generate Spokesperson Ad'}
               </button>
               {hostFailed && c.host_error && (
                 <p className="text-[10px] text-rose-300" title={c.host_error}>
@@ -1590,6 +1635,47 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
 
   const voiceBody = (
     <div className="space-y-4">
+      {/* PR AB — Ad Mode primer. Two distinct final commercials live
+          on a saved campaign; this card teaches the difference so the
+          user lands on the right tab for the right output. */}
+      <div className="rounded-lg ring-1 ring-zinc-800 bg-zinc-950/70 p-3 space-y-2">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-zinc-100">Ad Mode</span>
+          <span className="text-[10px] text-zinc-500 font-mono">
+            two final outputs · pick by use case
+          </span>
+        </div>
+        <ul className="space-y-1.5 text-[11px] leading-relaxed">
+          <li>
+            <span className="text-spark font-semibold">Cinematic Ad</span>{' '}
+            <span className="text-zinc-500">— Visuals tab.</span>{' '}
+            <span className="text-zinc-300">
+              Silent Runway visual cut + spokesperson voiceover.
+            </span>{' '}
+            <span className="text-zinc-500">
+              Best for B-roll / cinematic / product-only shots. Output:
+              "Final Voiced Ad".
+            </span>
+          </li>
+          <li>
+            <span className="text-violet-300 font-semibold">Spokesperson Ad</span>{' '}
+            <span className="text-zinc-500">— Character tab.</span>{' '}
+            <span className="text-zinc-300">
+              Selected character speaks the saved script directly to
+              camera, lip-synced.
+            </span>{' '}
+            <span className="text-zinc-500">
+              Best for mascot / personality-driven ads (e.g. Brewster).
+              Output: "Spokesperson Ad" (Runway avatar_videos).
+            </span>
+          </li>
+        </ul>
+        <p className="text-[10px] text-zinc-500 italic">
+          The Commercial Script below feeds both — Spokesperson Ad
+          speaks it lip-synced; Cinematic Ad mixes it as voiceover.
+        </p>
+      </div>
+
       {/* PR AA — Commercial Script. Authored before the Avatar Host
           Clip is generated; downstream host-video + commercial-with-
           voice paths speak this verbatim when present. */}
@@ -1669,11 +1755,11 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
               className="rounded-md bg-spark/80 hover:bg-spark text-ink text-[11px] font-semibold px-2 py-1 disabled:opacity-50"
               title={
                 avatarReady
-                  ? 'Saves the script then runs Avatar Host Clip generation'
+                  ? 'Saves the script then renders the talking-to-camera Spokesperson Ad'
                   : 'Attach or create a spokesperson first'
               }
             >
-              {hostBusy ? 'Recording…' : 'Record Host Clip from Script'}
+              {hostBusy ? 'Generating…' : 'Generate Spokesperson Ad'}
             </button>
           </div>
         </div>
@@ -1946,9 +2032,13 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
       meta: 'storyboard visual + host clip audio (ffmpeg)',
     },
     {
-      label: 'Avatar Host Clip',
+      // PR AB — same artefact, user-facing rename. Meta still reports
+      // the underlying Runway primitive so file vocabulary is honest.
+      label: 'Spokesperson Ad',
       url: hostReady ? c.host_video_url : null,
-      meta: c.host_mock_mode ? 'ffmpeg mock placeholder' : 'Runway avatar_videos',
+      meta: c.host_mock_mode
+        ? 'ffmpeg mock placeholder'
+        : 'talking avatar video with synced voice (Runway avatar_videos)',
     },
     {
       label: 'Brand Voice Sample',

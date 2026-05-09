@@ -321,8 +321,12 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
   // (asserted later) still uses the "Voiced Commercial" label so the
   // CLI/file vocabulary stays consistent.
   await expect(newestCard.getByText(/^Final Voiced Ad$/)).toBeVisible()
+  // PR AB — subtitle now distinguishes Cinematic Ad vs Spokesperson Ad.
   await expect(
-    newestCard.getByText(/This is the export with sound/i),
+    newestCard.getByText(/This is the Cinematic Ad/i),
+  ).toBeVisible()
+  await expect(
+    newestCard.getByText(/for a talking-to-camera ad, use/i),
   ).toBeVisible()
   const buildCommercialBtn = newestCard.getByRole('button', {
     name: /^Build Voiced Commercial$/i,
@@ -378,7 +382,13 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
     newestCard.getByRole('button', { name: /^Save Script$/i }),
   ).toBeVisible()
   await expect(
-    newestCard.getByRole('button', { name: /Record Host Clip from Script/i }),
+    newestCard.getByRole('button', { name: /^Generate Spokesperson Ad$/i }),
+  ).toBeVisible()
+  // PR AB — Ad Mode primer card distinguishes Cinematic Ad vs
+  // Spokesperson Ad above the script editor.
+  await expect(newestCard.getByText(/^Ad Mode$/)).toBeVisible()
+  await expect(
+    newestCard.getByText(/Selected character speaks the saved script directly/i),
   ).toBeVisible()
   // Audio Pack still renders below the Script section.
   await expect(newestCard.getByText(/^Audio Pack$/)).toBeVisible()
@@ -428,6 +438,10 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
   // PR Z — storyboard ledger rows.
   await expect(newestCard.getByText(/^Storyboard Commercial$/)).toBeVisible()
   await expect(newestCard.getByText(/^Voiced Storyboard$/)).toBeVisible()
+  // PR AB — host-clip ledger row renamed to "Spokesperson Ad". Same
+  // file (backend/data/host/<id>.mp4); user-facing vocabulary aligned
+  // with the rest of the UI.
+  await expect(newestCard.getByText(/^Spokesperson Ad$/)).toBeVisible()
 
   // 13. Console / page errors — page errors are always fatal; console errors
   //     are filtered to drop video-network noise.

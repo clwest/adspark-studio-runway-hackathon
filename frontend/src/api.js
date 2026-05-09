@@ -143,4 +143,13 @@ export const api = {
       `/api/campaigns/${encodeURIComponent(campaignId)}/script`,
       { method: 'POST', body: JSON.stringify({ script }) },
     ),
+  // PR AB — Spokesperson Ad alias. Same artefact + persisted fields
+  // as presentCampaign / host-video; the alias exists so the API
+  // vocabulary matches the user-facing "talking spokesperson ad"
+  // wording. No new files are written.
+  generateSpokespersonAd: (campaignId, body = {}) =>
+    jsonFetch(
+      `/api/campaigns/${encodeURIComponent(campaignId)}/spokesperson-ad`,
+      { method: 'POST', body: JSON.stringify(body) },
+    ),
 }

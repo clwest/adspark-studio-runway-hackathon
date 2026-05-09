@@ -1253,6 +1253,66 @@ def get_host_video(
     )
 
 
+# ---- PR AB — Spokesperson Ad (alias) ------------------------------
+#
+# The Avatar Host Clip + the "Spokesperson Ad" are the same MP4: a
+# Runway avatar_videos render where the selected character speaks the
+# saved Commercial Script directly to camera with lip sync. The
+# host-video route remains the implementation surface; these aliases
+# expose the same behaviour under the user-facing vocabulary so the
+# API + UI agree. No new files are written; the cached MP4 still
+# lives at backend/data/host/<id>.mp4.
+
+
+class SpokespersonAdBody(BaseModel):
+    """Optional override identical in shape to ``HostVideoBody``."""
+
+    script_override: Optional[str] = Field(
+        default=None,
+        max_length=300,
+        description=(
+            "Optional override for the spoken script. When omitted, "
+            "the route prefers ``campaign.commercial_script`` (PR AA) "
+            "and falls back to the deterministic ``build_script`` "
+            "template otherwise."
+        ),
+    )
+
+
+@router.post("/{campaign_id}/spokesperson-ad", response_model=Campaign)
+def post_spokesperson_ad(
+    campaign_id: str,
+    body: Optional[SpokespersonAdBody] = None,
+    settings: Settings = Depends(get_settings),
+    store: CampaignStore = Depends(_store),
+) -> Campaign:
+    """PR AB — Spokesperson Ad (talking-to-camera) generator. Delegates
+    to the existing host-video pipeline so the cached MP4, the
+    persisted ``host_*`` fields, and the script-override behaviour all
+    stay in sync with the legacy endpoint.
+    """
+    host_body = (
+        HostVideoBody(script_override=body.script_override) if body else None
+    )
+    return post_host_video(
+        campaign_id,
+        body=host_body,
+        settings=settings,
+        store=store,
+    )
+
+
+@router.get("/{campaign_id}/spokesperson-ad")
+def get_spokesperson_ad(
+    campaign_id: str,
+    settings: Settings = Depends(get_settings),
+) -> FileResponse:
+    """PR AB — serves the same MP4 as ``GET /host-video`` under the
+    user-facing vocabulary.
+    """
+    return get_host_video(campaign_id, settings=settings)
+
+
 # ---- PR H — Brand Voice + Multilingual Dub --------------------------
 
 

@@ -977,3 +977,95 @@ When the host clip is missing AND `auto_generate_host` is true:
   `/host-video` route — already verified end-to-end by SESSION_008's
   Brewster hero-run.
 
+---
+
+## PR AB — Cinematic Ad vs Spokesperson Ad (2026-05-09)
+
+The audio gap that PRs S/X closed produced a **voiceover ad**: a
+silent Runway visual cut with the Avatar Host Clip's audio mixed
+on top. That works for B-roll-style cinematic ads, but it's the
+wrong primitive for **mascot / personality-driven** campaigns where
+the user wants the character looking at camera, mouth synced,
+speaking the script.
+
+The Avatar Host Clip itself is the right primitive for that use
+case — it is already a talking-to-camera Runway `avatar_videos`
+render. PR AB renames the surface so users find it, and adds a
+clear distinction between the two final outputs a saved campaign
+can produce.
+
+### The two ad modes
+
+| Mode | Visual source | Audio source | Lip sync? | Best for |
+|---|---|---|---|---|
+| **Cinematic Ad** (`/commercial-with-voice`) | Runway `image_to_video` (silent) | Avatar Host Clip audio (extracted via ffmpeg) | **No** — visual is unrelated to mouth movement | B-roll, product shots, atmospheric scenes |
+| **Spokesperson Ad** (`/spokesperson-ad` alias of `/host-video`) | Runway `avatar_videos` (the avatar itself) | Same render — speech is rendered with the visual | **Yes** | Mascot ads, founder spokespersons, talking-head campaigns (e.g. Brewster) |
+
+### Why `image_to_video` is not lip-synced
+
+Runway's `gen4_turbo` / `gen4.5` produce visual-only output that
+animates a reference image. They do not consume a script and have
+no concept of mouth movement. The voice audio must come from a
+separate source (`avatar_videos` or `text_to_speech`, the latter
+remaining gated). PR S/X's ffmpeg mux is the right answer for that
+constraint, but it's a *voiceover* path — the visual and audio
+are not synchronised.
+
+### Why `avatar_videos` is the direct talking-ad path
+
+`/v1/avatar_videos` accepts a script + an avatar id and renders the
+avatar speaking the script with mouth movement. The output is one
+file with both video + audio streams (h264 + AAC, ~1088×704 at the
+gwm1_avatars model). No mux is required. This is the artefact
+AdSpark already cached at `backend/data/host/<id>.mp4` for every
+"Present Campaign" call; PR AB just promotes it as the final
+deliverable for spokesperson-driven campaigns.
+
+### Backend surface change
+
+- New alias routes `POST` + `GET /api/campaigns/{id}/spokesperson-ad`
+  delegate to `post_host_video` / `get_host_video`. **Same persisted
+  fields** (`host_video_url`, `host_status`, `host_task_id`, etc.).
+  **Same cached MP4** at `backend/data/host/<id>.mp4`. No new files
+  written; no new schema migration. Backward-compatible — every
+  pre-PR-AB persisted `host_video_url` continues to resolve.
+- Routes 48 → **50** (POST + GET pair).
+
+### Frontend surface change
+
+- Character tab: subsection header "Avatar Host Clip" → **"Spokesperson
+  Ad"** with subtitle "Your selected character speaks the saved
+  commercial script directly to camera with synced mouth movement"
+  and ready badge "lip synced + audio". The Runway-technical phrase
+  "Powered by Runway avatar_videos" survives as a small footnote.
+- Voice tab: button "Record Host Clip from Script" → **"Generate
+  Spokesperson Ad"**. Adds a new top-level **Ad Mode primer card**
+  that defines Cinematic vs Spokesperson with one-sentence guidance.
+- Visuals tab Final Voiced Ad: subtitle now starts with "This is
+  the Cinematic Ad…" and includes a "for a talking-to-camera ad,
+  use Spokesperson Ad" jump-button.
+- Overview chip "Host clip" → **"Spokesperson Ad"** with hint "lip
+  synced + audio" / "not recorded".
+- Overview Next-action cascade now surfaces "Generate spokesperson
+  ad →" (jumps to Character tab) ahead of the cinematic build.
+- Exports row "Avatar Host Clip" → **"Spokesperson Ad"** with meta
+  "talking avatar video with synced voice (Runway avatar_videos)".
+
+### Real-mode verification (CEO Buzz / Brewster, 2026-05-09)
+
+- `POST /api/campaigns/8ea08b2fc95d/script` — saved 201-char script.
+- `POST /api/campaigns/8ea08b2fc95d/spokesperson-ad` — 200 in 38.7 s.
+- ffprobe on `data/host/8ea08b2fc95d.mp4`: h264 1088×704 + AAC mono
+  48 kHz, **15.29 s**. Brewster lip-syncs the full "Built for
+  founders, coders, and sleep-deprived legends chasing impossible
+  ideas at 3AM…" script.
+- `GET /api/campaigns/8ea08b2fc95d/spokesperson-ad` → 200 video/mp4,
+  4.97 MB. Same file the legacy `GET /host-video` returns.
+
+### Mock-mode parity
+
+The same lavfi placeholder MP4 generation runs unchanged
+(`character_host_client._generate_mock`). Mock spokesperson-ads
+display "mock · lip sync" instead of "lip synced + audio" so the
+demo story stays honest under no-key conditions.
+
