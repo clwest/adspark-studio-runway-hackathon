@@ -550,6 +550,44 @@ export default function CharacterCard({
             </p>
           )}
 
+          {/* PR AR — Cloned voice preview. When Runway returns a
+              previewUrl during the clone poll, render an inline
+              <audio controls>; otherwise (mock mode + real-mode
+              poll timeouts) fall back to a one-line helper so the
+              operator knows preview just isn't available rather
+              than something being broken. Distinct from the PR AP
+              recorded-take preview which lives inside the recording
+              row (above) and disappears once the clone lands. */}
+          {customVoiceReady && c.custom_voice_preview_url && (
+            <div className="space-y-0.5 pt-0.5">
+              <p className="text-[9px] uppercase tracking-wide text-zinc-500 font-mono">
+                Cloned voice preview
+              </p>
+              <audio
+                src={c.custom_voice_preview_url}
+                controls
+                preload="metadata"
+                data-testid="custom-voice-preview"
+                className="w-full h-7"
+              />
+            </div>
+          )}
+          {customVoiceReady && !c.custom_voice_preview_url && (
+            <p
+              className="text-[9px] text-zinc-500 pt-0.5"
+              data-testid="custom-voice-preview-unavailable"
+              title={
+                customVoiceMock
+                  ? 'Mock-mode clones never expose a previewUrl.'
+                  : 'Runway did not return a preview URL during this clone.'
+              }
+            >
+              {customVoiceMock
+                ? 'Preview unavailable in mock mode.'
+                : 'Preview unavailable for this cloned voice.'}
+            </p>
+          )}
+
           {/* PR AO — In-browser audio recording. Sits below the file
               picker so the upload path stays the obvious primary
               affordance; the recording row is a faster shortcut when

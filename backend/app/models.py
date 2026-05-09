@@ -312,6 +312,12 @@ class Character(BaseModel):
     custom_voice_status: Optional[Literal["ready", "failed", "mock"]] = None
     custom_voice_error: Optional[str] = None
     custom_voice_mock_mode: Optional[bool] = None
+    # PR AR — Runway voice ``previewUrl`` from the READY poll
+    # response. ``None`` in mock mode (no playable URL) and when the
+    # poll didn't surface one before timeout. UI surfaces an inline
+    # `<audio controls>` when set, or "Preview unavailable" copy
+    # when the voice exists but the URL doesn't.
+    custom_voice_preview_url: Optional[str] = None
     # PR AQ — Avatar PATCH for custom voice swap. After a successful
     # clone, AdSpark auto-PATCHes the existing Runway avatar (when
     # one is bound) so the cloned voice applies without an avatar

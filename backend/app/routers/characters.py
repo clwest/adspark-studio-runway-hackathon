@@ -317,6 +317,10 @@ async def post_clone_voice(
         custom_voice_status=result.status,
         custom_voice_error=None,
         custom_voice_mock_mode=result.mock_mode,
+        # PR AR — surface the Runway voice previewUrl when the clone
+        # path captured one. ``None`` in mock mode + when polling
+        # didn't expose a URL; the UI handles both cases gracefully.
+        custom_voice_preview_url=result.preview_url,
         custom_voice_avatar_patch_status=apply_result.status,
         custom_voice_avatar_patch_error=apply_result.error,
         custom_voice_avatar_patched_at=(patched_at.isoformat() if patched_at else None),

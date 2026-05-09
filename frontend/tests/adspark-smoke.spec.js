@@ -243,6 +243,21 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
       .getByTestId('custom-voice-avatar-patch-status')
       .count()
     expect(patchPills).toBeLessThanOrEqual(voiceSectionCount)
+    // PR AR — cloned voice preview audio + the unavailable-fallback
+    // helper. Both are conditional on a cloned voice existing.
+    // Together they cover every cloned voice exactly once
+    // (audio when previewUrl is set, fallback line otherwise),
+    // so the combined count is bounded by the patch-pill count
+    // (which itself is bounded by voiceSectionCount). Mock-mode
+    // clones never carry a previewUrl, so on a mock-only library
+    // we'd see only the unavailable copy, not the audio element.
+    const previewAudio = await page
+      .getByTestId('custom-voice-preview')
+      .count()
+    const previewUnavailable = await page
+      .getByTestId('custom-voice-preview-unavailable')
+      .count()
+    expect(previewAudio + previewUnavailable).toBeLessThanOrEqual(patchPills)
   }
 
   // 7b.6. PR U — stage order: Spokesperson leads, Campaign Brief

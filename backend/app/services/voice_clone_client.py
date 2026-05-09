@@ -68,6 +68,11 @@ class VoiceCloneResult:
     voice_id: Optional[str] = None
     error: Optional[str] = None
     mock_mode: bool = False
+    # PR AR — previewUrl from the Runway voice resource (READY poll
+    # response). ``None`` in mock mode (no playable URL) and when the
+    # real-mode poll didn't surface one before timeout. Caller treats
+    # missing preview as non-fatal.
+    preview_url: Optional[str] = None
 
 
 def _runway_headers(settings: Settings) -> dict[str, str]:
@@ -93,6 +98,20 @@ def _data_uri(audio_bytes: bytes, mime: str) -> str:
     return f"data:{mime};base64,{b64}"
 
 
+def _extract_preview_url(payload: Optional[dict]) -> Optional[str]:
+    """PR AR — Runway has shipped both ``previewUrl`` and ``preview_url``
+    casings in different docs. Tolerate both (and the stripped form)
+    so a future server-side rename doesn't silently drop the preview.
+    """
+    if not isinstance(payload, dict):
+        return None
+    for key in ("previewUrl", "preview_url", "preview"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
 def _create_voice_real(
     name: str,
     audio_bytes: bytes,
@@ -101,10 +120,16 @@ def _create_voice_real(
     *,
     timeout: float = 60.0,
     poll_seconds: float = 90.0,
-) -> tuple[str, str]:
-    """Returns (voice_id, final_status). Raises a ``RuntimeError`` for
-    any non-2xx / non-READY outcome — the caller wraps the error into
-    a ``VoiceCloneResult``.
+) -> tuple[str, str, Optional[str]]:
+    """Returns ``(voice_id, final_status, preview_url)``. Raises
+    ``RuntimeError`` for any non-2xx / non-READY outcome — the caller
+    wraps the error into a ``VoiceCloneResult``.
+
+    PR AR — preview URL is captured from whichever poll response
+    flips status to ``READY`` (audio_client follows the same shape
+    for text-design voices). Returned as ``None`` when Runway never
+    surfaces one before the poll deadline; the caller treats missing
+    preview as non-fatal so the clone + apply flow still succeeds.
     """
     body = {
         "name": name,
@@ -128,17 +153,52 @@ def _create_voice_real(
     detail_url = f"{settings.runway_api_base}/v1/voices/{voice_id}"
     deadline = time.time() + poll_seconds
     final_status = (created.get("status") or "").upper()
+    last_payload: dict = created
     with httpx.Client(timeout=20.0) as client:
         while time.time() < deadline and final_status not in {"READY", "FAILED"}:
             time.sleep(3)
             r = client.get(detail_url, headers=_runway_headers(settings))
             r.raise_for_status()
-            final_status = (r.json().get("status") or "").upper()
+            last_payload = r.json() or {}
+            final_status = (last_payload.get("status") or "").upper()
     if final_status == "FAILED":
         raise RuntimeError("Runway rejected the voice clone request.")
     if final_status != "READY":
         raise RuntimeError(f"voice clone did not reach READY (final: {final_status})")
-    return voice_id, final_status
+    preview_url = _extract_preview_url(last_payload)
+    return voice_id, final_status, preview_url
+
+
+def fetch_voice_preview(
+    voice_id: str,
+    settings: Settings,
+    *,
+    timeout: float = 15.0,
+) -> Optional[str]:
+    """PR AR — best-effort `GET /v1/voices/{id}` to refresh a missing
+    or stale ``previewUrl``. Returns ``None`` in mock mode, when the
+    voice id is missing/mock, or on any HTTP / network error. Never
+    raises — caller treats missing preview as non-fatal.
+    """
+    if not voice_id or settings.runway_mock or str(voice_id).startswith("mock_"):
+        return None
+    url = f"{settings.runway_api_base}/v1/voices/{voice_id}"
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            resp = client.get(url, headers=_runway_headers(settings))
+    except httpx.HTTPError as exc:
+        logger.warning("voice detail http error for %s: %s", voice_id, exc)
+        return None
+    if resp.status_code >= 400:
+        logger.warning(
+            "voice detail non-2xx for %s: %s %s",
+            voice_id, resp.status_code, resp.text[:200],
+        )
+        return None
+    try:
+        return _extract_preview_url(resp.json())
+    except ValueError:
+        return None
 
 
 def clone_voice_from_audio(
@@ -170,7 +230,7 @@ def clone_voice_from_audio(
         )
 
     try:
-        voice_id, _final = _create_voice_real(
+        voice_id, _final, preview_url = _create_voice_real(
             cleaned_name, audio_bytes, mime, settings,
         )
     except httpx.HTTPError as exc:
@@ -189,7 +249,11 @@ def clone_voice_from_audio(
             status="failed",
             error=f"unexpected: {exc!s}"[:200],
         )
-    return VoiceCloneResult(status="ready", voice_id=voice_id)
+    return VoiceCloneResult(
+        status="ready",
+        voice_id=voice_id,
+        preview_url=preview_url,
+    )
 
 
 # ---- PR AQ — Avatar PATCH for custom voice swap -------------------

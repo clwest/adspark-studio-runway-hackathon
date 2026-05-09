@@ -183,6 +183,34 @@ POST /api/characters/{id}/apply-voice
 status pill), `custom-voice-apply-avatar` (the manual retry
 button — only renders on the `failed` branch).
 
+#### Hearing the cloned voice (PR AR)
+
+When Runway returns a `previewUrl` during the clone poll
+(real-mode only — mock clones never emit one), the voice
+section renders an inline native `<audio controls>` element
+labeled **"Cloned voice preview"** so operators can hear the
+result before binding it to an avatar.
+
+- Persisted on `Character.custom_voice_preview_url`.
+- Captured by the same poll loop that watches for `READY` —
+  no extra HTTP round trips.
+- Tolerant `_extract_preview_url` accepts `previewUrl` /
+  `preview_url` / `preview` casings so a future server-side
+  rename never silently drops the preview.
+- Mock mode: persists `null`. The UI shows
+  *"Preview unavailable in mock mode."* instead of an audio
+  element.
+- Real-mode poll timeout: persists `null`. The UI shows
+  *"Preview unavailable for this cloned voice."*
+
+`data-testid` hooks: `custom-voice-preview` (the audio element),
+`custom-voice-preview-unavailable` (the fallback line).
+
+This preview is **distinct** from the PR AP recorded-take
+preview, which renders inside the Or-record row above and shows
+the captured Blob *before* the clone fires. PR AR's preview
+shows what Runway returned *after* the clone landed.
+
 #### Recording in-browser (PR AO)
 
 Below the file picker on each library tile sits a small

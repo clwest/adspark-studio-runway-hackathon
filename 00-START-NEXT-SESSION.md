@@ -3,35 +3,34 @@
 **Last touched:** 2026-05-09 (PR AG/AH `6157512`; PR AI
 `108ca3b`; PR AJ `444cb6a`; PR AK `c59251a`; PR AL `8a43af2`;
 PR AM `3e12d27`; PR AN `f255c22`; PR AO `5bca7c4`; PR AP
-`3c6483e feat: preview recorded voice before cloning`; PR AQ
-Avatar PATCH for Custom Voice Swap in flight on top —
-SESSION_012–SESSION_022 handoffs added).
+`3c6483e`; PR AQ `ec35c0e feat: patch existing avatar with
+cloned voice`; PR AR Cloned Voice Preview Surface in flight on
+top — SESSION_012–SESSION_023 handoffs added).
 
 ## Where things stand
 
-- **Branch:** `main` at `3c6483e` (`feat: preview recorded voice
-  before cloning`) on `origin/main`. PR AQ patch in flight on
+- **Branch:** `main` at `ec35c0e` (`feat: patch existing avatar
+  with cloned voice`) on `origin/main`. PR AR patch in flight on
   top — no new commit / tag yet, both pending explicit user
   approval.
 - **Latest tag:** still **`hackathon-submission-v13`** at `ec446e4`
-  (PR AF). PR AG–AP shipped the funnel + polish + voice-identity
-  + recording stack; PR AQ closes the loop by letting cloned
-  voices apply to existing avatars without an avatar recreate.
+  (PR AF). PR AG–AQ shipped the funnel + polish + voice-identity
+  + recording + apply-existing-avatar stack; PR AR finishes the
+  voice loop by surfacing the Runway preview URL inline so
+  operators can hear the cloned result.
 - **Backend routes:** **66** application + FastAPI built-ins
-  (was 65 at PR AN/AP). PR AQ adds one new endpoint:
-  `POST /api/characters/{id}/apply-voice` (manual retry for the
-  avatar voice swap). The PR AN `clone-voice` route now also
-  runs an automatic `PATCH /v1/avatars/{id}` after every
-  successful clone.
-- **Frontend build:** 317.26 KB initial JS / 89.28 KB gzip +
-  561.97 KB lazy `@runwayml/avatars-react` chunk (≈ +2.4 KB
-  initial / +0.4 KB gzip vs PR AP — PR AQ added the patch
-  status pill + manual retry button + handler wiring).
-- **Playwright smoke:** `1 passed (~21.4 s)` against the mock
-  backend; existing PR AP assertions still pass; PR AQ adds a
-  resilient assertion that the patch-status pill count never
-  exceeds the number of voice sections (works whether the
-  operator has cloned voices on fixture characters or not).
+  (unchanged from PR AQ; PR AR is data-capture-only — clone
+  flow already polls and the preview slots into the same
+  response).
+- **Frontend build:** 317.95 KB initial JS / 89.43 KB gzip +
+  561.97 KB lazy `@runwayml/avatars-react` chunk (≈ +0.7 KB
+  initial / +0.2 KB gzip vs PR AQ — PR AR only added the
+  conditional audio element + fallback line).
+- **Playwright smoke:** `1 passed (~22.8 s)` against the mock
+  backend; existing PR AQ assertions still pass; PR AR adds a
+  resilient assertion that the preview audio + unavailable-
+  fallback combined count is bounded by the patch-status-pill
+  count (which is itself bounded by voice section count).
 - **Repo:** https://github.com/clwest/adspark-studio-runway-hackathon
   (private). Pushes happen on explicit user approval.
 - **Stale local feature branches:** 22 left over from PR A through
@@ -77,6 +76,16 @@ SESSION_012–SESSION_022 handoffs added).
   avatar` button on the failed branch (POST `/apply-voice`).
   Mock mode short-circuits to `mock_patched` without HTTP so
   the demo flow shows the linkage end-to-end.
+- **Cloned voice preview** (PR AR) — same poll loop that watches
+  for `READY` now also captures Runway's `previewUrl` (tolerating
+  `previewUrl` / `preview_url` / `preview` casings) and persists
+  it as `Character.custom_voice_preview_url`. UI renders an
+  inline native `<audio controls>` labeled *"Cloned voice
+  preview"* when the URL is set, or a one-line *"Preview
+  unavailable in mock mode."* / *"Preview unavailable for this
+  cloned voice."* fallback otherwise. Distinct from PR AP's
+  recorded-take preview — that one shows the captured Blob
+  *before* clone; PR AR shows what Runway returned *after*.
 - New backend route: `POST /api/characters/{id}/clone-voice`
   (multipart form with `audio` + optional `name`). The route
   validates mime + size (cap 15 MB locally; Runway docs say
