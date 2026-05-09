@@ -77,6 +77,15 @@ export default function App() {
   const [newestSavedId, setNewestSavedId] = useState(null)
   const [busy, setBusy] = useState({ concepts: false, runway: false, image: false, upload: false })
   const [error, setError] = useState('')
+  // PR AC follow-up — when an error appears, scroll its banner into
+  // view so the user doesn't miss it after scrolling down to fill
+  // the form. The banner sits at the top of the page; without this
+  // effect a 422 from /api/concepts looked like "nothing happened".
+  const errorBannerRef = useRef(null)
+  useEffect(() => {
+    if (!error || !errorBannerRef.current) return
+    errorBannerRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [error])
   const pollRef = useRef({ active: false, attempts: 0 })
 
   useEffect(() => {
@@ -400,7 +409,12 @@ export default function App() {
         </header>
 
         {error && (
-          <div className="rounded-lg border border-rose-500/40 bg-rose-500/10 text-rose-200 px-4 py-2 text-sm flex items-start justify-between gap-3">
+          <div
+            ref={errorBannerRef}
+            role="alert"
+            aria-live="assertive"
+            className="rounded-lg border border-rose-500/40 bg-rose-500/10 text-rose-200 px-4 py-2 text-sm flex items-start justify-between gap-3"
+          >
             <span>{error}</span>
             <button
               type="button"

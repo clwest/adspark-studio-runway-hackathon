@@ -21,10 +21,20 @@ export default function CampaignForm({ onSubmit, busy }) {
       onSubmit={submit}
       className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 space-y-4"
     >
+      {/* PR AC follow-up — maxLength caps mirror the backend
+          ConceptRequest validation so the user can't accidentally
+          type past the limit and receive a silent 422. */}
       <div className="space-y-1">
-        <label className="text-sm text-zinc-300">Business / brand</label>
+        <label className="text-sm text-zinc-300">
+          Business / brand
+          <span className="text-[10px] text-zinc-500 font-mono ml-2">
+            {form.business.length}/200
+          </span>
+        </label>
         <input
           required
+          minLength={2}
+          maxLength={200}
           value={form.business}
           onChange={update('business')}
           placeholder="Donkey Betz Coffee"
@@ -32,8 +42,14 @@ export default function CampaignForm({ onSubmit, busy }) {
         />
       </div>
       <div className="space-y-1">
-        <label className="text-sm text-zinc-300">Product / service</label>
+        <label className="text-sm text-zinc-300">
+          Product / service
+          <span className="text-[10px] text-zinc-500 font-mono ml-2">
+            {form.product.length}/200
+          </span>
+        </label>
         <input
+          maxLength={200}
           value={form.product}
           onChange={update('product')}
           placeholder="Cold-brew subscription"
@@ -42,8 +58,14 @@ export default function CampaignForm({ onSubmit, busy }) {
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1">
-          <label className="text-sm text-zinc-300">Tone</label>
+          <label className="text-sm text-zinc-300">
+            Tone
+            <span className="text-[10px] text-zinc-500 font-mono ml-2">
+              {form.tone.length}/80
+            </span>
+          </label>
           <input
+            maxLength={80}
             value={form.tone}
             onChange={update('tone')}
             placeholder="cinematic, gritty, playful…"
@@ -51,8 +73,14 @@ export default function CampaignForm({ onSubmit, busy }) {
           />
         </div>
         <div className="space-y-1">
-          <label className="text-sm text-zinc-300">Audience</label>
+          <label className="text-sm text-zinc-300">
+            Audience
+            <span className="text-[10px] text-zinc-500 font-mono ml-2">
+              {form.audience.length}/200
+            </span>
+          </label>
           <input
+            maxLength={200}
             value={form.audience}
             onChange={update('audience')}
             placeholder="urban creatives, 25–40"
