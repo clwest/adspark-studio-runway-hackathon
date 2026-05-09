@@ -3,34 +3,34 @@
 **Last touched:** 2026-05-09 (PR AG/AH `6157512`; PR AI
 `108ca3b`; PR AJ `444cb6a`; PR AK `c59251a`; PR AL `8a43af2`;
 PR AM `3e12d27`; PR AN `f255c22`; PR AO `5bca7c4`; PR AP
-`3c6483e`; PR AQ `ec35c0e`; PR AR `5aa5579`; PR AS `2321fd7
-feat: verify avatar voice bind after patch`; PR AT Avatar Voice
-Drift Detection in flight on top — SESSION_012–SESSION_025
-handoffs added).
+`3c6483e`; PR AQ `ec35c0e`; PR AR `5aa5579`; PR AS `2321fd7`;
+PR AT `632b696 feat: detect drift between cloned and avatar
+voice`; PR AU Voice Drift Repair Action in flight on top —
+SESSION_012–SESSION_026 handoffs added).
 
 ## Where things stand
 
-- **Branch:** `main` at `2321fd7` (`feat: verify avatar voice
-  bind after patch`) on `origin/main`. PR AT patch in flight on
-  top — no new commit / tag yet, both pending explicit user
-  approval.
+- **Branch:** `main` at `632b696` (`feat: detect drift between
+  cloned and avatar voice`) on `origin/main`. PR AU patch in
+  flight on top — no new commit / tag yet, both pending
+  explicit user approval.
 - **Latest tag:** still **`hackathon-submission-v13`** at `ec446e4`
-  (PR AF). PR AG–AS shipped clone → apply → preview → verify;
-  PR AT turns the verify state into trust by surfacing whether
-  the avatar's resolved voice id actually matches the
-  character's cloned id.
+  (PR AF). PR AG–AT shipped clone → apply → preview → verify
+  → drift detection; PR AU closes the loop with a one-click
+  drift-repair button that reuses the existing apply-voice
+  pipeline.
 - **Backend routes:** **66** application + FastAPI built-ins
-  (unchanged from PR AS; PR AT is verify-side-effect-only —
-  drift is computed inside `_verify_avatar_voice_after_patch`
-  during the existing clone/apply routes).
-- **Frontend build:** 319.70 KB initial JS / 89.89 KB gzip +
-  561.97 KB lazy `@runwayml/avatars-react` chunk (≈ +0.1 KB
-  initial / +0.1 KB gzip vs PR AS — PR AT only added a derived
-  state + tweaked the existing pill render).
-- **Playwright smoke:** `1 passed (~22.0 s)` against the mock
-  backend; PR AT extends the resilient assertion to cover the
-  new `custom-voice-avatar-drift` testid alongside the
-  existing resolved/unverified pills.
+  (unchanged from PR AT; PR AU is frontend-only — reuses the
+  existing `POST /api/characters/{id}/apply-voice` route).
+- **Frontend build:** 320.61 KB initial JS / 90.05 KB gzip +
+  561.97 KB lazy `@runwayml/avatars-react` chunk (≈ +0.9 KB
+  initial / +0.2 KB gzip vs PR AT — PR AU added the repair
+  button + busy/error state).
+- **Playwright smoke:** `1 passed (~26.0 s)` against the mock
+  backend; PR AU extends the resilient assertion so the
+  repair-button count is bounded by the drift-pill count.
+  Mock fixture libraries usually have zero drift, so the
+  button never renders in the default smoke pass.
 - **Repo:** https://github.com/clwest/adspark-studio-runway-hackathon
   (private). Pushes happen on explicit user approval.
 - **Stale local feature branches:** 22 left over from PR A through
@@ -112,6 +112,15 @@ handoffs added).
   yet). Pure helper `compute_voice_drift_status(...)` (case-
   insensitive id comparison after whitespace strip) is
   importable for tests + future API surfaces.
+- **Voice drift repair** (PR AU) — frontend-only one-click
+  *"Repair voice drift"* button that renders below the rose
+  *Avatar voice mismatch* pill. Reuses the existing
+  `POST /api/characters/{id}/apply-voice` route (which already
+  runs PATCH + verify + drift) so a click flips the rose pill
+  back to emerald end-to-end. Compact busy state + error row
+  via `data-testid="custom-voice-repair-status"`. No new
+  backend route — repair = apply (the route already does
+  exactly what repair needs).
 - New backend route: `POST /api/characters/{id}/clone-voice`
   (multipart form with `audio` + optional `name`). The route
   validates mime + size (cap 15 MB locally; Runway docs say

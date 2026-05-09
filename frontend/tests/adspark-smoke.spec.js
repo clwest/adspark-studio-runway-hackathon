@@ -278,6 +278,16 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
       .count()
     expect(verifyResolved + verifyDrift + verifyUnverified)
       .toBeLessThanOrEqual(patchPills)
+    // PR AU — Repair voice drift button. Renders only on the
+    // drift branch (rose "Avatar voice mismatch" pill). Mock-mode
+    // smoke runs against fixture characters that haven't been
+    // cloned, so the button count is normally 0; an operator
+    // who has manually mutated characters.json to simulate drift
+    // would see one button per drift pill, never more.
+    const repairButtons = await page
+      .getByTestId('custom-voice-repair-drift')
+      .count()
+    expect(repairButtons).toBeLessThanOrEqual(verifyDrift)
   }
 
   // 7b.6. PR U — stage order: Spokesperson leads, Campaign Brief

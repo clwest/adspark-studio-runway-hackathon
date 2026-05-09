@@ -1,12 +1,14 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after PR AT (Avatar Voice Drift Detection)
-on top of the PR AG–AS / SESSION 011 anchors. Backend route
-count is **66** application routes — PR AT is a finishing slice
-that compares `Character.custom_voice_id` to the PR AS resolved
-id and persists a single `match` / `drift` / `unknown` field so
-the UI surfaces a drift-aware pill. No new endpoint added.
+context-kit refresh after PR AU (Voice Drift Repair Action) on
+top of the PR AG–AT / SESSION 011 anchors. Backend route count
+is **66** application routes — PR AU is a frontend-only slice
+that adds a one-click "Repair voice drift" button to the
+existing PR AT mismatch branch. The button reuses
+`POST /api/characters/{id}/apply-voice` (which already runs
+PATCH + verify + drift) so a click flips the rose pill back to
+emerald end-to-end without a new endpoint.
 
 ## Backend (`backend/`)
 
@@ -211,6 +213,7 @@ the line's own `avatar_id`).
 | PR AR | Cloned Voice Preview Surface (capture Runway voice previewUrl during the PR AN clone poll; persist on Character; render inline `<audio controls>` in CharacterCard with a friendly fallback when the URL is missing or in mock mode) | (post-v13) |
 | PR AS | Avatar Resource Introspection After Voice Patch (run GET /v1/avatars/{id} after every successful PR AQ PATCH; persist resolved voice block + verify status on Character; surface a third pill "Avatar using cloned voice" / "Avatar voice unverified" in CharacterCard) | (post-v13) |
 | PR AT | Avatar Voice Drift Detection (compare cloned vs resolved voice id; persist match/drift/unknown; collapse PR AS pill into three operator-facing branches: match / drift / unverified) | (post-v13) |
+| PR AU | Voice Drift Repair Action (frontend-only one-click "Repair voice drift" button on the PR AT mismatch branch; reuses POST /apply-voice for PATCH + verify + drift; rose pill flips to emerald on success) | (post-v13) |
 
 ## Known limitations (current main)
 

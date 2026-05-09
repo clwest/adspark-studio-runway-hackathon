@@ -270,6 +270,26 @@ operator who triggers `apply-voice` against a stale binding
 sees the *Avatar voice mismatch* pill flip immediately rather
 than discovering it during a campaign render.
 
+#### One-click drift repair (PR AU)
+
+When the rose **Avatar voice mismatch** pill renders, the
+voice section also surfaces a compact **`Repair voice drift`**
+button (rose, `data-testid="custom-voice-repair-drift"`). It
+calls the same `POST /api/characters/{id}/apply-voice` route
+that PR AQ already wired — which runs the PATCH + verify +
+drift recompute pipeline — so a successful repair flips the
+pill back to emerald end-to-end without any operator
+hand-holding.
+
+No new backend route was added; the operator-facing button
+just labels the existing apply-voice action with a
+drift-specific copy when drift is the reason it's needed.
+
+While the request is in flight a one-line *"posting to
+/apply-voice…"* helper renders under the button (testid
+`custom-voice-repair-status`); a failure replaces it with
+the error message.
+
 #### Recording in-browser (PR AO)
 
 Below the file picker on each library tile sits a small

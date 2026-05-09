@@ -137,6 +137,25 @@ export default function CharacterCard({
       setPatchPending2(false)
     }
   }
+  // PR AU — Repair voice drift. Reuses the same apply-voice
+  // backend handler (which already runs PATCH + verify + drift)
+  // so a click here re-binds the cloned voice to the existing
+  // avatar and re-classifies the drift state. Local error state is
+  // mirrored from the parent through onApplyVoiceToAvatar(c).
+  const [repairBusy, setRepairBusy] = useState(false)
+  const [repairError, setRepairError] = useState('')
+  const handleRepairDrift = async () => {
+    if (!onApplyVoiceToAvatar) return
+    setRepairBusy(true)
+    setRepairError('')
+    try {
+      await onApplyVoiceToAvatar(c)
+    } catch (e) {
+      setRepairError(`${e?.message || e}`)
+    } finally {
+      setRepairBusy(false)
+    }
+  }
 
   const handleVoiceFile = async (file) => {
     if (!file || !onCloneVoice) return
@@ -627,6 +646,45 @@ export default function CharacterCard({
             <p className="text-[9px] text-amber-300">
               Voice cloned but no avatar bound yet — Create Runway Avatar to bind.
             </p>
+          )}
+          {/* PR AU — Drift repair. Surfaces only on the
+              "Avatar voice mismatch" branch so the operator can
+              one-click re-PATCH the existing avatar with the
+              cloned voice. Reuses the same apply-voice route
+              that PR AQ + PR AS + PR AT already hang off, so
+              a successful repair flows through PATCH → verify →
+              drift recompute and the rose pill flips back to
+              emerald without any operator hand-holding. */}
+          {customVoiceReady && (patchApplied || patchMock) && driftDrift && onApplyVoiceToAvatar && (
+            <div className="space-y-0.5">
+              <button
+                type="button"
+                onClick={handleRepairDrift}
+                disabled={repairBusy || patchPending2 || Boolean(busyAction)}
+                data-testid="custom-voice-repair-drift"
+                className="text-[9px] rounded bg-rose-500/30 hover:bg-rose-500/45 text-rose-100 ring-1 ring-rose-400/40 px-2 py-0.5 font-semibold disabled:opacity-50"
+                title="Re-apply the cloned voice to the existing avatar via PATCH /v1/avatars/{id} + verify"
+              >
+                {repairBusy ? 'Repairing…' : 'Repair voice drift'}
+              </button>
+              {repairError && (
+                <p
+                  data-testid="custom-voice-repair-status"
+                  className="text-[9px] text-rose-300"
+                  title={repairError}
+                >
+                  {repairError}
+                </p>
+              )}
+              {!repairError && repairBusy && (
+                <p
+                  data-testid="custom-voice-repair-status"
+                  className="text-[9px] text-zinc-500"
+                >
+                  posting to /apply-voice…
+                </p>
+              )}
+            </div>
           )}
           {!customVoiceReady && !customVoiceFailed && (
             <p className="text-[9px] text-zinc-500">
