@@ -17,6 +17,7 @@ result dataclasses and the router maps them to HTTP responses.
 from __future__ import annotations
 
 import logging
+import re
 import shutil
 import subprocess
 import time
@@ -163,35 +164,86 @@ def _location_phrase(campaign: Campaign) -> str:
     return "a softly lit cinematic interior"
 
 
+_SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
+
+
+def _split_script_beats(script: str) -> tuple[str, str, str]:
+    """PR AC — split the saved Commercial Script into 3 narrative
+    beats (intro / problem-or-action / payoff) for script-aware shot
+    planning. Empty inputs return three empty strings.
+
+    Heuristic shape:
+    - 1 sentence  -> intro=that, mid=that, end=that (single-shot script)
+    - 2 sentences -> intro=first, mid=first, end=second
+    - 3+ sentences -> first / middle joined / last
+    """
+    cleaned = (script or "").strip()
+    if not cleaned:
+        return "", "", ""
+    parts = [s.strip() for s in _SENTENCE_SPLIT.split(cleaned) if s.strip()]
+    if not parts:
+        return "", "", ""
+    if len(parts) == 1:
+        return parts[0], parts[0], parts[0]
+    if len(parts) == 2:
+        return parts[0], parts[0], parts[1]
+    return parts[0], " ".join(parts[1:-1]), parts[-1]
+
+
+def _trim_phrase(text: str, limit: int = 110) -> str:
+    """Clip a sentence to ``limit`` chars on a word boundary so the
+    embedded narrative cue stays inside Runway's prompt budget.
+    """
+    cleaned = (text or "").strip()
+    if not cleaned:
+        return ""
+    if len(cleaned) <= limit:
+        return cleaned
+    truncated = cleaned[:limit].rsplit(" ", 1)[0]
+    return truncated.rstrip(",.;:!?")
+
+
 def _shot_prompt(
     campaign: Campaign, settings: Settings, label: str,
 ) -> str:
     """Compose a single structured Runway prompt for one shot. Mirrors
     the frontend `buildRunwayVideoPrompt` rule of thumb: one character,
     one location, one action, one camera move.
+
+    PR AC — when ``campaign.commercial_script`` is set, weave the
+    matching script beat into the prompt as an emotional anchor. The
+    structured "subject + action + location + camera" shape stays the
+    load-bearing scaffolding so Runway still has concrete physical
+    cues; the script beat is supplementary mood / narrative context.
     """
     subject = _subject_hint(campaign, settings)
     product = _product_phrase(campaign)
     location = _location_phrase(campaign)
     tone = (campaign.tone or "warm cinematic").strip()
+    intro_beat, mid_beat, end_beat = _split_script_beats(campaign.commercial_script or "")
 
     if label == "Hook":
+        beat = intro_beat
         action = "enters the scene and looks toward camera with anticipation"
         mood = "opening beat, curious, ready"
         camera = "static camera shot"
     elif label == "Action":
+        beat = mid_beat
         action = f"interacts with {product}, hands-on, focused on the moment"
         mood = "engaged, satisfied, in the flow"
         camera = "static camera shot, slow push-in"
     else:  # Payoff
+        beat = end_beat
         action = "reacts with a satisfied expression and gives a small approving nod toward camera"
         mood = "payoff, warm satisfaction, ready to act on the call to action"
         camera = "static camera shot"
 
     constraints = "natural movement, high detail, expressive but natural, 16:9"
+    narrative_cue = _trim_phrase(beat)
 
     sentences = [
         f"A realistic {subject} {action} in {location}.",
+        f"Narrative cue: {narrative_cue}." if narrative_cue else "",
         f"{mood}.",
         "Soft natural lighting.",
         f"{camera}.",

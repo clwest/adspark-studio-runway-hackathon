@@ -54,10 +54,17 @@ class CampaignStore:
         return None
 
     def create(self, payload: CampaignCreate) -> Campaign:
+        now = datetime.now(timezone.utc)
+        # PR AC — when the frontend persists the Commercial Script in
+        # the same save call, stamp the updated_at field so downstream
+        # code can tell the difference between "never touched" and
+        # "set at create time".
+        script = (payload.commercial_script or "").strip() or None
         record = Campaign(
             id=uuid.uuid4().hex[:12],
-            created_at=datetime.now(timezone.utc),
-            **payload.model_dump(),
+            created_at=now,
+            commercial_script_updated_at=now if script else None,
+            **{**payload.model_dump(), "commercial_script": script},
         )
         with _LOCK:
             rows = self._read()
@@ -293,6 +300,49 @@ class CampaignStore:
                     row["storyboard_status"] = storyboard_status
                     row["storyboard_error"] = storyboard_error
                     row["storyboard_video_url"] = None
+                    row["storyboard_voiced_url"] = None
+                    row["storyboard_voiced_status"] = None
+                    row["storyboard_voiced_error"] = None
+                    self._write(rows)
+                    return Campaign.model_validate(row)
+        return None
+
+    def update_storyboard_shot_prompt(
+        self,
+        campaign_id: str,
+        shot_id: str,
+        prompt: str,
+    ) -> Optional[Campaign]:
+        """PR AC — overwrite a single shot's prompt with the user-edited
+        text + reset its generation state to ``idle`` so the next
+        Generate Shot call uses the new prompt and can retry without
+        keeping a stale failed/ok status. Other shots are untouched.
+        Also clears the stitched + voiced storyboard outputs so a
+        re-stitch is required after editing any shot.
+        """
+        cleaned = (prompt or "").strip()
+        with _LOCK:
+            rows = self._read()
+            for row in rows:
+                if row.get("id") == campaign_id:
+                    shots = list(row.get("storyboard_shots") or [])
+                    matched = False
+                    for shot in shots:
+                        if shot.get("id") == shot_id:
+                            matched = True
+                            shot["prompt"] = cleaned
+                            shot["status"] = "idle"
+                            shot["task_id"] = None
+                            shot["video_url"] = None
+                            shot["error"] = None
+                            break
+                    if not matched:
+                        return None
+                    row["storyboard_shots"] = shots
+                    # Stale outputs invalidated by the prompt change.
+                    row["storyboard_video_url"] = None
+                    if row.get("storyboard_status") == "ok":
+                        row["storyboard_status"] = "ready"
                     row["storyboard_voiced_url"] = None
                     row["storyboard_voiced_status"] = None
                     row["storyboard_voiced_error"] = None

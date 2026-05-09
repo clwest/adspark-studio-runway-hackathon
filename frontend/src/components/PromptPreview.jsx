@@ -39,6 +39,10 @@ export default function PromptPreview({
   imageUrl,
   onImageUrlChange,
   requireImage,
+  // PR AC — when the Stage-2 script editor has produced a draft, show
+  // a chip above the textarea so the user knows the visual prompt is
+  // being directed alongside a saved spoken pitch.
+  commercialScript = '',
   onGenerate,
   busy,
   disabled,
@@ -253,12 +257,36 @@ export default function PromptPreview({
         <h3 className="font-semibold">Runway video prompt</h3>
         <span className="text-xs text-zinc-500">edit before generating</span>
       </div>
+      {/* PR AC — Commercial Script chip. Surfaces the Stage-2 script
+          right above the visual prompt so the user remembers what the
+          spokesperson will say while composing what the camera sees. */}
+      {commercialScript && commercialScript.trim() && (
+        <div className="rounded-md ring-1 ring-pink-400/30 bg-pink-500/5 px-2 py-1.5 text-[11px] text-zinc-300">
+          <span className="text-pink-300 font-semibold">
+            Commercial Script powering this campaign:
+          </span>{' '}
+          <span className="text-zinc-300">
+            {commercialScript.length > 120
+              ? `${commercialScript.slice(0, 120).trim()}…`
+              : commercialScript}
+          </span>
+        </div>
+      )}
       <textarea
+        aria-label="Runway video prompt"
         rows={4}
         value={prompt}
         onChange={(e) => onChange(e.target.value)}
         className="w-full rounded-lg bg-zinc-950 border border-zinc-800 px-3 py-2 outline-none focus:border-spark text-sm"
       />
+      {/* PR AC — flow breadcrumb so the user knows the visual prompt
+          sits in the middle of the directing flow, not the end. */}
+      <p className="text-[10px] text-zinc-500 font-mono">
+        Script → Storyboard → Video → Final Ad
+        {commercialScript && commercialScript.trim() && (
+          <span className="text-zinc-400"> · using saved commercial script</span>
+        )}
+      </p>
       {/* PR T — Prompt Quality hint + Simplify-Prompt CTA. The hint
           stays visible whenever the prompt panel is mounted; the
           Simplify button is only useful when the user has a concept

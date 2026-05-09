@@ -152,4 +152,13 @@ export const api = {
       `/api/campaigns/${encodeURIComponent(campaignId)}/spokesperson-ad`,
       { method: 'POST', body: JSON.stringify(body) },
     ),
+  // PR AC — editable storyboard shot prompt. Persists the user-edited
+  // prompt + resets that shot's status so the next Generate Shot call
+  // uses the new text. Invalidates the stitched / voiced storyboard
+  // outputs server-side.
+  saveStoryboardShotPrompt: (campaignId, shotId, prompt) =>
+    jsonFetch(
+      `/api/campaigns/${encodeURIComponent(campaignId)}/storyboard/shot/${encodeURIComponent(shotId)}/prompt`,
+      { method: 'POST', body: JSON.stringify({ prompt }) },
+    ),
 }

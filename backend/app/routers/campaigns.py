@@ -796,6 +796,56 @@ def get_storyboard_shot_video(
     )
 
 
+# PR AC — Editable storyboard shot prompts. The user-edited text
+# becomes the load-bearing prompt for the next Generate Shot call;
+# stitch + voiced storyboard outputs are invalidated since the visual
+# narrative changed.
+class StoryboardShotPromptBody(BaseModel):
+    prompt: str = Field(
+        ...,
+        min_length=4,
+        max_length=1000,
+        description="User-edited shot prompt. Replaces the AI suggestion verbatim.",
+    )
+
+
+@router.post(
+    "/{campaign_id}/storyboard/shot/{shot_id}/prompt",
+    response_model=Campaign,
+)
+def post_storyboard_shot_prompt(
+    campaign_id: str,
+    shot_id: str,
+    body: StoryboardShotPromptBody,
+    store: CampaignStore = Depends(_store),
+) -> Campaign:
+    """Persist a user-edited storyboard shot prompt. Resets that
+    shot's status to ``idle`` so the next ``generate-shot`` call
+    uses the new text. Invalidates any stitched / voiced storyboard
+    output for the campaign since its narrative just changed.
+    """
+    record = store.get(campaign_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="campaign not found")
+    shots = list(record.storyboard_shots or [])
+    if not any(s.id == shot_id for s in shots):
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"shot {shot_id!r} not found — plan the storyboard first "
+                "(POST /storyboard/plan)."
+            ),
+        )
+    updated = store.update_storyboard_shot_prompt(campaign_id, shot_id, body.prompt)
+    if not updated:
+        raise HTTPException(status_code=404, detail="campaign not found")
+    logger.info(
+        "campaign %s shot %s prompt updated (%d chars)",
+        campaign_id, shot_id, len(body.prompt or ""),
+    )
+    return updated
+
+
 @router.post("/{campaign_id}/storyboard/voiced", response_model=Campaign)
 def post_storyboard_voiced(
     campaign_id: str,

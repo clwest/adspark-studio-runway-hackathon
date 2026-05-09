@@ -100,8 +100,10 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
   ).toBeVisible()
   // Prompt textarea must contain the structured-builder output rather
   // than the backend's dense single-shot. The structured builder
-  // always opens with "A realistic ".
-  const promptTextarea = page.locator('textarea').first()
+  // always opens with "A realistic ". PR AC — explicit aria-label so
+  // the Stage-2 Commercial Script textarea (which renders above the
+  // prompt textarea) doesn't shadow this selector.
+  const promptTextarea = page.getByLabel(/^Runway video prompt$/i)
   await expect(promptTextarea).toHaveValue(/^A realistic /i)
   // ...and the textarea must remain editable. Append a marker, confirm
   // it sticks, then revert so the rest of the smoke runs against a
@@ -185,17 +187,27 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
   // the form is open.
   await page.getByRole('button', { name: /^Cancel$/i }).click()
 
-  // 7b.6. PR U — stage order: Spokesperson must appear before Campaign
-  //        Brief in the DOM. We compare bounding boxes since the visual
-  //        order is what matters; both are sticky enough that flex/wrap
-  //        won't reorder them on a desktop viewport.
+  // 7b.6. PR U + PR AC — stage order. Stage 2 was renamed to
+  //        "Campaign Brief + Script". Spokesperson still leads.
   const spokespersonHeading = page.getByRole('heading', { name: /^Spokesperson$/i })
-  const briefHeading = page.getByRole('heading', { name: /^Campaign Brief$/i })
+  const briefHeading = page.getByRole('heading', { name: /^Campaign Brief \+ Script$/i })
   const spokeBox = await spokespersonHeading.boundingBox()
   const briefBox = await briefHeading.boundingBox()
   expect(spokeBox).not.toBeNull()
   expect(briefBox).not.toBeNull()
   expect(spokeBox.y).toBeLessThan(briefBox.y)
+  // 7b.7. PR AC — Stage-2 Commercial Script editor renders before
+  //        Generate Concepts is clicked. Textarea + Generate Script
+  //        button are reachable; the breadcrumb chip carries the
+  //        directing flow ordering.
+  const stage2ScriptArea = page.getByLabel(/^Stage 2 Commercial Script$/)
+  await expect(stage2ScriptArea).toBeVisible()
+  await expect(
+    page.getByRole('button', { name: /^Generate Script$/i }).first(),
+  ).toBeVisible()
+  await expect(
+    page.getByText(/Script → Storyboard → Video → Final Ad/i).first(),
+  ).toBeVisible()
   // Stage progress trail: "Spokesperson" chip must appear in the hero
   // before "Brief" — verifies the trail array reflects the new order.
   const trailNav = page.getByRole('navigation', { name: /demo path/i })
@@ -274,6 +286,15 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
   // 12b. PR Y — "just saved" pill highlights the newly created card so
   //       multi-card demos don't target the wrong campaign.
   await expect(newestCard.getByText(/^just saved$/i)).toBeVisible()
+
+  // 12c. PR AC — creative-director breadcrumb on the card. Surfaces
+  //       the "Script → Storyboard → Video → Final Ad" ordering above
+  //       the tab row regardless of which tab is active.
+  await expect(
+    newestCard.getByRole('navigation', {
+      name: /campaign creative director flow/i,
+    }),
+  ).toBeVisible()
 
   // 13a. Visuals tab — silent visual-cut copy + cache status + (when
   //      cached) Campaign Pack 3-up. Network unreachable in CI is

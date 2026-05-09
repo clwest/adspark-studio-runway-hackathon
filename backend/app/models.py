@@ -87,6 +87,11 @@ class CampaignCreate(BaseModel):
     reference_image_url: Optional[str] = None
     video_url: Optional[str] = None
     social_post: CampaignSocialPost
+    # PR AC — script-first save. The frontend can persist the
+    # author-edited Commercial Script in the same atomic CampaignCreate
+    # write so the script lives on the record from the very first save
+    # (instead of requiring a follow-up POST /script call).
+    commercial_script: Optional[str] = None
 
 
 CacheStatus = Literal["ok", "failed", "skipped"]

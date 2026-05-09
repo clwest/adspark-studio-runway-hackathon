@@ -162,6 +162,17 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
   const [storyboardShotBusy, setStoryboardShotBusy] = useState(null) // shot id or null
   const [storyboardStitchBusy, setStoryboardStitchBusy] = useState(false)
   const [storyboardVoicedBusy, setStoryboardVoicedBusy] = useState(false)
+  // PR AC — per-shot prompt drafts keyed by shot id. Drafts are
+  // initialised + re-synced from the server-side prompt when the
+  // campaign record changes; user edits diverge until Save / Generate.
+  const [shotPromptDrafts, setShotPromptDrafts] = useState(() => {
+    const out = {}
+    for (const s of c.storyboard_shots || []) {
+      if (s && s.id) out[s.id] = s.prompt || ''
+    }
+    return out
+  })
+  const [shotPromptSavingId, setShotPromptSavingId] = useState(null)
   // PR AA — Commercial Script editor state. Local draft tracks
   // unsaved edits; scriptSaved pulses a 1.5 s "saved" indicator after
   // a successful save.
@@ -403,6 +414,70 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
     }
   }
 
+  // PR AC — when the persisted shot list changes (plan / re-plan /
+  // server-side prompt update), reset any drafts whose seed shifted
+  // so the textarea reflects the new persisted text. We deliberately
+  // do NOT clobber drafts whose seed is unchanged — that would erase
+  // the user's in-progress edit on every poll/refresh.
+  useEffect(() => {
+    setShotPromptDrafts((prev) => {
+      const next = { ...prev }
+      let changed = false
+      for (const s of c.storyboard_shots || []) {
+        if (!s || !s.id) continue
+        const persisted = s.prompt || ''
+        if (next[s.id] === undefined) {
+          next[s.id] = persisted
+          changed = true
+          continue
+        }
+        // If the persisted prompt changed AND the draft equals the
+        // previous persisted value (i.e. user hadn't edited it), pull
+        // the new persisted prompt through. If the draft diverges
+        // (unsaved edit) leave it alone.
+        const prevSeed = prev.__seeds__?.[s.id] ?? next[s.id]
+        if (persisted !== prevSeed && next[s.id] === prevSeed) {
+          next[s.id] = persisted
+          changed = true
+        }
+      }
+      // Stash the latest seeds so the next render can detect drift.
+      next.__seeds__ = Object.fromEntries(
+        (c.storyboard_shots || []).map((s) => [s.id, s.prompt || '']),
+      )
+      return changed || !prev.__seeds__ ? next : prev
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [c.storyboard_shots])
+
+  const handleShotPromptDraftChange = (shotId, value) => {
+    setShotPromptDrafts((prev) => ({ ...prev, [shotId]: value }))
+  }
+
+  const handleResetShotPrompt = (shotId) => {
+    const persisted = (c.storyboard_shots || []).find((s) => s.id === shotId)
+    if (!persisted) return
+    setShotPromptDrafts((prev) => ({
+      ...prev,
+      [shotId]: persisted.prompt || '',
+    }))
+  }
+
+  const handleSaveShotPrompt = async (shotId) => {
+    const draft = (shotPromptDrafts[shotId] || '').trim()
+    if (!draft) return
+    setLocalError('')
+    setShotPromptSavingId(shotId)
+    try {
+      const updated = await api.saveStoryboardShotPrompt(c.id, shotId, draft)
+      onUpdated?.(updated)
+    } catch (e) {
+      setLocalError(`shot ${shotId} save: ${e}`)
+    } finally {
+      setShotPromptSavingId(null)
+    }
+  }
+
   // PR Z — Storyboard Commercial Builder handlers.
   const handlePlanStoryboard = async () => {
     setLocalError('')
@@ -421,6 +496,17 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
     setLocalError('')
     setStoryboardShotBusy(shotId)
     try {
+      // PR AC — flush any unsaved prompt edits before firing the
+      // generate call so Runway sees the user-edited text. The save
+      // route resets the shot's status to idle, which the generate
+      // route immediately overwrites with running.
+      const persisted =
+        (c.storyboard_shots || []).find((s) => s.id === shotId)?.prompt || ''
+      const draft = (shotPromptDrafts[shotId] || '').trim()
+      if (draft && draft !== persisted) {
+        const saved = await api.saveStoryboardShotPrompt(c.id, shotId, draft)
+        onUpdated?.(saved)
+      }
       const updated = await api.generateStoryboardShot(c.id, shotId)
       onUpdated?.(updated)
     } catch (e) {
@@ -1049,11 +1135,18 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
                 onClick={handlePlanStoryboard}
                 disabled={storyboardPlanBusy}
                 className="text-[10px] text-zinc-500 hover:text-violet-300 disabled:opacity-50"
-                title="Re-plan resets all shot prompts but keeps cached MP4s"
+                title="Re-plan regenerates AI suggestions for all shots from the current script"
               >
-                {storyboardPlanBusy ? 'replanning…' : 're-plan'}
+                {storyboardPlanBusy ? 'replanning…' : 're-plan from script'}
               </button>
             </div>
+            {/* PR AC — directing tip. Reinforces the structured-prompt
+                rule of thumb the editable textareas now expose. */}
+            <p className="text-[10px] text-zinc-500 italic">
+              Tip: keep each shot focused on one action, one location,
+              and one camera movement. Edit a shot below, then Save
+              Prompt + Generate Shot.
+            </p>
             <ul className="space-y-1.5">
               {storyboardShots.map((shot) => {
                 const shotBusy = storyboardShotBusy === shot.id
@@ -1084,14 +1177,58 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
                         {ok ? 'ok' : failed ? 'failed' : running || shotBusy ? 'running' : 'idle'}
                       </span>
                     </div>
-                    {shot.prompt && (
-                      <p
-                        className="text-[10px] text-zinc-400 leading-snug line-clamp-3"
-                        title={shot.prompt}
-                      >
-                        {shot.prompt}
-                      </p>
-                    )}
+                    {/* PR AC — editable shot prompt. The textarea is
+                        the load-bearing input; Generate Shot saves
+                        before firing if the draft has diverged. */}
+                    {(() => {
+                      const draft = shotPromptDrafts[shot.id] ?? shot.prompt ?? ''
+                      const persisted = shot.prompt || ''
+                      const dirty = draft !== persisted
+                      const saving = shotPromptSavingId === shot.id
+                      return (
+                        <div className="space-y-1">
+                          <textarea
+                            aria-label={`Storyboard ${shot.id} prompt`}
+                            value={draft}
+                            onChange={(e) =>
+                              handleShotPromptDraftChange(shot.id, e.target.value)
+                            }
+                            rows={3}
+                            placeholder="Describe one character, one location, one action, one camera move…"
+                            className="w-full rounded-md bg-zinc-950 border border-zinc-800 px-2 py-1.5 text-[11px] text-zinc-100 focus:border-violet-400 outline-none font-mono leading-snug"
+                          />
+                          <div className="flex items-center justify-between gap-2 flex-wrap text-[10px]">
+                            <span className="text-zinc-500 font-mono">
+                              {draft.length} chars
+                              {dirty && (
+                                <span className="text-amber-300"> · unsaved</span>
+                              )}
+                            </span>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {dirty && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleResetShotPrompt(shot.id)}
+                                  className="text-zinc-500 hover:text-violet-300"
+                                  title="Discard the unsaved edit + restore the saved prompt"
+                                >
+                                  reset to AI suggestion
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => handleSaveShotPrompt(shot.id)}
+                                disabled={!dirty || saving || !draft.trim()}
+                                className="rounded-md bg-violet-500/70 hover:bg-violet-500 text-zinc-100 px-2 py-0.5 disabled:opacity-50"
+                                title="Persist the edited prompt — invalidates any stitched output"
+                              >
+                                {saving ? 'Saving…' : 'Save Prompt'}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })()}
                     <div className="flex items-center gap-2 flex-wrap">
                       <button
                         type="button"
@@ -2180,6 +2317,41 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
           </details>
         )}
       </div>
+
+      {/* PR AC — Creative-Director breadcrumb. Surfaces the
+          script-first ordering ("Script -> Storyboard -> Video ->
+          Final Ad") right above the tab row so the user always knows
+          where they are in the directing flow. Each step lights up
+          when its underlying state is ready. */}
+      <nav
+        aria-label="campaign creative director flow"
+        className="flex items-center gap-1.5 text-[10px] text-zinc-500 font-mono flex-wrap pt-0.5"
+      >
+        {(() => {
+          const steps = [
+            { key: 'script',     label: 'Script',     done: hasScript },
+            { key: 'storyboard', label: 'Storyboard', done: storyboardPlanned },
+            { key: 'video',      label: 'Video',      done: hasVideo },
+            { key: 'final',      label: 'Final Ad',   done: commercialReady || hostReady },
+          ]
+          return steps.map((s, i) => (
+            <span key={s.key} className="flex items-center gap-1">
+              <span
+                className={
+                  s.done
+                    ? 'text-spark'
+                    : 'text-zinc-500'
+                }
+              >
+                {s.done ? '✓ ' : '· '}{s.label}
+              </span>
+              {i < steps.length - 1 && (
+                <span className="text-zinc-700">→</span>
+              )}
+            </span>
+          ))
+        })()}
+      </nav>
 
       {/* ---- Tab row ----------------------------------------------- */}
       {/* PR Q (Phase 3) — arrow-key navigation between tabs.
