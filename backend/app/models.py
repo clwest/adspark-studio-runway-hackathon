@@ -344,6 +344,13 @@ class Character(BaseModel):
     ]] = None
     avatar_voice_verified_at: Optional[datetime] = None
     avatar_voice_verify_error: Optional[str] = None
+    # PR AT — drift detection. Compares ``custom_voice_id`` to
+    # ``avatar_voice_resolved_id`` after every PR AQ PATCH + PR AS
+    # verify. The UI surfaces a single drift-aware pill instead of
+    # inferring from the underlying ids.
+    avatar_voice_drift_status: Optional[Literal[
+        "match", "drift", "unknown"
+    ]] = None
 
     # Portrait — local cache lives at backend/data/characters/<id>-portrait.png
     portrait_url: Optional[str] = None  # /api/characters/{id}/portrait

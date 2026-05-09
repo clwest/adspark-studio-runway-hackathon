@@ -3,34 +3,34 @@
 **Last touched:** 2026-05-09 (PR AG/AH `6157512`; PR AI
 `108ca3b`; PR AJ `444cb6a`; PR AK `c59251a`; PR AL `8a43af2`;
 PR AM `3e12d27`; PR AN `f255c22`; PR AO `5bca7c4`; PR AP
-`3c6483e`; PR AQ `ec35c0e`; PR AR `5aa5579 feat: surface cloned
-voice preview audio`; PR AS Avatar Resource Introspection in
-flight on top — SESSION_012–SESSION_024 handoffs added).
+`3c6483e`; PR AQ `ec35c0e`; PR AR `5aa5579`; PR AS `2321fd7
+feat: verify avatar voice bind after patch`; PR AT Avatar Voice
+Drift Detection in flight on top — SESSION_012–SESSION_025
+handoffs added).
 
 ## Where things stand
 
-- **Branch:** `main` at `5aa5579` (`feat: surface cloned voice
-  preview audio`) on `origin/main`. PR AS patch in flight on
+- **Branch:** `main` at `2321fd7` (`feat: verify avatar voice
+  bind after patch`) on `origin/main`. PR AT patch in flight on
   top — no new commit / tag yet, both pending explicit user
   approval.
 - **Latest tag:** still **`hackathon-submission-v13`** at `ec446e4`
-  (PR AF). PR AG–AR shipped the full clone → apply → preview
-  voice loop; PR AS adds verification — `GET /v1/avatars/{id}`
-  after every PATCH so operators can confirm the bind actually
-  landed instead of trusting Runway's 2xx alone.
+  (PR AF). PR AG–AS shipped clone → apply → preview → verify;
+  PR AT turns the verify state into trust by surfacing whether
+  the avatar's resolved voice id actually matches the
+  character's cloned id.
 - **Backend routes:** **66** application + FastAPI built-ins
-  (unchanged from PR AR; PR AS is verification-only — runs as
-  a side-effect inside the existing `clone-voice` and
-  `apply-voice` routes).
-- **Frontend build:** 319.56 KB initial JS / 89.79 KB gzip +
-  561.97 KB lazy `@runwayml/avatars-react` chunk (≈ +1.6 KB
-  initial / +0.4 KB gzip vs PR AR — PR AS added the third pill
-  + state derivations).
-- **Playwright smoke:** `1 passed (~23.0 s)` against the mock
-  backend; existing PR AR assertions still pass; PR AS adds a
-  resilient assertion that the resolved + unverified pill
-  combined count is bounded by the patch-status-pill count
-  (which is itself bounded by voice section count).
+  (unchanged from PR AS; PR AT is verify-side-effect-only —
+  drift is computed inside `_verify_avatar_voice_after_patch`
+  during the existing clone/apply routes).
+- **Frontend build:** 319.70 KB initial JS / 89.89 KB gzip +
+  561.97 KB lazy `@runwayml/avatars-react` chunk (≈ +0.1 KB
+  initial / +0.1 KB gzip vs PR AS — PR AT only added a derived
+  state + tweaked the existing pill render).
+- **Playwright smoke:** `1 passed (~22.0 s)` against the mock
+  backend; PR AT extends the resilient assertion to cover the
+  new `custom-voice-avatar-drift` testid alongside the
+  existing resolved/unverified pills.
 - **Repo:** https://github.com/clwest/adspark-studio-runway-hackathon
   (private). Pushes happen on explicit user approval.
 - **Stale local feature branches:** 22 left over from PR A through
@@ -97,11 +97,21 @@ flight on top — SESSION_012–SESSION_024 handoffs added).
   `avatar_voice_verify_error`. Tolerant extraction handles
   three voice-block shapes (`voice` / `voiceBlock` /
   `voice_block`) and three field-name variants per slot.
-  UI surfaces a third pill in the voice section: emerald
-  *"Avatar using cloned voice"* / amber *"… · mock"* / grey
-  *"Avatar voice unverified"* / *"Avatar voice pending"*.
   Verification failure is non-fatal — the cloned voice +
   PATCH state survive intact.
+- **Voice drift detection** (PR AT) — compares
+  `Character.custom_voice_id` to `avatar_voice_resolved_id`
+  after every verify and persists `avatar_voice_drift_status`
+  ∈ `{match, drift, unknown}`. UI consolidates the PR AS pill
+  into three operator-facing branches:
+  emerald *"Avatar using cloned voice"* (match) /
+  amber *"… · mock"* (mock-mode match) /
+  rose *"Avatar voice mismatch"* (drift) /
+  grey *"Avatar voice unverified"* (unknown / unverified /
+  failed) / grey *"Avatar voice pending"* (verify hasn't run
+  yet). Pure helper `compute_voice_drift_status(...)` (case-
+  insensitive id comparison after whitespace strip) is
+  importable for tests + future API surfaces.
 - New backend route: `POST /api/characters/{id}/clone-voice`
   (multipart form with `audio` + optional `name`). The route
   validates mime + size (cap 15 MB locally; Runway docs say

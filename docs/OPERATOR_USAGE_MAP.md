@@ -223,9 +223,10 @@ voice section:
 
 | Pill copy | When |
 |---|---|
-| **Avatar using cloned voice** (emerald) | Real GET returned a parseable voice block ✅ |
-| **Avatar using cloned voice · mock** (amber) | Mock mode short-circuits to `mock_verified` |
-| **Avatar voice unverified** (grey / rose) | GET returned no voice block, or the GET itself failed |
+| **Avatar using cloned voice** (emerald) | drift = match (real GET) ✅ |
+| **Avatar using cloned voice · mock** (amber) | drift = match (mock mode short-circuit) |
+| **Avatar voice mismatch** (rose) | drift = drift — resolved id differs from `custom_voice_id` |
+| **Avatar voice unverified** (grey / rose) | drift = unknown — GET returned no voice block, GET failed, or no cloned voice to compare |
 | **Avatar voice pending** (grey) | Patch landed but verification hasn't run yet |
 
 Tolerant extraction handles three Runway voice-block shapes
@@ -243,13 +244,31 @@ avatar_voice_resolved_label:   Optional[str]   # human-readable label
 avatar_voice_verify_status:    Optional[Literal[...]]
 avatar_voice_verified_at:      Optional[datetime]
 avatar_voice_verify_error:     Optional[str]
+avatar_voice_drift_status:     Optional[Literal["match", "drift", "unknown"]]  # PR AT
 ```
 
 Verification failure is non-fatal — the cloned voice + PATCH
 state survive intact; only the third pill flips to
 *unverified*. `data-testid` hooks: `custom-voice-avatar-resolved`
-(green / amber states), `custom-voice-avatar-unverified`
-(grey / rose states).
+(match states), `custom-voice-avatar-drift` (PR AT mismatch
+state), `custom-voice-avatar-unverified` (unknown / pending
+states).
+
+#### Drift detection logic (PR AT)
+
+```
+compute_voice_drift_status(custom_voice_id, resolved_id, verify_status)
+  └─ verify_status not in {"verified", "mock_verified"}   → "unknown"
+  └─ custom_voice_id missing / whitespace-only            → "unknown"
+  └─ resolved_id missing / whitespace-only                → "unknown"
+  └─ ids match (case-insensitive after whitespace strip)  → "match"
+  └─ otherwise                                            → "drift"
+```
+
+Re-runs after every PATCH (auto + manual) so a real-mode
+operator who triggers `apply-voice` against a stale binding
+sees the *Avatar voice mismatch* pill flip immediately rather
+than discovering it during a campaign render.
 
 #### Recording in-browser (PR AO)
 

@@ -31,6 +31,7 @@ from ..services.voice_clone_client import (
     SUPPORTED_AUDIO_MIMES,
     apply_voice_to_avatar,
     clone_voice_from_audio,
+    compute_voice_drift_status,
     fetch_avatar_voice,
 )
 
@@ -54,9 +55,13 @@ def _verify_avatar_voice_after_patch(
 ):
     """PR AS — run `GET /v1/avatars/{id}` to confirm the freshly-
     patched voice binding actually landed. Returns
-    ``(AvatarVoiceState, verified_at | None)``. The caller persists
-    every field; a verification failure is logged but never blocks
-    the clone or apply flows.
+    ``(AvatarVoiceState, verified_at | None, drift_status)``. The
+    caller persists every field; a verification failure is logged
+    but never blocks the clone or apply flows.
+
+    PR AT — also computes ``drift_status`` (match / drift / unknown)
+    from the resolved id vs the expected (cloned) voice id so the
+    UI can render a single drift-aware pill.
 
     When the prior PATCH was ``pending_avatar`` (no avatar bound
     yet) we skip the GET entirely — there's nothing to introspect.
@@ -65,7 +70,8 @@ def _verify_avatar_voice_after_patch(
         AvatarVoiceState,
     )
     if apply_status == "pending_avatar":
-        return AvatarVoiceState(status="failed", error="no avatar bound"), None
+        state = AvatarVoiceState(status="failed", error="no avatar bound")
+        return state, None, "unknown"
     state = fetch_avatar_voice(
         record.runway_avatar_id,
         settings,
@@ -77,7 +83,10 @@ def _verify_avatar_voice_after_patch(
         if state.status in {"verified", "mock_verified"}
         else None
     )
-    return state, verified_at
+    drift_status = compute_voice_drift_status(
+        expected_voice_id, state.resolved_id, state.status,
+    )
+    return state, verified_at, drift_status
 
 
 # ---- request bodies ----------------------------------------------
@@ -352,7 +361,9 @@ async def post_clone_voice(
     # confirm the bind actually landed (rather than trusting the
     # 2xx alone). Best-effort: a verify failure never blocks the
     # cloned voice or the patch state.
-    verify_state, verified_at = _verify_avatar_voice_after_patch(
+    # PR AT — also computes drift_status from the resolved id vs
+    # the cloned voice id so the UI renders a single drift-aware pill.
+    verify_state, verified_at, drift_status = _verify_avatar_voice_after_patch(
         record, result.voice_id, settings, apply_result.status,
     )
 
@@ -379,11 +390,13 @@ async def post_clone_voice(
             verified_at.isoformat() if verified_at else None
         ),
         avatar_voice_verify_error=verify_state.error,
+        # PR AT — drift detection.
+        avatar_voice_drift_status=drift_status,
     )
     logger.info(
-        "character %s voice cloned -> %s (status=%s mock=%s; patch=%s)",
+        "character %s voice cloned -> %s (status=%s mock=%s; patch=%s; drift=%s)",
         character_id, result.voice_id, result.status,
-        result.mock_mode, apply_result.status,
+        result.mock_mode, apply_result.status, drift_status,
     )
     return updated or record
 
@@ -433,8 +446,8 @@ def post_apply_voice_to_avatar(
         if apply_result.status in {"applied", "mock_patched"}
         else None
     )
-    # PR AS — verify the bind landed.
-    verify_state, verified_at = _verify_avatar_voice_after_patch(
+    # PR AS — verify the bind landed. PR AT — also compute drift.
+    verify_state, verified_at, drift_status = _verify_avatar_voice_after_patch(
         record, record.custom_voice_id, settings, apply_result.status,
     )
     updated = store.update(
@@ -450,6 +463,7 @@ def post_apply_voice_to_avatar(
             verified_at.isoformat() if verified_at else None
         ),
         avatar_voice_verify_error=verify_state.error,
+        avatar_voice_drift_status=drift_status,
     )
     if apply_result.status == "failed":
         raise HTTPException(

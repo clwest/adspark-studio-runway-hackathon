@@ -106,19 +106,27 @@ export default function CharacterCard({
   // pill so the operator can tell at a glance whether the bind
   // survived the PATCH (vs. just trusting the 2xx).
   const verifyStatus = c.avatar_voice_verify_status
-  const verifyVerified = verifyStatus === 'verified'
-  const verifyMock = verifyStatus === 'mock_verified'
-  const verifyUnverified = verifyStatus === 'unverified'
-  const verifyFailed = verifyStatus === 'failed'
   const verifyResolvedId = c.avatar_voice_resolved_id
   const verifyResolvedType = c.avatar_voice_resolved_type
   const verifyResolvedLabel = c.avatar_voice_resolved_label
+  // PR AT — drift detection. Compares custom_voice_id to
+  // avatar_voice_resolved_id after every PATCH+verify. The pill
+  // collapses the four PR AS verify states into three operator-
+  // facing branches so a mismatch is impossible to miss.
+  const driftStatus = c.avatar_voice_drift_status
+  const driftMatch = driftStatus === 'match'
+  const driftDrift = driftStatus === 'drift'
+  const driftUnknown =
+    driftStatus === 'unknown' ||
+    verifyStatus === 'unverified' ||
+    verifyStatus === 'failed'
   // The verification pill only makes sense when the avatar is
   // actually meant to be bound to the cloned voice (PR AQ patch
   // succeeded with applied / mock_patched). Pending / failed
   // patches show their own state via the PR AQ pill.
   const verifyShouldRender =
     customVoiceReady && (patchApplied || patchMock) && Boolean(verifyStatus)
+  const verifyMock = verifyStatus === 'mock_verified'
 
   const handleApplyVoice = async () => {
     if (!onApplyVoiceToAvatar) return
@@ -494,48 +502,55 @@ export default function CharacterCard({
                 patch failed
               </span>
             )}
-            {/* PR AS — avatar resource introspection pill. Only
-                renders when the patch state implies the bind
-                should have landed (applied / mock_patched). The
-                operator gets a second confirmation that the voice
-                block on the avatar actually resolves to the cloned
-                voice rather than just trusting the PATCH 2xx. */}
-            {verifyShouldRender && verifyVerified && (
+            {/* PR AS / PR AT — avatar resource introspection pill,
+                consolidated by drift detection. Only renders when
+                the patch state implies the bind should have landed
+                (applied / mock_patched). The pill collapses the
+                four PR AS verify states into three operator-facing
+                branches so a mismatch is impossible to miss. */}
+            {verifyShouldRender && driftMatch && (
               <span
                 data-testid="custom-voice-avatar-resolved"
-                className="text-[9px] rounded-full bg-emerald-500/30 text-emerald-100 ring-1 ring-emerald-400/50 px-1.5 py-0.5 font-mono"
+                data-drift="match"
+                className={
+                  verifyMock
+                    ? 'text-[9px] rounded-full bg-amber-500/25 text-amber-200 ring-1 ring-amber-400/40 px-1.5 py-0.5 font-mono'
+                    : 'text-[9px] rounded-full bg-emerald-500/30 text-emerald-100 ring-1 ring-emerald-400/50 px-1.5 py-0.5 font-mono'
+                }
                 title={
                   verifyResolvedId
                     ? `voice.${verifyResolvedType || '?'} = ${verifyResolvedId}`
-                    : 'avatar voice block resolved'
+                    : verifyResolvedLabel || 'avatar voice block resolved'
                 }
               >
-                Avatar using cloned voice
+                {verifyMock
+                  ? 'Avatar using cloned voice · mock'
+                  : 'Avatar using cloned voice'}
               </span>
             )}
-            {verifyShouldRender && verifyMock && (
+            {verifyShouldRender && driftDrift && (
               <span
-                data-testid="custom-voice-avatar-resolved"
-                className="text-[9px] rounded-full bg-amber-500/25 text-amber-200 ring-1 ring-amber-400/40 px-1.5 py-0.5 font-mono"
-                title={verifyResolvedLabel || 'mock-mode resolved binding'}
+                data-testid="custom-voice-avatar-drift"
+                data-drift="drift"
+                className="text-[9px] rounded-full bg-rose-500/30 text-rose-100 ring-1 ring-rose-400/50 px-1.5 py-0.5 font-mono"
+                title={
+                  `expected voice.${customVoiceId} but avatar resolves to ` +
+                  (verifyResolvedId || '?')
+                }
               >
-                Avatar using cloned voice · mock
+                Avatar voice mismatch
               </span>
             )}
-            {verifyShouldRender && verifyUnverified && (
+            {verifyShouldRender && driftUnknown && (
               <span
                 data-testid="custom-voice-avatar-unverified"
-                className="text-[9px] rounded-full bg-zinc-800 text-zinc-300 ring-1 ring-zinc-700 px-1.5 py-0.5 font-mono"
+                data-drift="unknown"
+                className={
+                  verifyStatus === 'failed'
+                    ? 'text-[9px] rounded-full bg-rose-500/20 text-rose-200 ring-1 ring-rose-400/40 px-1.5 py-0.5 font-mono'
+                    : 'text-[9px] rounded-full bg-zinc-800 text-zinc-300 ring-1 ring-zinc-700 px-1.5 py-0.5 font-mono'
+                }
                 title={c.avatar_voice_verify_error || 'avatar response carried no voice block'}
-              >
-                Avatar voice unverified
-              </span>
-            )}
-            {verifyShouldRender && verifyFailed && (
-              <span
-                data-testid="custom-voice-avatar-unverified"
-                className="text-[9px] rounded-full bg-rose-500/20 text-rose-200 ring-1 ring-rose-400/40 px-1.5 py-0.5 font-mono"
-                title={c.avatar_voice_verify_error || 'verify failed'}
               >
                 Avatar voice unverified
               </span>
@@ -543,6 +558,7 @@ export default function CharacterCard({
             {customVoiceReady && (patchApplied || patchMock) && !verifyStatus && (
               <span
                 data-testid="custom-voice-avatar-unverified"
+                data-drift="pending"
                 className="text-[9px] rounded-full bg-zinc-800 text-zinc-300 ring-1 ring-zinc-700 px-1.5 py-0.5 font-mono"
                 title="Verification not yet attempted"
               >

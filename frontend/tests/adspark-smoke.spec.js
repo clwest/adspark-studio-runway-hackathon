@@ -258,21 +258,26 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
       .getByTestId('custom-voice-preview-unavailable')
       .count()
     expect(previewAudio + previewUnavailable).toBeLessThanOrEqual(patchPills)
-    // PR AS — avatar voice introspection pills. The resolved /
-    // unverified pills only render when a clone exists AND the
-    // PR AQ patch state implies the bind should have landed
-    // (applied / mock_patched / pending verify). Their combined
-    // count is therefore bounded above by the patch-pill count,
-    // which is itself bounded by voiceSectionCount. Mock-mode
-    // clones produce mock_verified pills; real-mode clones with
-    // no avatar bound produce neither.
+    // PR AS / PR AT — avatar voice introspection pill,
+    // consolidated by drift detection. Only renders when a clone
+    // exists AND the PR AQ patch state implies the bind should
+    // have landed (applied / mock_patched / pending verify).
+    // PR AT collapses the four PR AS verify states into three
+    // operator-facing branches: resolved (match), drift (rose
+    // mismatch), unverified (grey/rose). Combined count across
+    // all three testids is bounded above by the patch-pill
+    // count, which is itself bounded by voiceSectionCount.
     const verifyResolved = await page
       .getByTestId('custom-voice-avatar-resolved')
+      .count()
+    const verifyDrift = await page
+      .getByTestId('custom-voice-avatar-drift')
       .count()
     const verifyUnverified = await page
       .getByTestId('custom-voice-avatar-unverified')
       .count()
-    expect(verifyResolved + verifyUnverified).toBeLessThanOrEqual(patchPills)
+    expect(verifyResolved + verifyDrift + verifyUnverified)
+      .toBeLessThanOrEqual(patchPills)
   }
 
   // 7b.6. PR U — stage order: Spokesperson leads, Campaign Brief

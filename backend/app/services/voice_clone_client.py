@@ -337,6 +337,39 @@ def _resolve_voice_fields(
     )
 
 
+# PR AT — voice-id drift detection. Pure helper so the route layer
+# can persist the result atomically and the frontend renders a
+# single drift-aware pill instead of inferring from raw fields.
+DRIFT_VERIFIED_STATUSES = ("verified", "mock_verified")
+
+
+def compute_voice_drift_status(
+    custom_voice_id: Optional[str],
+    resolved_id: Optional[str],
+    verify_status: Optional[str],
+) -> str:
+    """PR AT — three-state drift classifier:
+    - ``match``   — verification ran AND ids agree (case-insensitive
+                    string match after stripping whitespace).
+    - ``drift``   — verification ran AND both ids exist AND they
+                    disagree.
+    - ``unknown`` — verification didn't run OR an id is missing.
+
+    Whitespace-only ids are treated as missing (same convention the
+    PR AS extractor uses). The helper is pure + side-effect-free so
+    a future API surface or test harness can call it directly.
+    """
+    if not verify_status or verify_status not in DRIFT_VERIFIED_STATUSES:
+        return "unknown"
+    if not isinstance(custom_voice_id, str) or not custom_voice_id.strip():
+        return "unknown"
+    if not isinstance(resolved_id, str) or not resolved_id.strip():
+        return "unknown"
+    if custom_voice_id.strip().casefold() == resolved_id.strip().casefold():
+        return "match"
+    return "drift"
+
+
 def fetch_avatar_voice(
     avatar_id: Optional[str],
     settings: Settings,
