@@ -837,8 +837,43 @@ GET  /api/campaigns/{id}/dialogue-scene/reels
 Preconditions surface as 409s the UI handles: source MP4 must
 already exist (Spokesperson Ad rendered or Dialogue Scene stitched).
 ffmpeg-missing surfaces as 503. Output dimensions are pinned at
-720×1280 with a dark slate backdrop (`#0b1220`) — no brand-colour
-override is wired today.
+720×1280; the backdrop colour defaults to dark slate (`#0b1220`)
+and is overridable per campaign via PR AK (see "Brand colour"
+below).
+
+### Brand colour (PR AK)
+
+Every saved campaign card carries a compact **Brand colour**
+control between the creative-director breadcrumb and the tab row:
+a native `<input type="color">` swatch + the live hex value + a
+**reset** link.
+
+- Default state: shows `#0b1220 (default)`. The next reels build
+  uses the dark slate backdrop.
+- Picker change: the colour is normalised + persisted on commit
+  (input `onBlur`) via `POST /api/campaigns/{id}/brand-color`.
+  The next reels build picks it up automatically — no additional
+  rebuild button.
+- Reset: clears the stored value; reels revert to the default.
+
+Backend route:
+
+```
+POST /api/campaigns/{id}/brand-color
+{ "color": "#ff7a00" }   // null or "" clears
+```
+
+The route accepts `#RRGGBB` / `RRGGBB` / `0xRRGGBB` / `#RGB` and
+422s on anything else (e.g. `"not-a-color"`). The value persists
+on `Campaign.brand_color` as lowercase `#RRGGBB`. The reels routes
+read `record.brand_color`, run it through
+`color_utils.to_ffmpeg_color(...)` (which falls back to
+`0x0b1220`), and pass the result as `build_reels_export(...,
+backdrop_color=...)`.
+
+Output guarantees from PR AG / PR AH are unchanged: 720×1280,
+h264 + AAC, captioned by default. Only the letterbox bars'
+colour changes.
 
 ### Captions (PR AH)
 

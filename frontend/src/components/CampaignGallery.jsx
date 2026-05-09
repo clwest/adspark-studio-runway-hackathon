@@ -199,6 +199,14 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
   const [realtimeDocBusy, setRealtimeDocBusy] = useState(false)
   // PR AJ — Transcript fetch busy flag.
   const [transcriptBusy, setTranscriptBusy] = useState(false)
+  // PR AK — Brand colour control. Local draft mirrors the saved
+  // value so a quick swatch swap doesn't fire an API call until the
+  // user finishes choosing (commit-on-blur / change).
+  const DEFAULT_BRAND_COLOR_DISPLAY = '#0b1220'
+  const [brandColorBusy, setBrandColorBusy] = useState(false)
+  const [brandColorDraft, setBrandColorDraft] = useState(
+    c.brand_color || DEFAULT_BRAND_COLOR_DISPLAY,
+  )
   const [dialogueDrafts, setDialogueDrafts] = useState(() => {
     const out = {}
     for (const l of c.dialogue_lines || []) {
@@ -473,6 +481,37 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
     } finally {
       setTranscriptBusy(false)
     }
+  }
+
+  // PR AK — Brand colour. Persists immediately on commit (change /
+  // blur) so the next reels build picks it up. Empty / default value
+  // clears the stored colour and reverts to the default backdrop.
+  const handleCommitBrandColor = async (raw) => {
+    const cleaned = (raw || '').trim()
+    // Treat the visual default as "unset" so the operator can revert
+    // to the default backdrop just by leaving the swatch alone.
+    const persistAs =
+      !cleaned || cleaned.toLowerCase() === DEFAULT_BRAND_COLOR_DISPLAY
+        ? ''
+        : cleaned
+    if ((c.brand_color || '') === persistAs) return
+    setLocalError('')
+    setBrandColorBusy(true)
+    try {
+      const updated = await api.setBrandColor(c.id, persistAs || null)
+      onUpdated?.(updated)
+    } catch (e) {
+      setLocalError(`brand color: ${e}`)
+      // Revert local draft on failure so the swatch matches state.
+      setBrandColorDraft(c.brand_color || DEFAULT_BRAND_COLOR_DISPLAY)
+    } finally {
+      setBrandColorBusy(false)
+    }
+  }
+
+  const handleResetBrandColor = () => {
+    setBrandColorDraft(DEFAULT_BRAND_COLOR_DISPLAY)
+    handleCommitBrandColor('')
   }
 
   const handleDesignVoice = async (opts = {}) => {
@@ -3407,6 +3446,53 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
           ))
         })()}
       </nav>
+
+      {/* PR AK — Brand colour control. Compact: native colour input +
+          live hex display + reset link. Persisted via the small
+          dedicated POST /brand-color route on commit (no save button).
+          Affects the Reels backdrop on the next build for both kinds
+          (Spokesperson + Dialogue Scene). */}
+      <div
+        className="flex items-center gap-2 text-[10px] text-zinc-400 flex-wrap pt-0.5"
+        data-testid="brand-color-control"
+      >
+        <span className="font-mono uppercase tracking-wide text-zinc-500">
+          Brand colour
+        </span>
+        <label className="flex items-center gap-1.5 cursor-pointer">
+          <input
+            type="color"
+            aria-label="brand colour"
+            value={brandColorDraft || DEFAULT_BRAND_COLOR_DISPLAY}
+            onChange={(e) => setBrandColorDraft(e.target.value)}
+            onBlur={(e) => handleCommitBrandColor(e.target.value)}
+            disabled={brandColorBusy}
+            data-testid="brand-color-input"
+            className="h-5 w-7 rounded ring-1 ring-zinc-700 bg-transparent cursor-pointer disabled:opacity-50"
+          />
+          <span
+            className="font-mono text-zinc-300 text-[10px]"
+            data-testid="brand-color-value"
+          >
+            {(c.brand_color || '').toLowerCase() ||
+              `${DEFAULT_BRAND_COLOR_DISPLAY} (default)`}
+          </span>
+        </label>
+        {c.brand_color && (
+          <button
+            type="button"
+            onClick={handleResetBrandColor}
+            disabled={brandColorBusy}
+            className="text-[10px] text-zinc-500 hover:text-zinc-300 disabled:opacity-50"
+            title="Revert to the default dark slate backdrop"
+          >
+            reset
+          </button>
+        )}
+        <span className="text-[10px] text-zinc-600">
+          backdrop for Reels exports (720×1280)
+        </span>
+      </div>
 
       {/* ---- Tab row ----------------------------------------------- */}
       {/* PR Q (Phase 3) — arrow-key navigation between tabs.

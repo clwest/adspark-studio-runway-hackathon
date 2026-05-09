@@ -3,34 +3,31 @@
 **Last touched:** 2026-05-09 (PR AG / PR AH committed as
 `6157512 feat: add captioned reels exports`; PR AI committed as
 `108ca3b feat: add grounded realtime avatar documents`; PR AJ
-Conversation Transcript Retrieval + Replay UX in flight on top —
-SESSION_012 / SESSION_013 / SESSION_014 / SESSION_015 handoffs
-added).
+committed as `444cb6a feat: add realtime conversation
+transcripts`; PR AK Brand Colour Storage + Reels Styling Polish
+in flight on top — SESSION_012 / SESSION_013 / SESSION_014 /
+SESSION_015 / SESSION_016 handoffs added).
 
 ## Where things stand
 
-- **Branch:** `main` at `108ca3b` (`feat: add grounded realtime
-  avatar documents`) on `origin/main`. PR AJ patch in flight on
-  top — no new commit / tag yet, both pending explicit user
-  approval.
+- **Branch:** `main` at `444cb6a` (`feat: add realtime conversation
+  transcripts`) on `origin/main`. PR AK patch in flight on top —
+  no new commit / tag yet, both pending explicit user approval.
 - **Latest tag:** still **`hackathon-submission-v13`** at `ec446e4`
   (PR AF). PR AG + PR AH ship captioned reels; PR AI lands the
   document grounding slice; PR AJ closes the realtime story with
-  transcript retrieval + replay.
-- **Backend routes:** **63** application + FastAPI built-ins
-  (was 57 at v13, 61 at PR AG, 62 at PR AI). PR AJ adds one new
-  endpoint: `POST /api/campaigns/{id}/realtime-transcript`. The
-  existing spokesperson-session route also gained a side-effect
-  to capture the session id (Runway's session id doubles as the
-  conversation id).
-- **Frontend build:** 299.67 KB initial JS / 84.87 KB gzip + 561.97 KB
-  lazy `@runwayml/avatars-react` chunk (≈ +3.8 KB initial /
-  +0.9 KB gzip vs PR AI; PR AJ added the Conversation transcript
-  card on the Realtime tab).
+  transcript retrieval + replay; PR AK polishes the reels output
+  with brand-themed letterbox backdrops.
+- **Backend routes:** **64** application + FastAPI built-ins
+  (was 57 at v13, 61 at PR AG, 62 at PR AI, 63 at PR AJ).
+  PR AK adds one new endpoint: `POST /api/campaigns/{id}/brand-color`.
+- **Frontend build:** 301.21 KB initial JS / 85.28 KB gzip + 561.97 KB
+  lazy `@runwayml/avatars-react` chunk (≈ +1.5 KB initial /
+  +0.4 KB gzip vs PR AJ; PR AK added the compact Brand colour
+  control on the saved-card header).
 - **Playwright smoke:** `1 passed (~23 s)` against the mock backend
-  with the new transcript-card assertions: default `No transcript yet`
-  → click `Fetch transcript` → state flips to
-  `Replay ready · mock · 3 turns` and the turn list renders.
+  with the new brand-colour-control assertions plus the existing
+  transcript / grounding / captioned-reels assertions.
 - **Repo:** https://github.com/clwest/adspark-studio-runway-hackathon
   (private). Pushes happen on explicit user approval.
 - **Stale local feature branches:** 22 left over from PR A through
@@ -98,7 +95,37 @@ added).
   `runway_document_status` (`ready` / `failed` / `mock`),
   `runway_document_error`, `runway_document_mock_mode`.
 
-### Distribution layer (PR AG — Vertical / Reels Export · PR AH — Burned-in Captions)
+### Distribution layer (PR AG — Vertical / Reels Export · PR AH — Burned-in Captions · PR AK — Brand Colour Polish)
+
+- **Brand colour control** on every saved campaign's header
+  (between the creative-director breadcrumb and the tab row).
+  Native `<input type="color">` swatch + live hex display +
+  reset link. Persists on commit (input `onBlur`) via
+  `POST /api/campaigns/{id}/brand-color`; the next reels build
+  picks it up automatically.
+- New backend route: `POST /api/campaigns/{id}/brand-color` with
+  `{color}` body. Accepts `#RRGGBB` / `RRGGBB` / `0xRRGGBB` /
+  `#RGB` (case-insensitive); 422s on invalid input. Empty / null
+  body clears.
+- New utility module at `app/services/color_utils.py` —
+  `normalize_brand_color()` (storage shape) and
+  `to_ffmpeg_color()` (ffmpeg `0xRRGGBB` shape with safe default).
+- Both reels routes call `to_ffmpeg_color(record.brand_color)` and
+  pass the result as `build_reels_export(..., backdrop_color=...)`.
+  Output guarantees from PR AG / PR AH unchanged: 720×1280, h264
+  + AAC, captioned by default — only the letterbox bars' colour
+  changes.
+- Storage normalises the brand colour at create-time too, so an
+  unparseable initial-save input silently falls back to `None`.
+- Visual-verified: a brand colour of `#ff6a00` paints the top
+  and bottom bars of the captioned spokesperson reels orange
+  while leaving the talking-head + caption box untouched
+  (frame extracted at t=1 s reads `#fd6900` after h264 colour
+  quantisation).
+- ffprobe confirms `720×1280 h264 + aac` and source duration
+  preserved (5.0 s on the probe).
+
+
 
 - **Spokesperson Reels (720×1280, captioned)** — one click on
   the saved Spokesperson Ad card runs a local ffmpeg pad/letterbox
@@ -191,13 +218,15 @@ added).
    this thing" instructions across all twelve surfaces.
 3. **Pick one** of the recommended next phases (in
    `docs/handoffs/SESSION_011_OPERATOR_USAGE_MAP.md` §Next phases —
-   the four Tier-1 items are all now ✅ landed):
+   the four Tier-1 items + brand-colour polish are all now ✅
+   landed):
    - ✅ ~~Vertical / Reels export~~ — shipped in PR AG.
    - ✅ ~~Caption overlays~~ — shipped in PR AH (Reels-only;
      horizontal Dialogue Scene Ad captions still optional polish).
    - ✅ ~~Avatar `documentIds` for grounded realtime~~ — shipped
      in PR AI.
    - ✅ ~~Conversation transcript retrieval~~ — shipped in PR AJ.
+   - ✅ ~~Brand-colour reels polish~~ — shipped in PR AK.
    - **Avatar RAG / `documentIds`** — attach campaign brief +
      FAQ as a knowledge document so realtime can answer grounded
      questions about the brand (Tier-1 from the avatar deep review).

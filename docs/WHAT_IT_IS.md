@@ -74,16 +74,20 @@ stitched into a longer (~15 s) silent or voiced cut.
     Runway `avatar_videos` clip targeted at a specific Character's
     avatar id. ffmpeg `concat=n=N:v=1:a=1` stitches with audio
     preserved. The multi-character branded skit primitive.
-14b. **Vertical / Reels exports with burned-in captions** (PR AG +
-    PR AH) — every Spokesperson Ad and Dialogue Scene MP4 can be
-    reframed into a 720×1280 vertical clip via local ffmpeg
+14b. **Vertical / Reels exports with burned-in captions and brand-
+    themed backdrops** (PR AG + PR AH + PR AK) — every Spokesperson
+    Ad and Dialogue Scene MP4 can be reframed into a 720×1280
+    vertical clip via local ffmpeg
     (`scale=…:force_original_aspect_ratio=decrease` +
-    `pad=720:1280:(ow-iw)/2:(oh-ih)/2:color=#0b1220`). PR AH chains
-    `drawtext=…enable='between(t,a,b)'` filters on top so the saved
-    Commercial Script (Spokesperson) or per-line dialogue text
-    (Dialogue Scene, timed via ffprobe of the cached line clips)
-    is burned in as a bottom-safe subtitle box. Audio is preserved
-    end-to-end. Output lands at
+    `pad=720:1280:(ow-iw)/2:(oh-ih)/2:color=<brand|default>`).
+    PR AH chains `drawtext=…enable='between(t,a,b)'` filters on top
+    so the saved Commercial Script (Spokesperson) or per-line
+    dialogue text (Dialogue Scene, timed via ffprobe of the cached
+    line clips) is burned in as a bottom-safe subtitle box. **PR AK**
+    — the letterbox bars adopt a per-campaign `brand_color`
+    (`#RRGGBB`, set via the compact picker on the saved-card
+    header); falls back to dark slate (`#0b1220`) when unset.
+    Audio is preserved end-to-end. Output lands at
     `data/finished/<id>-spokesperson-reels.mp4` /
     `data/finished/<id>-dialogue-scene-reels.mp4`. Distribution layer
     only — no new Runway calls and no extra credit cost.

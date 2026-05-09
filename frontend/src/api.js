@@ -222,4 +222,11 @@ export const api = {
         body: JSON.stringify(body || {}),
       },
     ),
+  // PR AK — Brand colour for reels-export styling. Pass an empty
+  // string (or null) to clear and revert to the default backdrop.
+  setBrandColor: (campaignId, color) =>
+    jsonFetch(
+      `/api/campaigns/${encodeURIComponent(campaignId)}/brand-color`,
+      { method: 'POST', body: JSON.stringify({ color }) },
+    ),
 }

@@ -308,6 +308,21 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
     }),
   ).toBeVisible()
 
+  // 12d. PR AK — brand colour control renders above the tab row. New
+  //       campaigns default to the visual placeholder (#0b1220); the
+  //       value display reads "<default>" until the operator picks a
+  //       colour. The native colour input + value display must both
+  //       be visible so reels builds can adopt brand-themed backdrops.
+  await expect(
+    newestCard.getByTestId('brand-color-control'),
+  ).toBeVisible()
+  await expect(
+    newestCard.getByTestId('brand-color-input'),
+  ).toBeVisible()
+  await expect(
+    newestCard.getByTestId('brand-color-value'),
+  ).toContainText(/default/i)
+
   // 13a. Visuals tab — silent visual-cut copy + cache status + (when
   //      cached) Campaign Pack 3-up. Network unreachable in CI is
   //      acceptable; "cache failed" still proves the pipeline ran.

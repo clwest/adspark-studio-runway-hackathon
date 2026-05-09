@@ -60,11 +60,23 @@ class CampaignStore:
         # code can tell the difference between "never touched" and
         # "set at create time".
         script = (payload.commercial_script or "").strip() or None
+        # PR AK — normalise the brand colour at write time. An
+        # unparseable input silently falls back to None so the reels
+        # pipeline uses the default backdrop instead of failing the
+        # save (the explicit POST /brand-color route still 422s on
+        # invalid input so operators get clear feedback when they
+        # type a bad value directly).
+        from .color_utils import normalize_brand_color  # noqa: WPS433
+        brand_color = normalize_brand_color(payload.brand_color)
         record = Campaign(
             id=uuid.uuid4().hex[:12],
             created_at=now,
             commercial_script_updated_at=now if script else None,
-            **{**payload.model_dump(), "commercial_script": script},
+            **{
+                **payload.model_dump(),
+                "commercial_script": script,
+                "brand_color": brand_color,
+            },
         )
         with _LOCK:
             rows = self._read()
@@ -569,6 +581,26 @@ class CampaignStore:
                     row["storyboard_voiced_url"] = storyboard_voiced_url
                     row["storyboard_voiced_status"] = storyboard_voiced_status
                     row["storyboard_voiced_error"] = storyboard_voiced_error
+                    self._write(rows)
+                    return Campaign.model_validate(row)
+        return None
+
+    def update_brand_color(
+        self,
+        campaign_id: str,
+        brand_color: Optional[str],
+    ) -> Optional[Campaign]:
+        """PR AK — persist the campaign's brand colour. Pass a
+        normalised ``#RRGGBB`` string to set, or ``None`` to clear.
+        Validation happens upstream in
+        ``services.color_utils.normalize_brand_color``; this helper
+        just writes the already-normalised value.
+        """
+        with _LOCK:
+            rows = self._read()
+            for row in rows:
+                if row.get("id") == campaign_id:
+                    row["brand_color"] = brand_color
                     self._write(rows)
                     return Campaign.model_validate(row)
         return None

@@ -92,6 +92,13 @@ class CampaignCreate(BaseModel):
     # write so the script lives on the record from the very first save
     # (instead of requiring a follow-up POST /script call).
     commercial_script: Optional[str] = None
+    # PR AK — Brand color. Optional ``#RRGGBB`` hex; the reels pipeline
+    # passes this to ffmpeg's ``pad=…:color=…`` so vertical exports
+    # adopt brand-themed letterbox bars instead of the default dark
+    # slate. Validation lives in ``services.color_utils.normalize_brand_color``;
+    # invalid values fall back to the default colour rather than 422-ing
+    # the save (mirrors PR AA's "empty script clears" semantics).
+    brand_color: Optional[str] = None
 
 
 CacheStatus = Literal["ok", "failed", "skipped"]

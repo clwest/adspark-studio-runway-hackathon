@@ -25,6 +25,10 @@ from ..services.character_host_client import (
     path_for as host_path_for,
 )
 from ..services.character_store import CharacterStore
+from ..services.color_utils import (
+    normalize_brand_color,
+    to_ffmpeg_color,
+)
 from ..services.documents_client import (
     attach_documents_to_avatar as runway_attach_documents,
     build_campaign_brief_markdown,
@@ -1366,6 +1370,60 @@ def get_dialogue_line_video(
 # ---- PR F — Brand Spokesperson Avatar + Avatar Host Clip ------------
 
 
+# ---- PR AK — Brand colour ----------------------------------------
+
+
+class BrandColorBody(BaseModel):
+    """PR AK — set or clear the campaign brand colour. Pass an empty
+    string / null to clear (reverts the reels backdrop to the default
+    dark slate); any other value is normalised + validated server-side.
+    """
+
+    color: Optional[str] = Field(
+        default=None,
+        max_length=16,
+        description=(
+            "Brand colour as #RRGGBB / RRGGBB / 0xRRGGBB / #RGB. "
+            "Empty / null clears the stored value."
+        ),
+    )
+
+
+@router.post("/{campaign_id}/brand-color", response_model=Campaign)
+def post_set_brand_color(
+    campaign_id: str,
+    body: BrandColorBody,
+    store: CampaignStore = Depends(_store),
+) -> Campaign:
+    """PR AK — persist a brand colour for the campaign. Used by the
+    reels pipeline as the ffmpeg ``pad=…:color=…`` value so vertical
+    exports adopt brand-themed letterbox bars instead of the default
+    dark slate. Initial save normalises silently; this explicit
+    setter 422s on invalid input so operators see clear feedback.
+    """
+    record = store.get(campaign_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="campaign not found")
+
+    raw = (body.color or "").strip()
+    if not raw:
+        # Explicit clear — drop back to the default backdrop.
+        updated = store.update_brand_color(campaign_id, None)
+        return updated or record
+
+    normalised = normalize_brand_color(raw)
+    if not normalised:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"invalid brand colour {raw!r}; expected #RRGGBB hex "
+                "(e.g. #ff7a00). Pass null or '' to clear."
+            ),
+        )
+    updated = store.update_brand_color(campaign_id, normalised)
+    return updated or record
+
+
 class SelectAvatarBody(BaseModel):
     avatar_id: Optional[str] = Field(
         default=None,
@@ -1833,7 +1891,10 @@ def post_spokesperson_reels(
 
     target = finisher.spokesperson_reels_path(campaign_id)
     captions = _spokesperson_caption_schedule(record, source)
-    result = finisher.build_reels_export(source, target, captions=captions)
+    backdrop = to_ffmpeg_color(record.brand_color)  # PR AK
+    result = finisher.build_reels_export(
+        source, target, captions=captions, backdrop_color=backdrop,
+    )
     if result.status == "ok":
         updated = store.update_reels_fields(
             campaign_id, "spokesperson",
@@ -1918,7 +1979,10 @@ def post_dialogue_scene_reels(
     target = finisher.dialogue_scene_reels_path(campaign_id)
     fallback_total = probe_duration(source)
     captions = _dialogue_caption_schedule(record, settings, fallback_total)
-    result = finisher.build_reels_export(source, target, captions=captions)
+    backdrop = to_ffmpeg_color(record.brand_color)  # PR AK
+    result = finisher.build_reels_export(
+        source, target, captions=captions, backdrop_color=backdrop,
+    )
     if result.status == "ok":
         updated = store.update_reels_fields(
             campaign_id, "dialogue_scene",
