@@ -71,6 +71,36 @@ export default function SpokespersonWorkspace() {
     }
   }, [id])
 
+  // PR CL — consume the `adspark.startCampaignHint` set by the
+  // CreateSpokespersonFlow Step 4 "Start a campaign" checkbox.
+  // The flow + parent SpokespersonStudio writes the just-created
+  // spokesperson's id into localStorage and navigates to
+  // /spokespeople/{id}; on first mount we read the hint and, if
+  // it matches our route id, switch to the Campaigns tab and
+  // open the mode modal in-place so the operator can pick a
+  // format without an extra click. Single-shot — we clear the
+  // key after consuming so a refresh / re-mount doesn't re-open
+  // the modal unexpectedly.
+  useEffect(() => {
+    if (!id) return
+    if (typeof window === 'undefined') return
+    let hint = null
+    try {
+      hint = window.localStorage.getItem('adspark.startCampaignHint')
+    } catch {
+      return
+    }
+    if (!hint || hint !== id) return
+    try {
+      window.localStorage.removeItem('adspark.startCampaignHint')
+    } catch {
+      // best-effort; even if we can't clear, the next mount
+      // would still match + open — acceptable degraded state.
+    }
+    setActiveTab('campaigns')
+    setModeModalOpen(true)
+  }, [id])
+
   useEffect(() => {
     let cancelled = false
     const refresh = async () => {

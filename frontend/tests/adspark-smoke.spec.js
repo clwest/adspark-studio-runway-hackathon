@@ -1391,6 +1391,44 @@ test('AdSpark Studio Spokesperson Library @ /', async ({ page }) => {
       page.getByTestId('spokesperson-workspace-back-cta'),
     ).toBeVisible()
     await page.goto('/')
+
+    // PR CL — startCampaignHint round-trip. Setting
+    // adspark.startCampaignHint to a known spokesperson id then
+    // navigating to /spokespeople/{id} must auto-flip the
+    // workspace into the Campaigns tab + open the mode modal,
+    // and clear the localStorage key. Mirrors what
+    // CreateSpokespersonFlow Step 4's "Start a campaign"
+    // checkbox does end-to-end.
+    await page.evaluate((targetId) => {
+      try {
+        window.localStorage.setItem(
+          'adspark.startCampaignHint',
+          targetId,
+        )
+      } catch {}
+    }, cardId)
+    await page.goto(`/spokespeople/${cardId}`)
+    const hintWorkspace = page.getByTestId('spokesperson-workspace')
+    await expect(hintWorkspace).toBeVisible()
+    await expect(hintWorkspace).toHaveAttribute(
+      'data-active-tab',
+      'campaigns',
+    )
+    await expect(
+      page.getByTestId('campaign-mode-modal'),
+    ).toBeVisible({ timeout: 5_000 })
+    const hintCleared = await page.evaluate(() => {
+      try {
+        return window.localStorage.getItem('adspark.startCampaignHint')
+      } catch {
+        return null
+      }
+    })
+    expect(hintCleared).toBeNull()
+    // Close the modal so the rest of Test 2 isn't blocked by
+    // its overlay.
+    await page.keyboard.press('Escape')
+    await page.goto('/')
   }
 
   // PR CF — Copy cleanup. Visible v2 surfaces must not leak

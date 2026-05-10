@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 
 import { api } from '../api'
 import { friendlyError } from '../errors'
@@ -71,6 +72,12 @@ export default function SpokespersonStudio({
   // (any other caller still gets PR BH/BI/BK/BL behaviour).
   hideCampaignControls = false,
 }) {
+  // PR CL — needed so the multi-step Create Spokesperson flow
+  // can hand off to /spokespeople/{id} when the operator
+  // checks "Start a campaign" on Step 4. The workspace's own
+  // mount effect (PR CL too) reads `adspark.startCampaignHint`
+  // and finishes the round-trip by opening the mode modal.
+  const navigate = useNavigate()
   const [characters, setCharacters] = useState([])
   const [campaigns, setCampaigns] = useState([])
   const [loading, setLoading] = useState(true)
@@ -550,12 +557,9 @@ export default function SpokespersonStudio({
     setCreateOpen(false)
     if (options.startCampaign) {
       // PR CK — the flow's "Start a campaign" checkbox flag.
-      // Persist a hint in localStorage that the workspace at
-      // /spokespeople/{id} can read on mount and open its
-      // mode modal automatically. Workspace integration lives
-      // in a follow-up slice; for now the hint just records
-      // intent — operators who land on the workspace can hit
-      // + New Campaign manually one click later.
+      // Persist a hint in localStorage; the workspace mount
+      // effect (PR CL) reads it on /spokespeople/{id} and
+      // opens the mode modal in-place.
       try {
         if (typeof window !== 'undefined') {
           window.localStorage.setItem(
@@ -566,6 +570,12 @@ export default function SpokespersonStudio({
       } catch {
         // localStorage can throw in private modes; safe to ignore.
       }
+      // PR CL — auto-navigate to the new spokesperson's
+      // workspace so the hint lands on a mounted instance.
+      // Without this the operator stays on /, the localStorage
+      // hint sits unread, and the "Start a campaign" checkbox
+      // feels broken.
+      navigate(`/spokespeople/${encodeURIComponent(created.id)}`)
     }
   }
 
