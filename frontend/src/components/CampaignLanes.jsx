@@ -128,9 +128,19 @@ export default function CampaignLanes({
     if (!campaignId) throw new Error('campaign id required')
     return propagate(await api.buildCommercialWithVoice(campaignId))
   }
-  const handleGenerateSpokespersonAd = async (campaignId) => {
+  const handleGenerateSpokespersonAd = async (campaignId, options = {}) => {
     if (!campaignId) throw new Error('campaign id required')
-    return propagate(await api.generateSpokespersonAd(campaignId))
+    // PR DC — operator-selected variant_id flows through to the
+    // backend so the appended OutputRecord captures variant_id +
+    // variant_title. Backend honours `body.variant_id` even if
+    // `script_override` is also passed.
+    const body = {}
+    if (options.variantId) body.variant_id = options.variantId
+    return propagate(await api.generateSpokespersonAd(campaignId, body))
+  }
+  const handleUpsertAdVariant = async (campaignId, payload) => {
+    if (!campaignId) throw new Error('campaign id required')
+    return propagate(await api.upsertAdVariant(campaignId, payload))
   }
   const handleStitchStoryboard = async (campaignId) => {
     if (!campaignId) throw new Error('campaign id required')
@@ -389,6 +399,7 @@ export default function CampaignLanes({
           onUpdateBrief={handleUpdateBrief}
           onCreateCampaign={handleCreateCampaign}
           onSaveScript={handleSaveScript}
+          onUpsertAdVariant={handleUpsertAdVariant}
           focusedCampaign={focusedCampaign}
           creatingNew={creatingNewCampaign}
           onCancelCreate={onCancelCreateCampaign}

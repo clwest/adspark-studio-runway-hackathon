@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { formatHistoryTimestamp } from '../../uiHelpers.js'
 import LaneBriefCreator from './LaneBriefCreator.jsx'
@@ -48,6 +48,10 @@ export default function SpokespersonLane({
   // PR CU — Save the commercial script inline so Step 2 has a real
   // CTA instead of a "go to legacy" instruction. POSTs /script.
   onSaveScript = null,
+  // PR DC — Ad Variant upsert. Lifts the script editor out of the
+  // mutable campaign field into per-variant rows so multiple
+  // takes can coexist under one stable campaign brief.
+  onUpsertAdVariant = null,
   // PR DA — focused campaign + creating-new mode are now driven
   // by the workspace's selection state (lifted state). Lane no
   // longer derives "most recent" itself.
@@ -64,6 +68,30 @@ export default function SpokespersonLane({
   const focused = focusedCampaign
   const hasSpokesperson = Boolean(activeSpokesperson)
   const hasCampaign = Boolean(focused)
+
+  // PR DC — selected Ad Variant state. Scoped to the lane (not the
+  // workspace) because it resets when the operator switches
+  // campaigns. Render handler in Step 3 reads this so the
+  // OutputRecord captures variant_id + variant_title.
+  const variants = Array.isArray(focused?.ad_variants) ? focused.ad_variants : []
+  const [selectedVariantId, setSelectedVariantId] = useState(null)
+  useEffect(() => {
+    if (!focused?.id) {
+      setSelectedVariantId(null)
+      return
+    }
+    if (variants.length === 0) {
+      setSelectedVariantId(null)
+      return
+    }
+    // Default to newest variant; preserve a still-existing prior
+    // selection across re-renders of the same campaign.
+    setSelectedVariantId((prev) => {
+      if (prev && variants.some((v) => v.id === prev)) return prev
+      return variants[0].id
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focused?.id, variants.length])
   const focusedScript = focused?.commercial_script || ''
   const scriptPreview =
     focusedScript.length > 220 ? focusedScript.slice(0, 220) + '…' : focusedScript
@@ -178,7 +206,12 @@ export default function SpokespersonLane({
     setHorizontalError('')
     setHorizontalBusy(true)
     try {
-      await onGenerateSpokesperson(focused.id)
+      // PR DC — pass selected variant_id so the appended
+      // OutputRecord captures the variant linkage. Backend uses
+      // the variant's script as the spoken text when set.
+      await onGenerateSpokesperson(focused.id, {
+        variantId: selectedVariantId || undefined,
+      })
     } catch (e) {
       setHorizontalError(`${e?.message || e}`)
     } finally {
@@ -320,20 +353,24 @@ export default function SpokespersonLane({
           )}
         </div>
 
-        {/* Step 2 — Script */}
-        <Step2Script
+        {/* Step 2 — Ad Variants (PR DC) */}
+        <Step2AdVariants
           focusedCampaign={focused}
           focusedScript={focusedScript}
           scriptPreview={scriptPreview}
           hasCampaign={hasCampaign}
           onSaveScript={onSaveScript}
+          onUpsertAdVariant={onUpsertAdVariant}
+          selectedVariantId={selectedVariantId}
+          onSelectVariant={setSelectedVariantId}
           knowledgeSources={
             Array.isArray(activeSpokesperson?.knowledge_sources)
               ? activeSpokesperson.knowledge_sources
               : []
           }
         />
-        {/* — original block preserved as Step2Script (PR CU/CX) — */}
+        {/* — original block preserved as Step2Script (PR CU/CX); PR DC
+            wraps it inside Step2AdVariants for the new variant flow — */}
 
         {/* Step 3 — Render */}
         <div
@@ -496,23 +533,30 @@ export default function SpokespersonLane({
             </p>
           )}
           {/* PR DA — saved-renders disclosure for THIS campaign.
-              Distinct from the workspace Outputs tab gallery (which
-              shows every campaign's renders); this is scoped to
-              the active campaign so the operator can confirm prior
-              takes still exist after a new render. */}
+              PR DC — when a variant is selected, scope the list
+              to renders whose `variant_id` matches; otherwise show
+              all the campaign's spokesperson_ad outputs. Each row
+              shows the variant title when captured. */}
           {hasCampaign && (() => {
-            const adOutputs = Array.isArray(focused.outputs)
+            const allAdOutputs = Array.isArray(focused.outputs)
               ? focused.outputs.filter((o) => o.kind === 'spokesperson_ad')
               : []
-            if (adOutputs.length === 0) return null
+            const adOutputs = selectedVariantId
+              ? allAdOutputs.filter((o) => o.variant_id === selectedVariantId)
+              : allAdOutputs
+            if (allAdOutputs.length === 0) return null
+            const scopeLabel = selectedVariantId
+              ? `${adOutputs.length} saved render${adOutputs.length === 1 ? '' : 's'} for this variant`
+              : `${adOutputs.length} saved render${adOutputs.length === 1 ? '' : 's'} for this campaign`
             return (
               <details
                 data-testid="spokesperson-lane-saved-renders"
                 data-output-count={adOutputs.length}
+                data-scope={selectedVariantId ? 'variant' : 'campaign'}
                 className="rounded ring-1 ring-emerald-400/30 bg-emerald-500/[0.04] px-2 py-1 mt-1"
               >
                 <summary className="text-[10px] text-emerald-200 cursor-pointer select-none hover:text-emerald-100">
-                  {adOutputs.length} saved render{adOutputs.length === 1 ? '' : 's'} for this campaign
+                  {scopeLabel}
                 </summary>
                 <ul className="space-y-1 pt-1.5">
                   {adOutputs.slice(0, 5).map((o) => (
@@ -520,15 +564,24 @@ export default function SpokespersonLane({
                       key={o.id}
                       data-testid="spokesperson-lane-saved-render-row"
                       data-output-id={o.id}
+                      data-variant-id={o.variant_id || ''}
                       className="flex items-center justify-between gap-2 rounded bg-black/20 ring-1 ring-emerald-400/20 px-2 py-1"
                     >
-                      <span className="text-[10px] text-emerald-100 truncate">
-                        {o.script
-                          ? (o.script.length > 60
-                              ? o.script.slice(0, 60) + '…'
-                              : o.script)
-                          : <span className="text-zinc-400 italic">no script captured</span>}
-                      </span>
+                      <div className="min-w-0 flex-1">
+                        {o.variant_title && (
+                          <span className="text-[9px] text-pink-300 font-mono">
+                            {o.variant_title}
+                            <span className="text-zinc-500"> · </span>
+                          </span>
+                        )}
+                        <span className="text-[10px] text-emerald-100">
+                          {o.script
+                            ? (o.script.length > 60
+                                ? o.script.slice(0, 60) + '…'
+                                : o.script)
+                            : <span className="text-zinc-400 italic">no script captured</span>}
+                        </span>
+                      </div>
                       <a
                         href={o.video_url}
                         target="_blank"
@@ -800,4 +853,485 @@ function Step2Script({
 function formatKnowledgeTimeOrDash(iso) {
   if (!iso) return '—'
   return formatHistoryTimestamp(iso) || '—'
+}
+
+/**
+ * PR DC — Step 2 wrapper for Ad Variants. Lets the operator stack
+ * multiple variants (title + script) under one stable Campaign
+ * brief. The Step 3 render button uses the selected variant's id
+ * + script via the variant_id passthrough on the host-video route.
+ *
+ * Three states:
+ *   - no campaign       → points operator back to Step 1
+ *   - campaign + no variants → "+ New Ad" CTA (also surfaces the
+ *                          legacy commercial_script if one is set
+ *                          so it doesn't disappear visually)
+ *   - campaign + variants    → variant chip-row + per-variant
+ *                          script editor + new-variant + delete
+ *
+ * Backward compat: when a campaign has `commercial_script` set but
+ * no variants, we render a "Convert legacy script to Ad 1" CTA
+ * that materializes the saved script into a real variant.
+ */
+function Step2AdVariants({
+  focusedCampaign,
+  focusedScript,
+  scriptPreview,
+  hasCampaign,
+  onSaveScript,
+  onUpsertAdVariant,
+  selectedVariantId,
+  onSelectVariant,
+  knowledgeSources = [],
+}) {
+  const variants = Array.isArray(focusedCampaign?.ad_variants)
+    ? focusedCampaign.ad_variants
+    : []
+  const knowledgeCount = knowledgeSources.length
+  const selectedVariant =
+    variants.find((v) => v.id === selectedVariantId) || null
+
+  const hasLegacyScript = Boolean(focusedScript) && variants.length === 0
+
+  // The classic Step 2 inline editor moves inside this wrapper.
+  // When a variant is selected it edits the variant's script; when
+  // no variants exist it falls back to the campaign-level script
+  // editor (legacy path).
+  return (
+    <div
+      data-testid="spokesperson-lane-step-script"
+      data-variant-id={selectedVariantId || ''}
+      className="rounded-lg ring-1 ring-zinc-800 bg-zinc-950/50 p-2.5 space-y-1.5"
+    >
+      <div className="flex items-center justify-between gap-1">
+        <span className="text-[10px] uppercase tracking-wide text-zinc-500 font-mono">
+          Step 2 · Ad Variants
+        </span>
+        {variants.length > 0 && (
+          <span
+            className="text-[9px] text-zinc-600 font-mono"
+            data-testid="spokesperson-lane-variant-count"
+          >
+            {variants.length}{' '}
+            {variants.length === 1 ? 'variant' : 'variants'}
+          </span>
+        )}
+      </div>
+
+      {/* Knowledge reference disclosure (PR CX) — unchanged. */}
+      {knowledgeCount > 0 && (
+        <details
+          data-testid="spokesperson-lane-knowledge-reference"
+          data-source-count={knowledgeCount}
+          className="rounded ring-1 ring-emerald-400/30 bg-emerald-500/[0.04] px-2 py-1"
+        >
+          <summary className="text-[10px] text-emerald-200 cursor-pointer select-none hover:text-emerald-100">
+            {knowledgeCount} knowledge source{knowledgeCount === 1 ? '' : 's'} available — open for reference
+          </summary>
+          <div className="space-y-1.5 pt-1.5">
+            {knowledgeSources.slice(0, 5).map((src) => {
+              const preview =
+                src.content.length > 200
+                  ? src.content.slice(0, 200) + '…'
+                  : src.content
+              return (
+                <div
+                  key={src.id}
+                  data-testid="spokesperson-lane-knowledge-row"
+                  data-source-id={src.id}
+                  className="rounded bg-black/20 ring-1 ring-emerald-400/20 px-2 py-1"
+                >
+                  <p className="text-[10px] text-emerald-100 font-semibold">
+                    {src.title}
+                  </p>
+                  <p className="text-[10px] text-zinc-300 leading-snug whitespace-pre-wrap break-words">
+                    {preview}
+                  </p>
+                </div>
+              )
+            })}
+          </div>
+        </details>
+      )}
+
+      {!hasCampaign && (
+        <p className="text-[11px] text-zinc-400 leading-snug">
+          Save a campaign brief in Step 1 to start adding ad variants.
+        </p>
+      )}
+
+      {/* PR DC — variant chip row. Click to select; new-variant
+          button at the end. Replaces the legacy "one script per
+          campaign" mental model with "many scripts (variants)
+          under one campaign". */}
+      {hasCampaign && variants.length > 0 && (
+        <VariantChipRow
+          variants={variants}
+          selectedVariantId={selectedVariantId}
+          onSelectVariant={onSelectVariant}
+          onUpsertAdVariant={onUpsertAdVariant}
+          campaignId={focusedCampaign?.id}
+        />
+      )}
+
+      {/* Selected-variant inline script editor. Uses the same
+          UX shape as the PR CU/CX Step2Script — preview, edit,
+          save — but the save target is the variant, not the
+          campaign's commercial_script. */}
+      {hasCampaign && selectedVariant && (
+        <VariantScriptEditor
+          campaignId={focusedCampaign?.id}
+          variant={selectedVariant}
+          onUpsertAdVariant={onUpsertAdVariant}
+        />
+      )}
+
+      {/* No-variants empty state */}
+      {hasCampaign && variants.length === 0 && (
+        <NoVariantsState
+          campaignId={focusedCampaign?.id}
+          legacyScript={hasLegacyScript ? focusedScript : ''}
+          scriptPreview={scriptPreview}
+          onUpsertAdVariant={onUpsertAdVariant}
+          onSelectVariant={onSelectVariant}
+        />
+      )}
+    </div>
+  )
+}
+
+function VariantChipRow({
+  variants,
+  selectedVariantId,
+  onSelectVariant,
+  onUpsertAdVariant,
+  campaignId,
+}) {
+  const [creating, setCreating] = useState(false)
+  const handleNew = async () => {
+    if (!onUpsertAdVariant || !campaignId || creating) return
+    setCreating(true)
+    try {
+      const title = `Ad ${variants.length + 1}`
+      const updated = await onUpsertAdVariant(campaignId, { title, script: '' })
+      const newest = Array.isArray(updated?.ad_variants)
+        ? updated.ad_variants[0]
+        : null
+      if (newest?.id) onSelectVariant?.(newest.id)
+    } catch (e) {
+      // surfaced via the workspace's error banner if needed; the
+      // chip row itself stays simple
+    } finally {
+      setCreating(false)
+    }
+  }
+  return (
+    <div
+      data-testid="spokesperson-lane-variant-chips"
+      className="flex flex-wrap items-center gap-1"
+    >
+      {variants.map((v) => {
+        const isActive = v.id === selectedVariantId
+        return (
+          <button
+            key={v.id}
+            type="button"
+            onClick={() => onSelectVariant?.(v.id)}
+            data-testid="spokesperson-lane-variant-chip"
+            data-variant-id={v.id}
+            data-active={isActive ? 'true' : 'false'}
+            title={v.title}
+            className={
+              'text-[10px] rounded-full px-2 py-0.5 font-mono transition-colors ' +
+              (isActive
+                ? 'bg-pink-500/30 text-pink-100 ring-1 ring-pink-400/50'
+                : 'bg-zinc-800/60 text-zinc-400 ring-1 ring-zinc-700 hover:text-zinc-200')
+            }
+          >
+            {v.title}
+          </button>
+        )
+      })}
+      <button
+        type="button"
+        onClick={handleNew}
+        disabled={!onUpsertAdVariant || creating}
+        data-testid="spokesperson-lane-variant-new"
+        className={
+          'text-[10px] rounded-full px-2 py-0.5 font-mono transition-colors ring-1 ' +
+          (creating
+            ? 'bg-zinc-800/40 text-zinc-500 ring-zinc-700 cursor-wait'
+            : 'bg-zinc-900/60 text-zinc-300 ring-zinc-700 hover:ring-pink-400/40 hover:text-pink-200')
+        }
+        title="Add a new Ad Variant to this campaign — campaign brief stays the same."
+      >
+        {creating ? 'creating…' : '+ New Ad'}
+      </button>
+    </div>
+  )
+}
+
+function VariantScriptEditor({ campaignId, variant, onUpsertAdVariant }) {
+  const [editing, setEditing] = useState(false)
+  const [draftTitle, setDraftTitle] = useState(variant.title)
+  const [draftScript, setDraftScript] = useState(variant.script || '')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  // Re-sync on variant switch.
+  useEffect(() => {
+    setDraftTitle(variant.title)
+    setDraftScript(variant.script || '')
+    setEditing(false)
+    setError('')
+  }, [variant.id])
+
+  const canSave = !busy && draftTitle.trim().length > 0
+  const handleSave = async () => {
+    if (!canSave) return
+    setError('')
+    setBusy(true)
+    try {
+      await onUpsertAdVariant?.(campaignId, {
+        id: variant.id,
+        title: draftTitle.trim(),
+        script: draftScript.trim(),
+      })
+      setEditing(false)
+    } catch (e) {
+      setError(`${e?.message || e}`)
+    } finally {
+      setBusy(false)
+    }
+  }
+  const handleCancel = () => {
+    setDraftTitle(variant.title)
+    setDraftScript(variant.script || '')
+    setEditing(false)
+    setError('')
+  }
+
+  if (!editing) {
+    return (
+      <div
+        data-testid="spokesperson-lane-variant-script"
+        data-variant-id={variant.id}
+        className="space-y-1"
+      >
+        <p className="text-[10px] text-zinc-500 leading-snug">
+          <span className="text-zinc-300 font-medium">
+            {variant.title}
+          </span>{' '}
+          · {variant.script ? `${variant.script.length} chars` : 'no script yet'}
+        </p>
+        {variant.script ? (
+          <pre
+            data-testid="spokesperson-lane-variant-script-preview"
+            className="whitespace-pre-wrap break-words text-[10px] text-zinc-300 font-mono leading-snug max-h-[6rem] overflow-y-auto rounded bg-black/30 ring-1 ring-zinc-800 p-1.5"
+          >
+            {variant.script}
+          </pre>
+        ) : (
+          <p className="text-[11px] text-zinc-400 leading-snug">
+            No script yet for this variant.
+          </p>
+        )}
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          disabled={!onUpsertAdVariant}
+          data-testid="spokesperson-lane-variant-edit"
+          className="text-[10px] rounded px-2 py-1 font-mono bg-pink-500/30 hover:bg-pink-500/45 text-pink-100 ring-1 ring-pink-400/40 transition-colors disabled:opacity-60"
+        >
+          {variant.script ? 'Edit ad' : '+ Add script'}
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div
+      data-testid="spokesperson-lane-variant-editor"
+      data-variant-id={variant.id}
+      className="space-y-1"
+    >
+      <label className="text-[10px] text-zinc-300 flex flex-col gap-0.5">
+        <span className="text-[9px] uppercase tracking-wide text-zinc-500 font-mono">
+          Variant title
+        </span>
+        <input
+          type="text"
+          value={draftTitle}
+          onChange={(e) => setDraftTitle(e.target.value)}
+          maxLength={80}
+          disabled={busy}
+          data-testid="spokesperson-lane-variant-title-input"
+          className="rounded bg-zinc-950 ring-1 ring-zinc-800 px-1.5 py-1 text-[10px] focus:ring-pink-400 outline-none disabled:opacity-60"
+        />
+      </label>
+      <label className="text-[10px] text-zinc-300 flex flex-col gap-0.5">
+        <span className="text-[9px] uppercase tracking-wide text-zinc-500 font-mono">
+          Script · {draftScript.length}/300
+        </span>
+        <textarea
+          value={draftScript}
+          onChange={(e) => setDraftScript(e.target.value)}
+          placeholder="A short, direct line your spokesperson will speak verbatim. ≤300 chars."
+          rows={4}
+          maxLength={300}
+          disabled={busy}
+          data-testid="spokesperson-lane-variant-script-input"
+          className="rounded bg-zinc-950 ring-1 ring-zinc-800 px-1.5 py-1 text-[10px] leading-snug font-mono focus:ring-pink-400 outline-none disabled:opacity-60"
+        />
+      </label>
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={!canSave}
+          data-testid="spokesperson-lane-variant-save"
+          className={
+            'text-[10px] rounded px-2 py-1 font-mono transition-colors ' +
+            (canSave
+              ? 'bg-pink-500/30 hover:bg-pink-500/45 text-pink-100 ring-1 ring-pink-400/40'
+              : 'bg-zinc-800/40 text-zinc-400 ring-1 ring-zinc-700 cursor-not-allowed disabled:opacity-80')
+          }
+        >
+          {busy ? 'Saving…' : 'Save variant'}
+        </button>
+        <button
+          type="button"
+          onClick={handleCancel}
+          disabled={busy}
+          data-testid="spokesperson-lane-variant-cancel"
+          className="text-[10px] text-zinc-500 hover:text-zinc-200 px-1 py-1 disabled:opacity-50"
+        >
+          Cancel
+        </button>
+      </div>
+      {error && (
+        <p
+          data-testid="spokesperson-lane-variant-error"
+          className="text-[10px] text-rose-300 leading-snug"
+          role="status"
+          aria-live="polite"
+        >
+          {error}
+        </p>
+      )}
+    </div>
+  )
+}
+
+function NoVariantsState({
+  campaignId,
+  legacyScript,
+  scriptPreview,
+  onUpsertAdVariant,
+  onSelectVariant,
+}) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  const handleCreateBlank = async () => {
+    if (!onUpsertAdVariant || !campaignId || busy) return
+    setError('')
+    setBusy(true)
+    try {
+      const updated = await onUpsertAdVariant(campaignId, {
+        title: 'Ad 1',
+        script: '',
+      })
+      const created = Array.isArray(updated?.ad_variants)
+        ? updated.ad_variants[0]
+        : null
+      if (created?.id) onSelectVariant?.(created.id)
+    } catch (e) {
+      setError(`${e?.message || e}`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleConvertLegacy = async () => {
+    if (!onUpsertAdVariant || !campaignId || busy || !legacyScript) return
+    setError('')
+    setBusy(true)
+    try {
+      const updated = await onUpsertAdVariant(campaignId, {
+        title: 'Ad 1',
+        script: legacyScript,
+      })
+      const created = Array.isArray(updated?.ad_variants)
+        ? updated.ad_variants[0]
+        : null
+      if (created?.id) onSelectVariant?.(created.id)
+    } catch (e) {
+      setError(`${e?.message || e}`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div
+      data-testid="spokesperson-lane-variants-empty"
+      className="space-y-1.5"
+    >
+      <p className="text-[11px] text-zinc-400 leading-snug">
+        No ad variants yet for this campaign. Each variant carries its
+        own title + script; campaign brief stays stable across them.
+      </p>
+      {legacyScript ? (
+        <>
+          <p className="text-[10px] text-amber-200 leading-snug">
+            This campaign has a legacy saved script:
+          </p>
+          <pre className="whitespace-pre-wrap break-words text-[10px] text-zinc-300 font-mono leading-snug max-h-[5rem] overflow-y-auto rounded bg-black/30 ring-1 ring-zinc-800 p-1.5">
+            {scriptPreview}
+          </pre>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={handleConvertLegacy}
+              disabled={busy}
+              data-testid="spokesperson-lane-variants-convert-legacy"
+              className="text-[10px] rounded px-2 py-1 font-mono bg-amber-500/30 hover:bg-amber-500/45 text-amber-100 ring-1 ring-amber-400/40 transition-colors disabled:opacity-60"
+            >
+              {busy ? 'Converting…' : 'Convert to Ad 1 variant'}
+            </button>
+            <button
+              type="button"
+              onClick={handleCreateBlank}
+              disabled={busy}
+              data-testid="spokesperson-lane-variants-new"
+              className="text-[10px] rounded px-2 py-1 font-mono bg-pink-500/30 hover:bg-pink-500/45 text-pink-100 ring-1 ring-pink-400/40 transition-colors disabled:opacity-60"
+            >
+              + New Ad (blank)
+            </button>
+          </div>
+        </>
+      ) : (
+        <button
+          type="button"
+          onClick={handleCreateBlank}
+          disabled={busy}
+          data-testid="spokesperson-lane-variants-new"
+          className="text-[10px] rounded px-2 py-1 font-mono bg-pink-500/30 hover:bg-pink-500/45 text-pink-100 ring-1 ring-pink-400/40 transition-colors disabled:opacity-60"
+        >
+          {busy ? 'Creating…' : '+ New Ad'}
+        </button>
+      )}
+      {error && (
+        <p
+          data-testid="spokesperson-lane-variants-error"
+          className="text-[10px] text-rose-300 leading-snug"
+          role="status"
+          aria-live="polite"
+        >
+          {error}
+        </p>
+      )}
+    </div>
+  )
 }

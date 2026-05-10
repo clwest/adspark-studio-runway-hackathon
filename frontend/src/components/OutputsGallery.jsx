@@ -113,6 +113,9 @@ function buildCardsForCampaign(campaign) {
         script: o.script,
         parentLabel: parent ? `derived from ${KIND_META[parent.kind]?.label || parent.kind}` : null,
         outputId: o.id,
+        // PR DC — variant linkage so the card surface groups
+        // multiple takes under their producing Ad Variant.
+        variantTitle: o.variant_title || null,
       }
     })
   }
@@ -283,6 +286,15 @@ function OutputCard({ card }) {
         <p className="text-[10px] text-zinc-400 leading-snug">
           {card.description}
         </p>
+        {card.variantTitle && (
+          <p
+            data-testid="output-card-variant"
+            className="text-[10px] text-pink-300 font-mono leading-snug"
+            title={`Ad Variant: ${card.variantTitle}`}
+          >
+            {card.variantTitle}
+          </p>
+        )}
         {scriptPreview && (
           <p
             data-testid="output-card-script"

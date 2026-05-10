@@ -1,7 +1,42 @@
 # START NEXT SESSION — AdSpark Studio
 
-**Last touched:** 2026-05-10 (PR DB — demo
-stabilization. Submission-video recording is the next
+**Last touched:** 2026-05-10 (PR DC — Ad Variants
+separate stable Campaign context from mutable Ad
+scripts. Pre-PR-DC, `Campaign.commercial_script` was
+a single mutable string — every script edit
+overwrote it, so multiple takes against the same
+brief required brand-new campaigns. New
+`Campaign.ad_variants: list[AdVariant]` field; each
+entry carries its own `id`, `title`, `script`,
+`created_at`, `updated_at`. New
+`POST /api/campaigns/{id}/ad-variant` upsert route
+(route count **74 → 75**). `OutputRecord` extended
+with optional `variant_id` + `variant_title`; the
+host-video route honours `HostVideoBody.variant_id`
+by reading the variant's script as the spoken text
+and stamping the OutputRecord with both fields. The
+spokesperson-ad alias passes variant_id through.
+Lane Step 2 rewrites into `<Step2AdVariants>`:
+variant chip-row (pink for active), per-variant
+inline title + script editor, `+ New Ad` button at
+the end of the chip-row, no-variants empty state
+with both `+ New Ad (blank)` and "Convert legacy
+script to Ad 1" CTAs (the legacy
+`commercial_script` stays readable until converted).
+Step 3 saved-renders disclosure scopes to the
+selected variant via `data-scope` and shows the
+variant title on each row. Outputs gallery cards
+show the variant title (pink) above the script
+preview when captured. Mock probe confirmed
+end-to-end: two variants on one campaign, two
+variant-scoped renders, each output carries
+`variant_title`. Campaign B opens blank;
+re-opening A preserves both variants + both
+outputs. Pytest 24/24 (4 new PR DC tests), smoke
+3/3, build 527.42 KB initial / 142.04 KB gzip
+(+6.29 KB / +1.20 KB). No real Runway calls fired.
+Backend route count now **75**.
+Earlier: PR DB — demo stabilization. Submission-video recording is the next
 thing to happen; PR DB adds three operator-facing
 guard rails. (1) New
 `<ConversationPreCallChecklist>` collapsible `<details>`
@@ -342,8 +377,8 @@ Dead-End `ea4ba88`; PR CV Runway API Contract Audit
 `2630532`; PR DA Multi-Ad / Reviewable Spokesperson
 Campaigns `2510562`; PR DA Demo Pillars (Conversation +
 Dialogue Scene readiness) `168094a`; PR DB Demo
-Stabilization in flight on top —
-SESSION_012–SESSION_085 handoffs added).
+Stabilization `e560bee`; PR DC Ad Variants in flight
+on top — SESSION_012–SESSION_086 handoffs added).
 
 ## Where things stand
 

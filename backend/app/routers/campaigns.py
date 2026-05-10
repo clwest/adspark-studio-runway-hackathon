@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from ..config import Settings, get_settings
-from ..models import Campaign, CampaignCreate, CampaignList
+from ..models import AdVariantCreate, Campaign, CampaignCreate, CampaignList
 from ..services.audio_client import (
     SUPPORTED_DUB_LANGS,
     design_brand_voice,
@@ -1511,6 +1511,12 @@ class HostVideoBody(BaseModel):
     script_override: Optional[str] = Field(
         default=None, max_length=300, description="overrides the templated script"
     )
+    # PR DC — when the operator renders a specific Ad Variant, the
+    # frontend passes its id here so the appended OutputRecord
+    # captures variant_id + variant_title. Backend uses the variant's
+    # script as the spoken text (script_override stays free-form for
+    # legacy callers).
+    variant_id: Optional[str] = Field(default=None)
 
 
 # PR AA — Commercial Script field. Persists the user-edited script so
@@ -1693,6 +1699,55 @@ def post_commercial_script(
     return updated
 
 
+# ---- PR DC — Ad Variant upsert -----------------------------------
+#
+# Lets the operator stack multiple Ad Variants (title + script) under
+# one stable Campaign brief without overwriting prior scripts or
+# their rendered videos. Upsert by id: passing an existing id updates
+# in place; omitting it creates a new variant. Campaign context
+# (business / product / audience / tone) is unchanged.
+
+
+@router.post("/{campaign_id}/ad-variant", response_model=Campaign)
+def post_ad_variant(
+    campaign_id: str,
+    body: AdVariantCreate,
+    store: CampaignStore = Depends(_store),
+) -> Campaign:
+    """Create or update one Ad Variant on this campaign. Returns the
+    full updated Campaign so the workspace's local slice stays in
+    sync without a re-fetch.
+    """
+    record = store.get(campaign_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="campaign not found")
+    now = datetime.now(timezone.utc).isoformat()
+    existing = None
+    if body.id:
+        existing = next(
+            (v for v in (record.ad_variants or []) if v.id == body.id), None
+        )
+    variant = {
+        "id": body.id if existing else uuid.uuid4().hex[:12],
+        "title": body.title.strip(),
+        "script": body.script.strip(),
+        "created_at": existing.created_at.isoformat() if existing else now,
+        "updated_at": now,
+    }
+    updated = store.upsert_ad_variant(campaign_id, variant)
+    if not updated:
+        raise HTTPException(status_code=404, detail="campaign not found")
+    logger.info(
+        "campaign %s ad_variant %s id=%s title=%r script_len=%d",
+        campaign_id,
+        "updated" if existing else "created",
+        variant["id"],
+        variant["title"][:40],
+        len(variant["script"]),
+    )
+    return updated
+
+
 @router.post("/{campaign_id}/avatar", response_model=Campaign)
 def post_create_avatar(
     campaign_id: str,
@@ -1822,6 +1877,8 @@ def _append_output_record(
     task_id: Optional[str] = None,
     mock_mode: Optional[bool] = None,
     parent_output_id: Optional[str] = None,
+    variant_id: Optional[str] = None,
+    variant_title: Optional[str] = None,
 ) -> None:
     entry = {
         "id": output_id,
@@ -1832,6 +1889,9 @@ def _append_output_record(
         "task_id": task_id,
         "mock_mode": mock_mode,
         "parent_output_id": parent_output_id,
+        # PR DC — variant linkage for Spokesperson Ad outputs.
+        "variant_id": variant_id,
+        "variant_title": variant_title,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     try:
@@ -1922,14 +1982,29 @@ def post_host_video(
     # PR AA — host clip prefers the saved Commercial Script when no
     # explicit override is supplied. character_host_client.build_script
     # remains the deterministic fallback when neither exists.
+    # PR DC — when a variant_id is passed, prefer that variant's
+    # script over both explicit override and campaign-level
+    # commercial_script. Capture variant_id + variant_title on the
+    # OutputRecord so the gallery can group renders under their
+    # producing variant.
     script_override = body.script_override if body and body.script_override else None
+    variant_id_arg = body.variant_id if body else None
+    variant_title_arg = None
+    if variant_id_arg and record.ad_variants:
+        v_match = next(
+            (v for v in record.ad_variants if v.id == variant_id_arg), None
+        )
+        if v_match:
+            variant_title_arg = v_match.title
+            if not script_override and v_match.script:
+                script_override = v_match.script
     if not script_override and record.commercial_script:
         script_override = record.commercial_script
     result = generate_host_video(record, settings, script_override=script_override)
     if result.status == "ok":
         logger.info(
-            "host video ok campaign=%s mock=%s task=%s",
-            campaign_id, result.mock_mode, result.task_id,
+            "host video ok campaign=%s mock=%s task=%s variant=%s",
+            campaign_id, result.mock_mode, result.task_id, variant_id_arg,
         )
         updated = store.update_host_video_fields(
             campaign_id,
@@ -1957,6 +2032,8 @@ def post_host_video(
                 script=script_override,
                 task_id=result.task_id,
                 mock_mode=result.mock_mode,
+                variant_id=variant_id_arg,
+                variant_title=variant_title_arg,
             )
             updated = store.get(campaign_id) or updated
     else:
@@ -2017,6 +2094,10 @@ class SpokespersonAdBody(BaseModel):
             "template otherwise."
         ),
     )
+    # PR DC — variant linkage passthrough; the alias forwards to
+    # post_host_video so the OutputRecord captures variant_id +
+    # variant_title.
+    variant_id: Optional[str] = Field(default=None)
 
 
 @router.post("/{campaign_id}/spokesperson-ad", response_model=Campaign)
@@ -2032,7 +2113,12 @@ def post_spokesperson_ad(
     stay in sync with the legacy endpoint.
     """
     host_body = (
-        HostVideoBody(script_override=body.script_override) if body else None
+        HostVideoBody(
+            script_override=body.script_override,
+            variant_id=body.variant_id,
+        )
+        if body
+        else None
     )
     return post_host_video(
         campaign_id,

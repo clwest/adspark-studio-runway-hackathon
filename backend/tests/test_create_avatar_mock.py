@@ -412,6 +412,132 @@ def test_output_route_404s_for_unknown_campaign(client: TestClient):
     assert r.status_code == 404
 
 
+# ---- PR DC — ad variants + variant-aware renders ----------------
+
+
+def test_ad_variant_create_and_update(client: TestClient):
+    """Upsert by id: passing no id creates a new variant; passing
+    an existing id patches it in place; campaign.ad_variants
+    preserves the order (newest-first for fresh creates)."""
+    # Minimal campaign — `_create_campaign_with_avatar` is heavier
+    # than we need here since this test doesn't render.
+    resp = client.post("/api/campaigns", json={
+        "business": "Variant Test",
+        "selected_concept": {"title":"x","hook":"x","visual":"x","caption":"x","cta":"x"},
+        "runway_prompt": "x",
+        "social_post": {"caption":"x","cta":"x","hashtags":[]},
+    })
+    cid = resp.json()["id"]
+    assert resp.json()["ad_variants"] == []
+
+    # Create variant A
+    a = client.post(
+        f"/api/campaigns/{cid}/ad-variant",
+        json={"title": "Ad 1", "script": "First take."},
+    )
+    assert a.status_code == 200, a.text
+    assert len(a.json()["ad_variants"]) == 1
+    v1 = a.json()["ad_variants"][0]
+    assert v1["title"] == "Ad 1"
+    assert v1["script"] == "First take."
+    assert v1["id"]
+
+    # Create variant B (newer)
+    b = client.post(
+        f"/api/campaigns/{cid}/ad-variant",
+        json={"title": "Ad 2", "script": "Different angle."},
+    )
+    assert len(b.json()["ad_variants"]) == 2
+    # newest-first
+    assert b.json()["ad_variants"][0]["title"] == "Ad 2"
+    assert b.json()["ad_variants"][1]["title"] == "Ad 1"
+
+    # Update variant A's script in place
+    u = client.post(
+        f"/api/campaigns/{cid}/ad-variant",
+        json={"id": v1["id"], "title": "Ad 1 (edited)", "script": "Edited take."},
+    )
+    assert u.status_code == 200
+    variants = u.json()["ad_variants"]
+    assert len(variants) == 2  # not duplicated
+    v1_after = next(v for v in variants if v["id"] == v1["id"])
+    assert v1_after["title"] == "Ad 1 (edited)"
+    assert v1_after["script"] == "Edited take."
+    # created_at preserved, updated_at moved forward
+    assert v1_after["created_at"] == v1["created_at"]
+
+
+def test_ad_variant_404_when_campaign_missing(client: TestClient):
+    r = client.post(
+        "/api/campaigns/no-such-campaign/ad-variant",
+        json={"title": "x", "script": "y"},
+    )
+    assert r.status_code == 404
+
+
+def test_ad_variant_validation(client: TestClient):
+    """Title is required (1-80); script optional (≤2000)."""
+    resp = client.post("/api/campaigns", json={
+        "business": "Validation Test",
+        "selected_concept": {"title":"x","hook":"x","visual":"x","caption":"x","cta":"x"},
+        "runway_prompt": "x",
+        "social_post": {"caption":"x","cta":"x","hashtags":[]},
+    })
+    cid = resp.json()["id"]
+    # Empty title → 422
+    r = client.post(
+        f"/api/campaigns/{cid}/ad-variant", json={"title": "", "script": "x"}
+    )
+    assert r.status_code == 422
+    # Empty script OK (placeholder variant)
+    r = client.post(
+        f"/api/campaigns/{cid}/ad-variant", json={"title": "Placeholder"}
+    )
+    assert r.status_code == 200
+    assert r.json()["ad_variants"][0]["script"] == ""
+
+
+def test_host_video_captures_variant_id(client: TestClient):
+    """When the host-video request includes variant_id, the
+    appended OutputRecord carries the variant_id + variant_title +
+    the variant's script (overriding both explicit override and
+    campaign-level commercial_script per PR DC precedence)."""
+    char = _create_character(client, name="Variant Render Test")
+    _generate_portrait(client, char["id"])
+    cid = _create_campaign_with_avatar(client, char["id"])
+    # Create a variant with a distinctive script
+    var = client.post(
+        f"/api/campaigns/{cid}/ad-variant",
+        json={"title": "Hook take", "script": "Variant-scripted line."},
+    ).json()
+    variant = var["ad_variants"][0]
+
+    # Render with variant_id in body
+    r = client.post(
+        f"/api/campaigns/{cid}/host-video",
+        json={"variant_id": variant["id"]},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["host_status"] == "ok"
+    assert len(body["outputs"]) == 1
+    out = body["outputs"][0]
+    assert out["variant_id"] == variant["id"]
+    assert out["variant_title"] == "Hook take"
+    # Variant script captured on the OutputRecord (PR CY field +
+    # PR DC variant override).
+    assert out["script"] == "Variant-scripted line."
+
+    # Render again without variant_id → output's variant fields are
+    # null (legacy / unscoped render).
+    r2 = client.post(f"/api/campaigns/{cid}/host-video", json={})
+    body2 = r2.json()
+    assert len(body2["outputs"]) == 2
+    latest = body2["outputs"][0]
+    assert latest["variant_id"] is None
+    assert latest["variant_title"] is None
+
+
 def test_clean_prompt_prompt_override_still_wins():
     """`prompt_override` short-circuits the composer entirely so
     operator-typed text reaches Runway verbatim."""

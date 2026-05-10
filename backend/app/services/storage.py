@@ -288,6 +288,44 @@ class CampaignStore:
                     return Campaign.model_validate(row)
         return None
 
+    # PR DC — Ad Variants. Upsert keeps the variants list newest-
+    # first (when creating) or in-place (when updating an existing
+    # entry by id). Capped at 20 variants per campaign so the JSON
+    # record never grows unbounded over a long demo session.
+    def upsert_ad_variant(
+        self,
+        campaign_id: str,
+        variant: dict,
+        *,
+        max_entries: int = 20,
+    ) -> Optional[Campaign]:
+        """Insert a new variant (when `variant["id"]` is missing or
+        unknown) or patch an existing one. Returns the updated
+        Campaign, or ``None`` when the campaign id isn't found.
+        """
+        with _LOCK:
+            rows = self._read()
+            for row in rows:
+                if row.get("id") != campaign_id:
+                    continue
+                variants = list(row.get("ad_variants") or [])
+                vid = variant.get("id")
+                if vid:
+                    found = False
+                    for i, v in enumerate(variants):
+                        if v.get("id") == vid:
+                            variants[i] = {**v, **variant}
+                            found = True
+                            break
+                    if not found:
+                        variants.insert(0, variant)
+                else:
+                    variants.insert(0, variant)
+                row["ad_variants"] = variants[:max_entries]
+                self._write(rows)
+                return Campaign.model_validate(row)
+        return None
+
     def delete(self, campaign_id: str) -> bool:
         """Remove the campaign record from the JSON store. Returns True
         when a row was removed, False when no campaign matched.

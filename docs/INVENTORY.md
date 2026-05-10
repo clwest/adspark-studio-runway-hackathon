@@ -1,7 +1,39 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after **PR DB — Demo Stabilization**.
+context-kit refresh after **PR DC — Ad Variants**.
+Pre-PR-DC, `Campaign.commercial_script` was a single mutable
+string — every script edit overwrote it, so multiple takes
+against the same brief required brand-new campaigns. PR DC
+separates **stable Campaign context** (business / product /
+audience / tone) from **mutable Ad Variants** (title + script).
+New `Campaign.ad_variants: list[AdVariant]` field; each entry
+carries `id`, `title`, `script`, `created_at`, `updated_at`.
+New `POST /api/campaigns/{id}/ad-variant` upsert route — pass
+`id` to update in place, omit to create. Backend route count
+**74 → 75**. `OutputRecord` extended with optional
+`variant_id` + `variant_title`; the host-video route honours
+`HostVideoBody.variant_id` by reading the variant's script as
+the spoken text and stamping both fields on the appended
+OutputRecord. The spokesperson-ad alias passes variant_id
+through to the underlying host-video pipeline. Lane Step 2
+rewrites into `<Step2AdVariants>`: variant chip-row, per-variant
+inline title + script editor, `+ New Ad` button, no-variants
+empty state with both `+ New Ad (blank)` and "Convert legacy
+script to Ad 1" CTAs (legacy `commercial_script` stays
+readable until converted). Step 3 saved-renders disclosure
+scopes to the selected variant via `data-scope` and shows the
+variant title on each row. Outputs gallery cards show the
+variant title (pink) above the script preview when captured.
+Mock probe round-tripped two variants × two renders with
+correct linkage; Campaign B opens blank; re-opening A
+preserves both variants + both outputs. Four new pytests
+(`test_ad_variant_create_and_update`,
+`test_ad_variant_404_when_campaign_missing`,
+`test_ad_variant_validation`,
+`test_host_video_captures_variant_id`). Backend route count
+now **75**.
+Earlier: PR DB — Demo Stabilization.
 Submission-video recording is the next thing; PR DB adds three
 operator-facing guard rails on top of the PR DA Demo Pillars
 wiring. New `<ConversationPreCallChecklist>` (testid

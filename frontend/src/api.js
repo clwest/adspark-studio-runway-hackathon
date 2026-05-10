@@ -156,6 +156,14 @@ export const api = {
       `/api/campaigns/${encodeURIComponent(campaignId)}/script`,
       { method: 'POST', body: JSON.stringify({ script }) },
     ),
+  // PR DC — Ad Variants. Upsert one variant on a campaign. Pass
+  // `id` to update an existing variant in place; omit to create
+  // a new one. Returns the updated Campaign.
+  upsertAdVariant: (campaignId, body) =>
+    jsonFetch(
+      `/api/campaigns/${encodeURIComponent(campaignId)}/ad-variant`,
+      { method: 'POST', body: JSON.stringify(body) },
+    ),
   // PR BQ — Inline brief editor for the v2 lane Step 1. Patches
   // business / product / audience / tone on a saved campaign
   // without touching any of the generated media or firing Runway.

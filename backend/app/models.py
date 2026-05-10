@@ -149,7 +149,45 @@ class OutputRecord(BaseModel):
     task_id: Optional[str] = None
     mock_mode: Optional[bool] = None
     parent_output_id: Optional[str] = None  # for derived outputs (e.g. reels)
+    # PR DC — ad variant linkage. When the operator renders a
+    # specific Ad Variant (instead of the legacy `commercial_script`
+    # field), the variant id + title are captured on the OutputRecord
+    # so the Outputs gallery can group renders under their producing
+    # variant. Optional — pre-PR-DC outputs and legacy script renders
+    # leave it null.
+    variant_id: Optional[str] = None
+    variant_title: Optional[str] = None
     created_at: datetime
+
+
+class AdVariant(BaseModel):
+    """PR DC — One Ad Variant attached to a Spokesperson Ad campaign.
+
+    Campaign context (business / product / audience / tone) stays
+    stable across variants; each variant carries its own script +
+    render history. Lets the operator try multiple takes against the
+    same campaign brief without overwriting prior scripts/renders.
+    """
+
+    id: str  # 12-char hex generated server-side
+    title: str = Field(..., min_length=1, max_length=80)
+    script: str = Field(default="", max_length=2000)
+    created_at: datetime
+    updated_at: datetime
+
+
+class AdVariantCreate(BaseModel):
+    """Request body for `POST /api/campaigns/{id}/ad-variant`.
+
+    Upsert shape: passing `id` updates that variant; omitting it
+    creates a new one. Title is required; script defaults to empty
+    so the operator can create a placeholder variant and fill it in
+    later.
+    """
+
+    id: Optional[str] = None
+    title: str = Field(..., min_length=1, max_length=80)
+    script: str = Field(default="", max_length=2000)
 
 
 # ---- PR AF — Multi-Character Dialogue Scene Builder ---------------
@@ -362,6 +400,14 @@ class Campaign(CampaignCreate):
     # while this list preserves prior renders so the Outputs gallery
     # surfaces full history.
     outputs: list[OutputRecord] = []
+    # PR DC — Ad Variants. Each variant carries a title + script and
+    # tracks its own render history (via the per-OutputRecord
+    # variant_id linkage above). Multiple variants per campaign lets
+    # the operator iterate on scripts without overwriting prior
+    # takes. Legacy campaigns without variants keep using the
+    # `commercial_script` field above. Capped at 20 variants by the
+    # store helper.
+    ad_variants: list[AdVariant] = []
 
 
 class CampaignList(BaseModel):
