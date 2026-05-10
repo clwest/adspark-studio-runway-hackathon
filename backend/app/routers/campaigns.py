@@ -1541,6 +1541,24 @@ class BriefUpdateBody(BaseModel):
     tone: Optional[str] = Field(default=None, max_length=200)
 
 
+class CinematicVideoBody(BaseModel):
+    """PR BU — request body for persisting a freshly-generated
+    cinematic video onto a saved campaign.
+
+    The URL is the Runway image_to_video task's output[0] from the
+    PR BT polling loop. Backend downloads it via the same VideoCache
+    helper that v1 ``POST /api/campaigns`` already uses at create
+    time, then flips ``cached_video_url`` to the local-served path
+    so the gallery's existing video player picks it up unchanged.
+
+    Capped at 2000 chars to leave room for Runway's signed-URL
+    query strings (typically <500 chars) without rejecting legit
+    upstream URLs.
+    """
+
+    video_url: str = Field(..., min_length=8, max_length=2000)
+
+
 @router.post("/{campaign_id}/brief", response_model=Campaign)
 def post_brief(
     campaign_id: str,
@@ -1580,6 +1598,71 @@ def post_brief(
         body.tone is not None,
     )
     return updated
+
+
+@router.post("/{campaign_id}/cinematic-video", response_model=Campaign)
+def post_cinematic_video(
+    campaign_id: str,
+    body: CinematicVideoBody,
+    store: CampaignStore = Depends(_store),
+    cache: VideoCache = Depends(_video_cache),
+) -> Campaign:
+    """PR BU — persist a freshly-generated cinematic video onto a
+    saved campaign so v2 lane regenerations survive page reloads.
+
+    Mirrors v1 ``POST /api/campaigns`` create-time caching exactly:
+    download the Runway output URL via ``VideoCache.fetch``,
+    overwrite ``data/videos/{id}.mp4`` (the same path the existing
+    GET ``/api/campaigns/{id}/video`` route serves), then flip
+    ``cached_video_url`` / ``cache_status`` / ``cache_error`` via
+    the long-standing ``update_cache_fields`` helper. No new
+    storage helpers; no new model fields. The route is only
+    called by the v2 CinematicLane after PR BT's polling loop
+    resolves SUCCEEDED.
+
+    Failure modes:
+    - 404 — campaign not found.
+    - 422 — pydantic validation (URL min/max length).
+    - 502 — cache.fetch returned status != 'ok' (download error,
+      content-type rejection, asset-cap overflow). The campaign's
+      cache_status / cache_error fields are persisted so the v1
+      gallery surface stays consistent with the failure.
+    """
+    record = store.get(campaign_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="campaign not found")
+    result = cache.fetch(campaign_id, body.video_url)
+    if result.status == "ok":
+        logger.info(
+            "campaign %s cinematic-video persisted (%d bytes) from %s",
+            campaign_id,
+            result.bytes_written,
+            body.video_url[:80],
+        )
+        updated = store.update_cache_fields(
+            campaign_id,
+            cached_video_url=f"/api/campaigns/{campaign_id}/video",
+            cache_status="ok",
+            cache_error=None,
+        )
+        if not updated:
+            raise HTTPException(status_code=404, detail="campaign not found")
+        return updated
+    logger.warning(
+        "campaign %s cinematic-video persist failed: %s",
+        campaign_id,
+        result.error,
+    )
+    store.update_cache_fields(
+        campaign_id,
+        cached_video_url=None,
+        cache_status="failed",
+        cache_error=result.error,
+    )
+    raise HTTPException(
+        status_code=502,
+        detail=result.error or "failed to fetch upstream video",
+    )
 
 
 @router.post("/{campaign_id}/script", response_model=Campaign)

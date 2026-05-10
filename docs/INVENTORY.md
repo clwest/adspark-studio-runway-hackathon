@@ -1,24 +1,32 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after PR BT (V2 Cinematic Video Async
-Action) on top of the PR AG–BS / SESSION 011 anchors.
-Backend route count remains **69** (no new routes in PR BT —
-reuses `POST /api/runway/generate` + `GET /api/runway/task/{id}`).
+context-kit refresh after PR BU (Persist V2 Cinematic Video
+Result to Campaign) on top of the PR AG–BT / SESSION 011
+anchors. Backend route count is now **70** (PR BU adds the
+single field-specific endpoint `POST
+/api/campaigns/{id}/cinematic-video`; reuses the existing
+`VideoCache.fetch` + `update_cache_fields` plumbing v1
+already uses at create time).
 PR BR scrolls + highlights the matching CampaignCard; PR BS
 extends the path so the card also lands on the **most
 relevant tab** inferred from the Appearances row's mode pill
 (Spokesperson Ad → character; Cinematic / Storyboard →
 visuals; Dialogue Scene → dialogue; Realtime → realtime;
-Mixed / Draft → overview). PR BT closes the last v2 lane
+Mixed / Draft → overview). PR BT closed the last v2 lane
 placeholder: the **Cinematic Video** button now fires real
 Runway `image_to_video` (start + poll, 5 s ± 800 ms jitter,
 60-attempt 5-min cap), mirroring v1 `App.handleGenerateVideo`
-exactly; the resulting URL surfaces as a download link in the
-lane (not persisted to the campaign — that would require a
-new backend route). PR BQ's inline brief editor still mounts
-at lane Step 1; the action count from PR BP / BT now covers
-**every** lane render target:
+exactly. PR BU **persists** that output: after polling
+SUCCEEDED, the studio handler POSTs the Runway URL to the new
+`POST /api/campaigns/{id}/cinematic-video` route; backend
+downloads via `VideoCache.fetch`, then flips
+`cached_video_url → /api/campaigns/{id}/video` (same path the
+existing gallery player already streams). Persisted state
+survives reloads + appears unchanged in the v1 gallery.
+PR BQ's inline brief editor still mounts at lane Step 1;
+the action count from PR BP / BT now covers **every** lane
+render target:
 **Spokesperson Lane** Horizontal (real `avatar_videos`, burns
 credits) + Captioned Reels (PR BN); **Cinematic Lane**
 Cinematic Video (real `image_to_video`, burns credits — PR BT)
@@ -273,6 +281,7 @@ the line's own `avatar_id`).
 | PR BR | V2 Appearances Click-Through to Campaign Gallery (gated v2 slice tracked in SESSION_049; the previously-disabled "Open in gallery →" affordance on each Appearances row now bubbles up `onOpenCampaign(campaignId)` through SpokespersonStudio → App.jsx → CampaignGallery; CampaignCard accepts new `isOpenedFromV2` + `onClearOpen` props that scroll the matching saved card into view + flash a pink highlight ring for ~2 s; SpokespersonStudio renders a "Opened campaign in gallery: {label}" emerald banner that auto-clears after 2.5 s; no backend changes; route count unchanged at 69; pink chrome on the v2 button mirrors the studio's accent vocabulary) | (post-v13) |
 | PR BS | V2 Appearances Click-Through Tab Hints (gated v2 slice tracked in SESSION_050; extends PR BR by passing the inferred mode through the click chain so App.jsx can resolve a target tab inside the saved CampaignCard; new `_tabFromInferredMode` helper maps Spokesperson Ad → character, Cinematic / Storyboard → visuals, Dialogue Scene → dialogue, Realtime → realtime, Mixed / Draft → overview; new `openCampaignTab` state threaded through CampaignGallery → CampaignCard; the existing v2 effect now flips `setActiveTab(targetTab)` alongside the scroll + highlight; banner copy now reads "Opened campaign in gallery: {label} · {mode} tab"; CampaignCard outer `<li>` carries `data-active-tab` for smoke + future tooling; no backend changes; route count still 69) | (post-v13) |
 | PR BT | Wire V2 Cinematic Video Async Action (gated v2 slice tracked in SESSION_051; closes the last v2 lane render placeholder — Cinematic Video now fires real Runway `image_to_video` via the existing `api.startRunway` (POST `/api/runway/generate`) + `api.pollRunway` (GET `/api/runway/task/{id}`) helpers; SpokespersonStudio adds `handleGenerateCinematicVideo(id, onProgress)` that mirrors v1 `App.handleGenerateVideo` exactly — same 5 s ± 800 ms jitter, 60-attempt 5-min cap, terminal SUCCEEDED / FAILED / CANCELED handling; no infinite loops (cap-on-attempts guarantees termination); CinematicLane wires the button with rose chrome + `data-burns-credits="true"` + `data-source-ready` (gated on `runway_prompt` being truthy on the focused campaign) + `data-busy`; status row surfaces start phase, polling progress percentage, errors, and a download link to the fresh output URL when SUCCEEDED; output URL is **not persisted to the campaign** (would require a new backend route — kept out of scope per brief); smoke asserts the button has `data-burns-credits="true"`, `data-render-target="cinematic-video"`, follows fixture readiness disjunctions; no v1 changes; no backend changes; route count still 69) | (post-v13) |
+| PR BU | Persist V2 Cinematic Video Result to Campaign (gated v2 slice tracked in SESSION_052; closes the "session-only" gap PR BT left open — fresh outputs now survive reloads. New `POST /api/campaigns/{id}/cinematic-video` route reuses `VideoCache.fetch` + `update_cache_fields` (the same plumbing v1 `POST /api/campaigns` uses at create time) to download the Runway URL, overwrite `data/videos/{id}.mp4`, and flip `cached_video_url → /api/campaigns/{id}/video`. Smallest possible field-specific endpoint; no new storage helpers; no new model fields. Route count 69 → **70**. Failure modes: 404 (campaign not found), 422 (URL min/max length), 502 (download / content-type / size-cap failure — campaign's `cache_status` / `cache_error` persisted in tandem). New `api.persistCinematicVideo(id, url)` helper. SpokespersonStudio's `handleGenerateCinematicVideo` now chains the persist call after polling SUCCEEDED + emits `'persisting'` / `'persisted'` / `'persist-failed'` progress phases; updates the local campaigns slice in place + bubbles `onCharactersChanged` so the v1 gallery refreshes alongside if open. CinematicLane prefers the persisted `cached_video_url` for the link (always when set) and only falls back to a session URL when persist 502s; new `data-persisted` button attr; status copy now reads "saving to campaign…" / "saved to campaign" / "saved (persist failed — session URL only)". Probes confirmed: 404, 422, 502 on broken upstream, and happy path persists + survives `GET /api/campaigns` reload. No v1 changes; no automatic real Runway calls fired this session.) | (post-v13) |
 
 ## Known limitations (current main)
 

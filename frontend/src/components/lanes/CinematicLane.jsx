@@ -177,12 +177,30 @@ export default function CinematicLane({
   // is optional (text_to_video path when null), mirroring v1
   // App.handleGenerateVideo. Burns Runway credits per click;
   // mock mode short-circuits to a fast-resolving SUCCEEDED.
+  //
+  // PR BU — after the SUCCEEDED task lands, the studio handler
+  // also POSTs the output URL to /cinematic-video so the
+  // backend persists it onto the campaign (cached_video_url
+  // flips to /api/campaigns/{id}/video). Persisted state
+  // survives reloads + appears in the existing gallery video
+  // player; the lane shows "open cinematic video ↗" pointing
+  // at the persisted path.
   const videoPromptReady = Boolean((focused?.runway_prompt || '').trim())
   const videoCached = Boolean(focused?.cached_video_url)
   const [videoBusy, setVideoBusy] = useState(false)
   const [videoError, setVideoError] = useState('')
   const [videoTaskInfo, setVideoTaskInfo] = useState(null)
-  const [videoOutputUrl, setVideoOutputUrl] = useState('')
+  // PR BU — phase tracks where in the lifecycle we are so the
+  // status row can read "starting…" / "polling…" / "saving to
+  // campaign…" / "saved to campaign" / "saved (persist failed,
+  // session URL only)" without inferring from busy state.
+  const [videoPhase, setVideoPhase] = useState('idle')
+  // PR BU — fallback session URL kept for the rare case where
+  // the persist call 502s but the SUCCEEDED Runway URL is still
+  // valid (mock mode + a fake upstream is the obvious scenario).
+  // When the campaign's `cached_video_url` is set we prefer that;
+  // this only renders when persist-failed but the task SUCCEEDED.
+  const [videoSessionUrl, setVideoSessionUrl] = useState('')
   // Cancellation flag so a mid-poll unmount doesn't try to
   // setState after the lane is gone (effect cleanup below).
   const videoActiveRef = useRef(true)
@@ -195,10 +213,11 @@ export default function CinematicLane({
   const videoCanFire = Boolean(
     onGenerateCinematicVideo && hasCampaign && videoPromptReady && !videoBusy,
   )
+  // PR BU — label flips between Generate / Regenerate based on
+  // the campaign's *persisted* cached_video_url, since the
+  // session-only URL is now the exception path.
   const videoLabel = videoBusy
     ? 'Generating Real Cinematic Video…'
-    : videoOutputUrl
-    ? 'Regenerate Real Cinematic Video'
     : videoCached
     ? 'Regenerate Real Cinematic Video'
     : 'Generate Real Cinematic Video'
@@ -212,38 +231,60 @@ export default function CinematicLane({
   const handleGenerateVideo = async () => {
     if (!videoCanFire) return
     setVideoError('')
-    setVideoOutputUrl('')
+    setVideoSessionUrl('')
     setVideoTaskInfo(null)
+    setVideoPhase('starting')
     setVideoBusy(true)
     try {
-      const finalTask = await onGenerateCinematicVideo(
+      const result = await onGenerateCinematicVideo(
         focused.id,
         (progress) => {
           if (!videoActiveRef.current) return
-          setVideoTaskInfo(progress.task || null)
+          if (progress.task) setVideoTaskInfo(progress.task)
+          if (progress.phase) setVideoPhase(progress.phase)
         },
       )
       if (!videoActiveRef.current) return
-      setVideoTaskInfo(finalTask || null)
-      const url =
-        Array.isArray(finalTask?.output) && finalTask.output.length > 0
-          ? finalTask.output[0]
-          : ''
-      setVideoOutputUrl(url || '')
+      // PR BU — handler now returns
+      //   { task, campaign, persistError? }
+      // when SUCCEEDED. Lane prefers the persisted campaign's
+      // cached_video_url (rendered via the focused campaign
+      // re-fetch through the studio); only falls back to the
+      // session URL when persist failed.
+      if (result?.campaign) {
+        setVideoPhase('persisted')
+      } else {
+        const url =
+          Array.isArray(result?.task?.output) && result.task.output.length > 0
+            ? String(result.task.output[0] || '').trim()
+            : ''
+        setVideoSessionUrl(url)
+        setVideoPhase(result?.persistError ? 'persist-failed' : 'no-output')
+      }
     } catch (e) {
       if (!videoActiveRef.current) return
       setVideoError(`${e?.message || e}`)
+      setVideoPhase('failed')
     } finally {
       if (videoActiveRef.current) setVideoBusy(false)
     }
   }
-  const videoStatusText = videoBusy
-    ? videoTaskInfo
-      ? `polling Runway… status=${videoTaskInfo.status} progress=${Math.round(
+  const videoStatusText = (() => {
+    if (videoBusy) {
+      if (videoPhase === 'persisting') return 'saving to campaign…'
+      if (videoPhase === 'starting') return 'starting Runway image_to_video…'
+      if (videoTaskInfo) {
+        return `polling Runway… status=${videoTaskInfo.status} progress=${Math.round(
           (videoTaskInfo.progress || 0) * 100,
         )}%`
-      : 'starting Runway image_to_video…'
-    : ''
+      }
+      return 'starting Runway image_to_video…'
+    }
+    if (videoPhase === 'persisted') return 'saved to campaign'
+    if (videoPhase === 'persist-failed')
+      return 'saved (persist failed — session URL only)'
+    return ''
+  })()
 
   return (
     <section
@@ -376,10 +417,11 @@ export default function CinematicLane({
               data-testid="cinematic-lane-video"
               data-render-target="cinematic-video"
               data-has-output={
-                videoOutputUrl || focused?.cached_video_url ? 'true' : 'false'
+                focused?.cached_video_url || videoSessionUrl ? 'true' : 'false'
               }
               data-source-ready={videoPromptReady ? 'true' : 'false'}
               data-busy={videoBusy ? 'true' : 'false'}
+              data-persisted={focused?.cached_video_url ? 'true' : 'false'}
               data-burns-credits="true"
               title={
                 videoCanFire
@@ -397,10 +439,8 @@ export default function CinematicLane({
               <span className="text-[9px] text-zinc-200/70">
                 {videoBusy
                   ? 'generating…'
-                  : videoOutputUrl
-                  ? 'fresh · burns credits'
                   : videoCached
-                  ? 'cached · burns credits'
+                  ? 'saved · burns credits'
                   : videoCanFire
                   ? 'burns credits'
                   : 'no prompt'}
@@ -574,15 +614,17 @@ export default function CinematicLane({
               download storyboard commercial ↗
             </a>
           )}
-          {/* PR BT — Cinematic Video status row. Renders one of:
+          {/* PR BT/BU — Cinematic Video status row. Renders one of:
               - rose error from the click handler
-              - zinc "polling Runway…" while busy
-              - emerald "open generated video ↗" when the new
-                output URL came back this session.
-              The campaign's persisted `cached_video_url` (set
-              at create time) is intentionally NOT shown here —
-              that surface stays in the classic gallery's
-              Visuals tab. PR BT only surfaces fresh outputs. */}
+              - zinc "polling Runway…" / "saving to campaign…" while busy
+              - emerald "saved to campaign" once the SUCCEEDED
+                output URL has been persisted onto the campaign
+                (PR BU); link below points at the persisted
+                /api/campaigns/{id}/video path so it survives
+                reloads.
+              - rose "saved (persist failed — session URL only)"
+                fallback when persist 502s but the SUCCEEDED
+                Runway URL is still streamable in this session. */}
           {videoError && (
             <p
               data-testid="cinematic-lane-video-status"
@@ -600,18 +642,52 @@ export default function CinematicLane({
               {videoStatusText}
             </p>
           )}
-          {!videoError && !videoBusy && videoOutputUrl && (
+          {!videoError && !videoBusy && videoPhase === 'persisted' && (
+            <p
+              data-testid="cinematic-lane-video-status"
+              className="text-[10px] text-emerald-300 leading-snug"
+            >
+              {videoStatusText}
+            </p>
+          )}
+          {!videoError && !videoBusy && videoPhase === 'persist-failed' && (
+            <p
+              data-testid="cinematic-lane-video-status"
+              className="text-[10px] text-rose-300 leading-snug"
+              title="POST /cinematic-video failed; the SUCCEEDED Runway URL is still usable for this session."
+            >
+              {videoStatusText}
+            </p>
+          )}
+          {!videoError && !videoBusy && focused?.cached_video_url && (
             <a
-              href={videoOutputUrl}
+              href={focused.cached_video_url}
               target="_blank"
               rel="noreferrer"
               download
               data-testid="cinematic-lane-video-link"
+              data-persisted="true"
               className="text-[10px] text-spark hover:underline font-mono"
             >
-              open generated cinematic video ↗
+              open cinematic video ↗
             </a>
           )}
+          {!videoError &&
+            !videoBusy &&
+            !focused?.cached_video_url &&
+            videoSessionUrl && (
+              <a
+                href={videoSessionUrl}
+                target="_blank"
+                rel="noreferrer"
+                download
+                data-testid="cinematic-lane-video-link"
+                data-persisted="false"
+                className="text-[10px] text-spark hover:underline font-mono"
+              >
+                open generated cinematic video ↗ (session only)
+              </a>
+            )}
           {focused?.realtime_transcript_fetched_at && (
             <p className="text-[9px] text-zinc-600 leading-snug">
               last touched{' '}

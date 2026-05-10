@@ -1279,6 +1279,12 @@ test('AdSpark Studio UX v2 SpokespersonStudio scaffold', async ({ page }) => {
     'data-render-target',
     'cinematic-video',
   )
+  // PR BU — data-persisted reflects whether the campaign's
+  // cached_video_url is set. When the lane has no focused
+  // campaign (smoke's no-active-spokesperson path) the attr
+  // reads "false" since `focused` is null.
+  const cineVideoPersisted = await cineVideoBtn.getAttribute('data-persisted')
+  expect(['true', 'false']).toContain(cineVideoPersisted)
   const cineVideoReady = await cineVideoBtn.getAttribute('data-source-ready')
   expect(['true', 'false']).toContain(cineVideoReady)
   if (cineVideoReady === 'true') {

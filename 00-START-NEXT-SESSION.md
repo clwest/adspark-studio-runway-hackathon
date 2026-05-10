@@ -11,17 +11,17 @@ PR BA `9d0a99d`; PR BB `8702660`; PR BC `9eae15f`; PR BD
 `af48e28`; SESSION REAL-API `4a68278`; PR BH `600eec9`; PR BI
 `42a8054`; PR BJ `c04aced`; PR BK `7185554`; PR BL `8967061`;
 PR BM `669a584`; PR BN `13bc608`; PR BO `5e7400f`; PR BP
-`18a296b`; PR BQ `74d5dc6`; PR BR `ae7c130`; PR BS `bcbc1d8
-feat: v2 appearances tab hints (PR BS)`; PR BT V2 Cinematic
-Video Async Action in flight on top — SESSION_012–SESSION_051
-handoffs added).
+`18a296b`; PR BQ `74d5dc6`; PR BR `ae7c130`; PR BS `bcbc1d8`; PR BT `065a557 feat: wire
+v2 cinematic video async action (PR BT)`; PR BU Persist V2
+Cinematic Video Result to Campaign in flight on top —
+SESSION_012–SESSION_052 handoffs added).
 
 ## Where things stand
 
-- **Branch:** `main` at `bcbc1d8` (`feat: v2 appearances tab
-  hints (PR BS)`) on `origin/main`. PR BT patch in flight on
-  top — no new commit / tag yet, both pending explicit user
-  approval.
+- **Branch:** `main` at `065a557` (`feat: wire v2 cinematic
+  video async action (PR BT)`) on `origin/main`. PR BU patch
+  in flight on top — no new commit / tag yet, both pending
+  explicit user approval.
 - **Latest tag:** still **`hackathon-submission-v13`** at `ec446e4`
   (PR AF). PR AG–BI shipped the full voice arc + audit trails
   + UX v2 foundation + SpokespersonStudio + Knowledge +
@@ -36,22 +36,31 @@ handoffs added).
   buttons. Spokesperson lane unmounts when the operator
   switches modes. **Default load remains v1**; v2 reachable
   via footer toggle or `?ux=v2`.
-- **Backend routes:** **69** application + FastAPI built-ins
-  (unchanged — PR BT reuses the existing `POST
-  /api/runway/generate` + `GET /api/runway/task/{id}` helpers).
-- **Frontend build:** 397.87 KB initial JS / 107.07 KB gzip +
-  561.97 KB lazy `@runwayml/avatars-react` chunk (+3.00 KB
-  initial / +0.80 KB gzip vs PR BS — Cinematic Video gating +
-  start/poll handler + status row + warning copy + `useRef`
-  for cancellation).
-- **Playwright smoke:** `3 passed (~27.3 s)` against the mock
+- **Backend routes:** **70** application + FastAPI built-ins
+  (PR BU adds `POST /api/campaigns/{id}/cinematic-video` —
+  the smallest field-specific endpoint to persist a freshly-
+  generated cinematic video; reuses existing
+  `VideoCache.fetch` + `update_cache_fields` plumbing v1
+  already uses at create time).
+- **Frontend build:** 399.68 KB initial JS / 107.51 KB gzip +
+  561.97 KB lazy `@runwayml/avatars-react` chunk (+1.81 KB
+  initial / +0.44 KB gzip vs PR BT — persist call wiring,
+  phase-aware status copy, persisted-vs-session link
+  fallback, `data-persisted` attr).
+- **Playwright smoke:** `3 passed (~29.7 s)` against the mock
   backend booted via `bash scripts/start-local-mock.sh`. v1
-  test ~23.1 s unchanged. v2 test ~2.8 s now also asserts the
-  Cinematic Video button carries `data-burns-credits="true"`
-  + `data-render-target="cinematic-video"` + follows fixture
-  readiness (`data-source-ready` disjunction) just like the
-  Spokesperson Horizontal button from PR BP. Toggle
-  round-trip ~810 ms unchanged.
+  test ~25.3 s. v2 test ~2.9 s now also asserts the
+  Cinematic Video button carries the new
+  `data-persisted="true|false"` attribute alongside PR BT's
+  `data-burns-credits` / `data-source-ready`. Toggle
+  round-trip ~834 ms unchanged.
+- **Backend probes (PR BU):** confirmed end-to-end against
+  the mock backend — 404 on missing campaign, 422 on missing
+  `video_url`, 502 on broken upstream URL (with
+  `cache_status="failed"` + `cache_error` persisted in
+  tandem), and happy-path persist + `GET /api/campaigns`
+  reload showing `cached_video_url=/api/campaigns/{id}/video`
+  + `cache_status="ok"`.
   ```bash
   bash scripts/start-local-mock.sh
   (cd frontend && npm run test:e2e)
@@ -76,7 +85,7 @@ handoffs added).
 
 ## What's implemented (full feature stack on `main`)
 
-### UX redesign foundation (PR BD — UX v2 Flag + Shared Helpers · PR BE — SpokespersonStudio Scaffold · PR BF — Knowledge Tab Wiring · PR BG — Appearances Tab Wiring · PR BH — Mode-First Creation Modal · PR BI — Spokesperson Lane Scaffold · PR BK — Cinematic Lane Scaffold · PR BL — Dialogue Lane Scaffold · PR BM — Lane Regression Pass · PR BN — Spokesperson Reels Action Wired · PR BO — Cinematic Voiced Action Wired · PR BP — All Remaining v2 Lane Actions Wired · PR BQ — V2 Lane Inline Brief Editing · PR BR — V2 Appearances Click-Through · PR BS — Click-Through Tab Hints · PR BT — Cinematic Video Async Action Wired)
+### UX redesign foundation (PR BD — UX v2 Flag + Shared Helpers · PR BE — SpokespersonStudio Scaffold · PR BF — Knowledge Tab Wiring · PR BG — Appearances Tab Wiring · PR BH — Mode-First Creation Modal · PR BI — Spokesperson Lane Scaffold · PR BK — Cinematic Lane Scaffold · PR BL — Dialogue Lane Scaffold · PR BM — Lane Regression Pass · PR BN — Spokesperson Reels Action Wired · PR BO — Cinematic Voiced Action Wired · PR BP — All Remaining v2 Lane Actions Wired · PR BQ — V2 Lane Inline Brief Editing · PR BR — V2 Appearances Click-Through · PR BS — Click-Through Tab Hints · PR BT — Cinematic Video Async Action Wired · PR BU — Cinematic Video Persistence)
 
 - **UX v2 feature flag** at `frontend/src/uxFlag.js`. Resolves
   precedence URL `?ux=v2|v1` > localStorage `adspark.ux` >
@@ -197,6 +206,28 @@ handoffs added).
   `spokesperson-lane-reels-status`,
   `spokesperson-lane-reels-link`. Reels button new attrs:
   `data-source-ready`, `data-busy`.
+- **V2 Cinematic Video Persistence** (PR BU) — fresh outputs
+  from PR BT now survive page reloads. New `POST
+  /api/campaigns/{id}/cinematic-video` route (smallest
+  possible field-specific endpoint; route count 69 → 70)
+  reuses the existing `VideoCache.fetch` +
+  `update_cache_fields` plumbing v1 `POST /api/campaigns`
+  already uses at create time — downloads the Runway URL,
+  overwrites `data/videos/{id}.mp4`, flips
+  `cached_video_url → /api/campaigns/{id}/video`. Failure
+  modes: 404 (campaign not found), 422 (URL min/max length),
+  502 (download / content-type / size-cap; `cache_status` /
+  `cache_error` persisted in tandem). New
+  `api.persistCinematicVideo(id, url)` helper. Studio's
+  `handleGenerateCinematicVideo` chains the persist after
+  polling SUCCEEDED + emits `'persisting'` / `'persisted'` /
+  `'persist-failed'` progress phases. CinematicLane prefers
+  the persisted `cached_video_url` for the link (always when
+  set); only falls back to a session URL when persist 502s.
+  New `data-persisted` button attr; status copy now reads
+  "saving to campaign…" / "saved to campaign" / "saved
+  (persist failed — session URL only)". v1 default load
+  unchanged.
 - **V2 Cinematic Video Async Action** (PR BT) — closes the
   last v2 lane render placeholder. CinematicLane's "Cinematic
   Video" button now fires real Runway `image_to_video` via

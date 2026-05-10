@@ -154,6 +154,18 @@ export const api = {
       `/api/campaigns/${encodeURIComponent(campaignId)}/brief`,
       { method: 'POST', body: JSON.stringify(body || {}) },
     ),
+  // PR BU — Persist a freshly-generated cinematic video onto a
+  // saved campaign. Called by the v2 CinematicLane after PR BT's
+  // image_to_video polling resolves SUCCEEDED with an output URL.
+  // Backend downloads the URL via VideoCache.fetch, then flips
+  // cached_video_url + cache_status to "ok". 502 surfaces if the
+  // download fails (mock mode + a fake URL is the common cause —
+  // smoke avoids this path by never clicking the button).
+  persistCinematicVideo: (campaignId, videoUrl) =>
+    jsonFetch(
+      `/api/campaigns/${encodeURIComponent(campaignId)}/cinematic-video`,
+      { method: 'POST', body: JSON.stringify({ video_url: videoUrl }) },
+    ),
   // PR AB — Spokesperson Ad alias. Same artefact + persisted fields
   // as presentCampaign / host-video; the alias exists so the API
   // vocabulary matches the user-facing "talking spokesperson ad"

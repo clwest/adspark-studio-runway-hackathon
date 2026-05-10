@@ -297,10 +297,7 @@ export default function SpokespersonStudio({
   // Uses the saved campaign's `runway_prompt` + optional
   // `reference_image_url` + `runway_model` so the lane re-renders
   // the same cinematic visual the operator set up at create time
-  // — no inline prompt edit (today). The output URL lives on the
-  // returned task; persisting it to the campaign would require a
-  // new backend route, so PR BT keeps it lane-local (download /
-  // open link).
+  // — no inline prompt edit (today).
   //
   // Polling matches v1 App.handleGenerateVideo exactly:
   //   POLL_INTERVAL_MS = 5000  (+ jitter up to 800 ms)
@@ -308,8 +305,20 @@ export default function SpokespersonStudio({
   //   terminal = SUCCEEDED | FAILED | CANCELED
   // No infinite loops; cap-on-attempts guarantees termination.
   //
+  // PR BU — after polling resolves SUCCEEDED, the resulting
+  // output[0] URL is persisted onto the campaign via the new
+  // POST /api/campaigns/{id}/cinematic-video route. The backend
+  // downloads it (VideoCache.fetch) + flips cached_video_url to
+  // /api/campaigns/{id}/video so the v1 gallery's existing
+  // player picks it up unchanged on reload. The local
+  // `campaigns` slice is updated in place + onCharactersChanged
+  // bubbles so the v1 gallery refreshes alongside if open.
+  //
   // ⚠️ Real Runway credits per click (mock mode short-circuits
-  // to a fast-resolving SUCCEEDED in the same shape).
+  // to a fast-resolving SUCCEEDED in the same shape; in mock
+  // mode the persist call may 502 if the fake URL doesn't
+  // resolve to a video — that's a status the lane surfaces
+  // without losing the SUCCEEDED task).
   const handleGenerateCinematicVideo = async (campaignId, onProgress) => {
     if (!campaignId) {
       throw new Error('campaign id required')
@@ -331,7 +340,7 @@ export default function SpokespersonStudio({
       model: camp.runway_model || 'gen4_turbo',
     })
     onProgress?.({ phase: 'started', task: start })
-    return await new Promise((resolve, reject) => {
+    const finalTask = await new Promise((resolve, reject) => {
       let attempts = 0
       const tick = async () => {
         attempts += 1
@@ -361,6 +370,43 @@ export default function SpokespersonStudio({
       }
       tick()
     })
+    // PR BU — persist the SUCCEEDED output onto the campaign.
+    // Source URL must be present + a string we can pass to the
+    // backend's VideoCache.fetch.
+    const outputUrl =
+      Array.isArray(finalTask?.output) && finalTask.output.length > 0
+        ? String(finalTask.output[0] || '').trim()
+        : ''
+    if (outputUrl) {
+      onProgress?.({ phase: 'persisting', task: finalTask })
+      try {
+        const updatedCampaign = await api.persistCinematicVideo(
+          campaignId,
+          outputUrl,
+        )
+        setCampaigns((cs) =>
+          cs.map((x) => (x.id === campaignId ? updatedCampaign : x)),
+        )
+        onCharactersChanged?.()
+        onProgress?.({
+          phase: 'persisted',
+          task: finalTask,
+          campaign: updatedCampaign,
+        })
+        return { task: finalTask, campaign: updatedCampaign }
+      } catch (persistErr) {
+        // Persist failure does not invalidate the SUCCEEDED task
+        // — surface it as a `persist-failed` phase so the lane can
+        // still link the fresh URL while showing the warning.
+        onProgress?.({
+          phase: 'persist-failed',
+          task: finalTask,
+          error: persistErr,
+        })
+        return { task: finalTask, campaign: null, persistError: persistErr }
+      }
+    }
+    return { task: finalTask, campaign: null }
   }
 
   // PR BP — Stitch Storyboard Commercial. ffmpeg-only concat
