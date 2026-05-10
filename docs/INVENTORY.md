@@ -1,7 +1,36 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after **PR DE — Curated Self-Demo Grounding**.
+context-kit refresh after **PR DF — Tighten Grounding Language**.
+PR DE landed a structurally clean curated narrative, but a real demo
+of the grounded avatar on Donny's `d00dc42fe5cb` campaign surfaced a
+softer conflation: the spokesperson described context-kit as if it
+helped *the avatar* maintain context at runtime. The LLM bait was
+the ambiguous word "session" — context-kit talks about "AI coding
+sessions" and the avatar generalized to "this conversation." PR DF
+closes the ambiguity. Preamble adds three new hard rules: (a) do not
+describe context-kit as the avatar's memory system / memory layer /
+runtime power source; (b) name the IDE-side assistants explicitly
+(Claude Code / Cursor / Copilot) so "session" is pinned to
+build-time; (c) when asked how the spokesperson knows things,
+explain campaign grounding documents + character knowledge sources
+*separately* from context-kit. Two new canonical lines added:
+*"context-kit is a memory protocol for AI coding sessions, not the
+memory system for Character OS spokespeople."* and *"context-kit
+does not make the avatars remember conversations. It helped the AI
+builders stay aligned while developing the project."* Section 2
+leads with a disambiguation paragraph; Section 6 gains three new
+Q&A pairs ("Does context-kit power the spokespeople's memory?" / 
+"How do you know things about Character OS?" / "So what *is*
+context-kit then, in one line?") carrying the "context-kit is how
+the project was built, not what the product is" answer style.
+Document length 8,103 → **10,742 chars** (still way under cap). Two
+new pytests pin forbidden phrasings absent + required PR DF
+distinctions present (whitespace-normalized substring check defends
+against Markdown line wrap at column 72). Pytest **34/34**. No
+backend / route / broker / model changes; backend route count still
+**76**.
+Earlier: PR DE — Curated Self-Demo Grounding.
 PR DD shipped the raw attach route + an uploader that file-dumped
 `docs/WHAT_IT_IS.md` + START head + INVENTORY head + the latest 2
 handoffs verbatim into the realtime grounding slot. The dump

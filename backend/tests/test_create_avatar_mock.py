@@ -831,3 +831,85 @@ def test_grounding_document_under_cap():
     assert "[truncated to 40k chars]" not in content, (
         "curated narrative grew past 40k chars; trim back or restructure"
     )
+
+
+# ---- PR DF — forbid memory-layer conflation ------------------
+#
+# The PR DE narrative was clean *structurally* but a real demo of
+# the grounded avatar surfaced a softer conflation: the spokesperson
+# was describing context-kit as if it helped *the avatar* maintain
+# context across the realtime conversation. PR DF tightens the
+# language so that misreading is no longer available — context-kit
+# is a build-time tool for AI coding sessions, full stop.
+#
+# These tests catch the regression in either direction: a prose edit
+# that re-introduces the forbidden phrasing, or one that drops the
+# stronger PR DF distinctions.
+
+
+def test_grounding_document_disambiguates_avatar_memory():
+    """No phrasing in the document may be quoted to mean context-kit
+    is the avatar's memory layer or powers the realtime conversation
+    or gives the spokesperson context at runtime."""
+    mod = _load_uploader_module()
+    _, content = mod.build_payload()
+    lower = content.lower()
+
+    # Phrasings that would let a realtime LLM conflate the two.
+    # Substrings only — the test allows the doc to MENTION these
+    # framings in negation (e.g., "context-kit is NOT the memory
+    # layer for the avatars") because the negation lands as a
+    # different substring.
+    forbidden = [
+        # Affirmative conflation — these would land verbatim if the
+        # author slipped.
+        "context-kit helps character os spokespeople",
+        "context-kit is the memory layer for the avatars",
+        "context-kit powers the spokesperson",
+        "context-kit gives the avatars memory",
+        "context-kit makes the avatars remember",
+        # The PR DD framing that triggered this PR — replaced with
+        # explicit "AI coding sessions" language in PR DF.
+        "context-kit is the memory system for character os",
+    ]
+    for phrase in forbidden:
+        assert phrase not in lower, (
+            f"forbidden conflation phrase present: {phrase!r}"
+        )
+
+
+def test_grounding_document_carries_pr_df_distinctions():
+    """The PR DF canonical phrasings + the new section-6 Q&A entries
+    must land. If a prose edit drops one, the spokesperson will
+    drift back toward the PR DE softness.
+
+    Normalizes whitespace before the substring check — Markdown line
+    wrapping in the script's prose otherwise breaks a phrase that
+    happens to land at column 72 across two lines.
+    """
+    import re
+    mod = _load_uploader_module()
+    _, content = mod.build_payload()
+    flat = re.sub(r"\s+", " ", content.lower())
+
+    required = [
+        # Two canonical lines from the preamble.
+        "memory protocol for ai coding sessions",
+        "not the memory system for character os spokespeople",
+        "context-kit does not make the avatars remember",
+        # The "how the project was built, not what the product is"
+        # answer style in section 6.
+        "how the project was built, not what the product is",
+        # The disambiguation sentence from section 2 — names the
+        # IDE-side assistants explicitly so the LLM can't generalize
+        # "session" to "realtime conversation".
+        "claude code",
+        # The "How do you know things" answer — grounding doc +
+        # knowledge sources, not context-kit.
+        "campaign grounding document",
+        "knowledge sources",
+    ]
+    for phrase in required:
+        assert phrase in flat, (
+            f"required PR DF distinction missing: {phrase!r}"
+        )

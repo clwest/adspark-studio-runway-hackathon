@@ -78,17 +78,35 @@ Hard rules for your answers:
 
 - Do **not** describe Character OS as context-kit.
 - Do **not** describe context-kit as the product being demoed.
+- Do **not** describe context-kit as the memory system for Character
+  OS spokespeople, the memory layer for the avatars, or the thing
+  that powers the realtime conversation. It is **none of those**.
 - When asked about context-kit, say it is the separate AI
-  context-management package that helped the builders stay aligned
-  across many coding sessions.
+  context-management package that helped the **AI coding sessions**
+  building this project stay aligned. By "AI coding session" we
+  mean a developer's IDE-side assistant (Claude Code / Cursor /
+  Copilot writing real code) — **not** a viewer talking to a
+  Character OS spokesperson.
 - When asked about Character OS, say it is the AI spokesperson
   platform — the hackathon product itself.
+- If asked **how the spokesperson knows things**, explain it using
+  Character OS's own product features: the **campaign grounding
+  document** attached to this campaign, plus the character's
+  **knowledge sources**. Explain those *separately* from context-kit.
+  Do not introduce context-kit when the topic is the spokesperson's
+  knowledge.
 - If asked something this document does not cover, say so politely
   and offer to discuss what is covered.
 
 **Core distinction (memorize this line and repeat it when asked):**
 
-> Character OS is the hackathon product. context-kit is the separate AI context-management package used to coordinate the build."""
+> Character OS is the hackathon product. context-kit is the separate AI context-management package used to coordinate the build.
+
+**Two more lines to keep handy:**
+
+> context-kit is a memory protocol for AI coding sessions, not the memory system for Character OS spokespeople.
+
+> context-kit does not make the avatars remember conversations. It helped the AI builders stay aligned while developing the project."""
 
 
 SECTIONS: list[tuple[str, str]] = [
@@ -118,9 +136,18 @@ feature.""",
     (
         "2. What context-kit Is",
         """\
-context-kit is a **separate** package and discipline for keeping AI
-coding sessions oriented as a codebase grows. It is **not** Character
-OS. It is a tool the builders used during the hackathon.
+context-kit is a **separate** package and discipline for keeping
+**AI coding sessions** oriented as a codebase grows. It is **not**
+Character OS. It is **not** the spokesperson's memory. It is **not**
+involved at runtime when a viewer talks to a Character OS avatar.
+
+**Disambiguation up front.** When this document says "AI coding
+session" it means a developer's IDE-side AI assistant — Claude Code,
+Cursor, Copilot — actually writing or editing source files in the
+Character OS repository. It does **not** mean a viewer talking to a
+Character OS spokesperson over WebRTC. Those are two completely
+different things that both happen to involve AI, and context-kit
+only addresses the first one.
 
 context-kit's job is to make sure every new AI coding session —
 whether yesterday, today, or six weeks from now — can pick up
@@ -141,9 +168,10 @@ It also includes a drift guard
 (`scripts/check-context-kit-drift.sh`) that warns when the anchors
 haven't been refreshed against recent commits.
 
-context-kit is **package-able tooling**. It is reusable on other
-projects. The Character OS repo just happens to be one place it grew
-up.""",
+context-kit is **package-able tooling for AI developers**. It is
+reusable on other projects. The Character OS repo just happens to
+be one place it grew up. End users of Character OS never touch it
+and never see it.""",
     ),
     (
         "3. How context-kit Helped Build Character OS",
@@ -264,6 +292,28 @@ paraphrase for tone but keep the facts straight:
   → No. The realtime conversation is powered by Runway's
   `/v1/realtime_sessions` plus a grounding document attached to the
   campaign. context-kit's job is keeping the *builders* on track.
+
+- **"Does context-kit power the spokespeople's memory?"**
+  → No. context-kit was used during development to keep AI coding
+  sessions aligned. Character OS has its own product features for
+  character identity, knowledge sources, campaigns, conversations,
+  and outputs. None of those features run through context-kit.
+
+- **"How do you know things about Character OS?"** /
+  **"Where does your memory come from?"** /
+  **"What gives you context?"**
+  → From two Character OS product features, not from context-kit:
+  (1) the **campaign grounding document** attached to this campaign
+  — Markdown content the realtime broker passes to Runway as
+  `documentIds` on the session — and (2) the **knowledge sources**
+  saved on my character record. context-kit is not involved at
+  runtime.
+
+- **"So what *is* context-kit then, in one line?"**
+  → context-kit is how the project was built, not what the product
+  is. It gave each new AI coding session the current repo state,
+  recent decisions, and verification history so the builders didn't
+  drift.
 
 If a question falls outside this document, say so and offer to talk
 about what is covered.""",

@@ -1,6 +1,70 @@
 # START NEXT SESSION — AdSpark Studio
 
-**Last touched:** 2026-05-10 (PR DE — Curate
+**Last touched:** 2026-05-10 (PR DF — Tighten
+context-kit grounding language so the realtime
+spokesperson can no longer drift into describing
+context-kit as the avatar's memory layer. PR DE's
+curated narrative was structurally clean (Character
+OS vs context-kit clearly separated) but a real demo
+of the grounded avatar on Donny's `d00dc42fe5cb`
+campaign surfaced a softer conflation: the
+spokesperson described context-kit as if it helped
+*the avatar* maintain context across the realtime
+conversation. The LLM bait was the word "session" —
+context-kit talks about "AI coding sessions" but the
+realtime spokesperson reads "session" and generalizes
+to "this conversation." PR DF closes that ambiguity.
+Preamble adds three new hard rules: (a) do not
+describe context-kit as memory system / memory layer /
+powers-the-realtime; (b) when explaining context-kit,
+name the IDE-side assistants explicitly (Claude Code /
+Cursor / Copilot writing real code) and contrast with
+the WebRTC viewer talking to a Character OS
+spokesperson; (c) when asked how the spokesperson
+knows things, explain campaign grounding documents
+and character knowledge sources — Character OS's own
+product features — *separately* from context-kit. Two
+new canonical lines added under the original
+distinction blockquote: *"context-kit is a memory
+protocol for AI coding sessions, not the memory
+system for Character OS spokespeople."* and
+*"context-kit does not make the avatars remember
+conversations. It helped the AI builders stay aligned
+while developing the project."* Section 2 leads with
+an explicit disambiguation paragraph that names the
+two senses of "session" and pins context-kit to the
+build-time one. Section 6 gains three new Q&A pairs:
+"Does context-kit power the spokespeople's memory?"
+(No, with explanation), "How do you know things about
+Character OS / Where does your memory come from /
+What gives you context?" (campaign grounding doc +
+knowledge sources, not context-kit), and "So what
+*is* context-kit then, in one line?" (carries the new
+"context-kit is how the project was built, not what
+the product is" answer style). Document length
+8,103 → **10,742 chars** — still way under the 40k
+cap. Two new pytests:
+`test_grounding_document_disambiguates_avatar_memory`
+forbids six specific conflation phrases ("context-kit
+helps Character OS spokespeople" / "context-kit is
+the memory layer for the avatars" / "context-kit
+powers the spokesperson" / "context-kit gives the
+avatars memory" / "context-kit makes the avatars
+remember" / "context-kit is the memory system for
+Character OS"); `test_grounding_document_carries_pr_df_distinctions`
+requires seven new canonical substrings present
+(whitespace-normalized so Markdown line wrapping
+doesn't break the substring check at column 72).
+Pytest **34/34** (32 prior + 2 new PR DF). Drift guard
+OK (1 commit since anchor touch, threshold 5). Hygiene
+clean. No real Runway calls fired — Donny's
+`d00dc42fe5cb` campaign still carries the PR DE
+curated grounding doc; operator re-runs the upload
+script after PR DF lands to refresh with the
+tightened version (one real `/v1/documents` call,
+same campaign). No backend / route / broker / model
+changes; backend route count still **76**.
+Earlier: PR DE — Curate
 context-kit grounding so product and build tool stay
 separate. The PR DD revision raw-dumped repo docs
 (`docs/WHAT_IT_IS.md` full + head of START + INVENTORY
