@@ -1,6 +1,37 @@
 # START NEXT SESSION — AdSpark Studio
 
-**Last touched:** 2026-05-10 (PR DA — multi-ad /
+**Last touched:** 2026-05-10 (PR DA Demo Pillars —
+final-day demo prep wired the v2 Conversations tab and
+finished the Dialogue Scene flow without leaving v2.
+**Conversation**: new `<ConversationsTab>` mounts the
+existing `<RealtimeSpokesperson>` (lazy-loaded
+`@runwayml/avatars-react` `<AvatarCall>` against
+`/v1/realtime_sessions` via the PR I broker) using the
+operator's selected campaign for brand context. Real
+WebRTC realtime when `RUNWAY_API_KEY` is set; clear
+gated states for "no avatar bound" / "avatar not
+ready" / "no campaign selected" with operator-readable
+next-step copy. **Dialogue Scene**: new
+`<DialogueLinesEditor>` + `<DialogueLineRow>`
+subcomponents in `DialogueLane.jsx` close the per-line
+gap. Each line gets a text textarea (≤300 chars), a
+speaker dropdown filtered to characters with
+`runway_avatar_status in {ready, mock}`, a status pill,
+`Save line` + `Generate line` buttons. `Generate line`
+fires `/api/campaigns/{id}/dialogue/generate-line/
+{line_id}` (real `avatar_videos` per click). Stitch's
+disabled-reason copy now points at the in-lane
+generate buttons instead of the legacy wizard. Mock
+probe round-tripped Donny / Riggs / Miles end-to-end:
+Plan → save 3 lines → generate 3 MP4s → Stitch →
+`dialogue_scene_video_url=ok`. No legacy round-trip
+required for any pillar. Backend untouched (route
+count still **74**); no new endpoints — just exposed
+existing PR I + PR AF routes through new in-lane UI.
+Pytest 20/20, smoke 3/3, build 514.01 KB initial /
+138.64 KB gzip (+8.09 KB / +1.65 KB). No real Runway
+calls fired this slice — the demo run requires explicit
+operator approval. Earlier: PR DA — multi-ad /
 reviewable Spokesperson campaigns. The lane used to
 silently target "most recent" via internal
 `focused = sorted[0]`, so clicking `+ New Campaign`
@@ -274,8 +305,9 @@ Dead-End `ea4ba88`; PR CV Runway API Contract Audit
 `d9e556c`; PR CX Minimum Viable Knowledge Flow
 `80e32ca`; PR CY Append-Only Output History
 `2630532`; PR DA Multi-Ad / Reviewable Spokesperson
-Campaigns in flight on top —
-SESSION_012–SESSION_083 handoffs added).
+Campaigns `2510562`; PR DA Demo Pillars (Conversation +
+Dialogue Scene readiness) in flight on top —
+SESSION_012–SESSION_084 handoffs added).
 
 ## Where things stand
 

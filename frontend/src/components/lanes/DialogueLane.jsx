@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { formatHistoryTimestamp } from '../../uiHelpers.js'
 import LaneBriefCreator from './LaneBriefCreator.jsx'
@@ -40,6 +40,12 @@ export default function DialogueLane({
   // PR CU — closes the empty-state dead-end. Same shape as the
   // other lanes.
   onCreateCampaign = null,
+  // PR DA (Demo Pillars) — per-line text/character edit + per-line
+  // render. Closes the gap that used to force operators back to
+  // /legacy to render dialogue lines before stitching.
+  onSaveDialogueLine = null,
+  onGenerateDialogueLine = null,
+  availableCharacters = [],
 }) {
   const campaigns = Array.isArray(linkedCampaigns) ? linkedCampaigns : []
   const sorted = [...campaigns].sort((a, b) => {
@@ -126,7 +132,7 @@ export default function DialogueLane({
     : lineCount === 0
     ? 'Plan dialogue lines first.'
     : !stitchAllReady
-    ? `${lines.filter((l) => l.status === 'ok').length}/${lineCount} lines ready — render the rest in the legacy wizard before stitching.`
+    ? `${lines.filter((l) => l.status === 'ok').length}/${lineCount} lines ready — click Generate per line below to render the rest before stitching.`
     : !onStitchDialogue
     ? 'Wire the v2 onStitchDialogue handler before this button can fire.'
     : ''
@@ -195,9 +201,9 @@ export default function DialogueLane({
           </h4>
           <p className="text-[11px] text-zinc-400 leading-snug max-w-prose">
             Build a Hook / Beat / Closer skit across multiple
-            spokespeople. Plan and stitch the scene here; per-line
-            renders run in the legacy wizard until inline rendering
-            lands.
+            spokespeople. Plan, edit lines, render each line, and
+            stitch the scene — all inline. Real Runway credits per
+            line; ffmpeg-only stitch + reels.
           </p>
         </div>
         {hasSpokesperson && (
@@ -284,9 +290,8 @@ export default function DialogueLane({
                 )}
               </ul>
               <p className="text-[10px] text-zinc-500 leading-snug pt-1">
-                Cast is inferred from the dialogue lines saved on
-                this campaign. Editing speakers per line lands in a
-                follow-up slice.
+                Cast is inferred from the saved dialogue lines.
+                Edit each line's speaker + text in Step 3 below.
               </p>
             </>
           ) : (
@@ -356,6 +361,22 @@ export default function DialogueLane({
                   : 'no campaign'}
               </span>
             </button>
+
+            {/* PR DA (Demo Pillars) — per-line editor list. Renders
+                between Plan and Stitch when at least one line exists.
+                Each line is editable (text + speaker dropdown) and
+                rendered via the existing /dialogue/generate-line
+                route. Backend supports it; UI was the gap. */}
+            {lineCount > 0 && (
+              <DialogueLinesEditor
+                campaignId={focused?.id}
+                lines={lines}
+                availableCharacters={availableCharacters}
+                onSaveDialogueLine={onSaveDialogueLine}
+                onGenerateDialogueLine={onGenerateDialogueLine}
+              />
+            )}
+
             {/* PR BP — Stitch Dialogue Scene (ffmpeg only) */}
             <button
               type="button"
@@ -546,4 +567,284 @@ export default function DialogueLane({
 function formatTouchedOrDash(iso) {
   if (!iso) return '—'
   return formatHistoryTimestamp(iso) || '—'
+}
+
+/**
+ * PR DA (Demo Pillars) — per-line editor for Dialogue Scene.
+ *
+ * Each line gets:
+ *   - text textarea (≤300 chars to match Runway's avatar_videos
+ *     speech cap)
+ *   - speaker dropdown populated from the workspace's
+ *     `availableCharacters` slice (filtered server-side to only
+ *     those with a ready Runway avatar — backend
+ *     `/dialogue/save-line` 409s otherwise)
+ *   - status pill (idle / pending / running / ok / failed)
+ *   - "Save line" button — POSTs /dialogue/line/{line_id}
+ *   - "Generate line" button — POSTs /dialogue/generate-line/{line_id}
+ *     ⚠️ Burns Runway credits (one /v1/avatar_videos task per line)
+ *
+ * Closes the gap that used to require operators to drop into
+ * /legacy to render per-line clips before the v2 lane could
+ * stitch them. Saving a line resets that line's status to `idle`
+ * (backend handles this automatically), so the operator must
+ * Generate again after editing.
+ */
+function DialogueLinesEditor({
+  campaignId,
+  lines,
+  availableCharacters,
+  onSaveDialogueLine,
+  onGenerateDialogueLine,
+}) {
+  const readyChars = (availableCharacters || []).filter(
+    (c) =>
+      c.runway_avatar_id &&
+      ['ready', 'mock'].includes(c.runway_avatar_status || ''),
+  )
+  return (
+    <ul
+      data-testid="dialogue-lane-lines-editor"
+      data-line-count={lines.length}
+      className="space-y-1.5 pt-1"
+    >
+      {lines.map((line) => (
+        <DialogueLineRow
+          key={line.id}
+          campaignId={campaignId}
+          line={line}
+          readyChars={readyChars}
+          onSave={onSaveDialogueLine}
+          onGenerate={onGenerateDialogueLine}
+        />
+      ))}
+    </ul>
+  )
+}
+
+function DialogueLineRow({
+  campaignId,
+  line,
+  readyChars,
+  onSave,
+  onGenerate,
+}) {
+  const [draftText, setDraftText] = useState(line.text || '')
+  const [draftCharId, setDraftCharId] = useState(line.character_id || '')
+  const [savingLine, setSavingLine] = useState(false)
+  const [generating, setGenerating] = useState(false)
+  const [error, setError] = useState('')
+
+  // PR DA — keep local form state in sync with parent slice so
+  // /generate-line refreshes (which mutate the line) propagate
+  // back into the textarea + dropdown.
+  useEffect(() => {
+    setDraftText(line.text || '')
+    setDraftCharId(line.character_id || '')
+  }, [line.id, line.text, line.character_id])
+
+  const dirty =
+    (draftText || '').trim() !== (line.text || '').trim() ||
+    (draftCharId || '') !== (line.character_id || '')
+  const canSave = Boolean(
+    onSave && campaignId && (draftText.trim().length > 0 || draftCharId) && dirty && !savingLine,
+  )
+  const canGenerate = Boolean(
+    onGenerate &&
+      campaignId &&
+      (line.text || '').trim().length > 0 &&
+      line.character_id &&
+      !generating &&
+      !dirty,
+  )
+
+  const handleSave = async () => {
+    if (!canSave) return
+    setError('')
+    setSavingLine(true)
+    try {
+      await onSave(campaignId, line.id, {
+        text: draftText.trim(),
+        character_id: draftCharId || null,
+      })
+    } catch (e) {
+      setError(`save: ${e?.message || e}`)
+    } finally {
+      setSavingLine(false)
+    }
+  }
+
+  const handleGenerate = async () => {
+    if (!canGenerate) return
+    setError('')
+    setGenerating(true)
+    try {
+      await onGenerate(campaignId, line.id)
+    } catch (e) {
+      setError(`generate: ${e?.message || e}`)
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  const statusTone =
+    line.status === 'ok'
+      ? 'emerald'
+      : line.status === 'failed'
+      ? 'rose'
+      : line.status === 'running' || line.status === 'pending'
+      ? 'amber'
+      : 'zinc'
+  const statusClass = {
+    emerald: 'bg-emerald-500/15 text-emerald-200 ring-emerald-400/40',
+    rose: 'bg-rose-500/15 text-rose-200 ring-rose-400/40',
+    amber: 'bg-amber-500/15 text-amber-200 ring-amber-400/40',
+    zinc: 'bg-zinc-800 text-zinc-400 ring-zinc-700',
+  }[statusTone]
+
+  const beat = line.label || line.id || 'line'
+  const charsLeft = 300 - draftText.length
+
+  return (
+    <li
+      data-testid="dialogue-lane-line-row"
+      data-line-id={line.id}
+      data-line-status={line.status}
+      className="rounded ring-1 ring-zinc-800 bg-zinc-950/60 px-2 py-1.5 space-y-1"
+    >
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <span className="text-[10px] uppercase tracking-wide text-zinc-500 font-mono">
+          {beat}
+        </span>
+        <span
+          className={`text-[9px] rounded-full px-2 py-0.5 font-mono ring-1 ${statusClass}`}
+          title={`status: ${line.status}`}
+        >
+          {String(line.status).replace(/_/g, ' ')}
+        </span>
+      </div>
+      <textarea
+        value={draftText}
+        onChange={(e) => setDraftText(e.target.value)}
+        placeholder="Line of dialogue (≤300 chars, matches Runway avatar_videos cap)"
+        rows={2}
+        maxLength={300}
+        disabled={savingLine || generating}
+        data-testid="dialogue-lane-line-text"
+        className="w-full rounded bg-zinc-950 ring-1 ring-zinc-800 px-1.5 py-1 text-[10px] leading-snug font-mono focus:ring-pink-400 outline-none disabled:opacity-60"
+      />
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <select
+          value={draftCharId}
+          onChange={(e) => setDraftCharId(e.target.value)}
+          disabled={savingLine || generating || readyChars.length === 0}
+          data-testid="dialogue-lane-line-character"
+          className="rounded bg-zinc-950 ring-1 ring-zinc-800 px-1.5 py-1 text-[10px] focus:ring-pink-400 outline-none disabled:opacity-60 flex-1 min-w-0"
+        >
+          <option value="">— pick a speaker —</option>
+          {readyChars.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name} ({c.runway_avatar_status})
+            </option>
+          ))}
+        </select>
+        <span className="text-[9px] text-zinc-600 font-mono shrink-0">
+          {charsLeft}/300
+        </span>
+      </div>
+      {readyChars.length === 0 && (
+        <p className="text-[9px] text-amber-300/80 leading-snug">
+          No spokespeople have a ready Runway avatar yet. Open a
+          spokesperson and click Create Avatar to enable dialogue
+          rendering.
+        </p>
+      )}
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={!canSave}
+          data-testid="dialogue-lane-line-save"
+          className={
+            'text-[10px] rounded px-2 py-1 font-mono transition-colors ' +
+            (canSave
+              ? 'bg-zinc-700 hover:bg-zinc-600 text-zinc-100 ring-1 ring-zinc-600'
+              : 'bg-zinc-800/40 text-zinc-400 ring-1 ring-zinc-700 cursor-not-allowed disabled:opacity-80')
+          }
+          title={
+            !onSave
+              ? 'Wire onSaveDialogueLine before this can fire.'
+              : !dirty
+              ? 'No edits to save.'
+              : !draftCharId
+              ? 'Pick a speaker.'
+              : savingLine
+              ? 'Saving…'
+              : 'POST /dialogue/line/{line_id} — no Runway credits.'
+          }
+        >
+          {savingLine ? 'Saving…' : 'Save line'}
+        </button>
+        <button
+          type="button"
+          onClick={handleGenerate}
+          disabled={!canGenerate}
+          data-testid="dialogue-lane-line-generate"
+          data-burns-credits="true"
+          className={
+            'text-[10px] rounded px-2 py-1 font-mono transition-colors ' +
+            (canGenerate
+              ? 'ring-1 ring-rose-400/50 bg-rose-500/30 hover:bg-rose-500/45 text-rose-100'
+              : 'bg-zinc-800/40 text-zinc-400 ring-1 ring-zinc-700 cursor-not-allowed disabled:opacity-80')
+          }
+          title={
+            !onGenerate
+              ? 'Wire onGenerateDialogueLine before this can fire.'
+              : dirty
+              ? 'Save edits before generating.'
+              : !line.character_id
+              ? 'Pick + save a speaker first.'
+              : !line.text
+              ? 'Save a line of text first.'
+              : generating
+              ? 'Generating…'
+              : '⚠️ POST /dialogue/generate-line — burns Runway credits per click (one avatar_videos task).'
+          }
+        >
+          {generating
+            ? 'Generating…'
+            : line.status === 'ok'
+            ? 'Re-render line'
+            : 'Generate line'}
+        </button>
+        {line.video_url && line.status === 'ok' && (
+          <a
+            href={line.video_url}
+            target="_blank"
+            rel="noreferrer"
+            download
+            className="text-[10px] text-spark hover:underline font-mono ml-auto"
+            data-testid="dialogue-lane-line-link"
+          >
+            preview ↗
+          </a>
+        )}
+      </div>
+      {error && (
+        <p
+          data-testid="dialogue-lane-line-error"
+          className="text-[10px] text-rose-300 leading-snug"
+          role="status"
+          aria-live="polite"
+        >
+          {error}
+        </p>
+      )}
+      {!error && line.error && line.status === 'failed' && (
+        <p className="text-[10px] text-rose-300 leading-snug" title={line.error}>
+          backend · {line.error}
+        </p>
+      )}
+    </li>
+  )
 }

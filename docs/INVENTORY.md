@@ -1,8 +1,35 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after **PR DA — Multi-Ad / Reviewable
-Spokesperson Campaigns**. The lane used to silently target
+context-kit refresh after **PR DA Demo Pillars — Conversation
++ Dialogue Scene readiness**. Final-day demo prep wired three
+demo-critical surfaces in the v2 spokesperson workspace:
+**Pillar 1 (Spokesperson Ad)** already worked post the
+multi-ad PR DA — verified end-to-end. **Pillar 2 (Conversation)**
+mounts the existing `<RealtimeSpokesperson>` (lazy-loaded
+`@runwayml/avatars-react` `<AvatarCall>` against
+`/v1/realtime_sessions` via the PR I broker) inside a new
+`<ConversationsTab>` using the operator's selected campaign
+for brand context. Real WebRTC realtime when
+`RUNWAY_API_KEY` is set; gated states with operator-readable
+next-step copy when no avatar bound, avatar not ready, or no
+campaign selected. **Pillar 3 (Dialogue Scene)** closes the
+per-line gap that used to require dropping into `/legacy` to
+render lines before the v2 stitch button could fire. New
+`<DialogueLinesEditor>` + `<DialogueLineRow>` subcomponents
+inside `DialogueLane.jsx` give each planned line a text
+textarea (≤300 chars), a speaker dropdown filtered to
+characters with `runway_avatar_status in {ready, mock}`, a
+status pill, `Save line` (POSTs `/dialogue/line/{line_id}`),
+and `Generate line` (POSTs `/dialogue/generate-line/{line_id}`,
+fires real `avatar_videos`). Mock probe round-tripped Donny /
+Riggs / Miles end-to-end: Plan → save 3 lines → generate 3
+MP4s → Stitch. Lane subtitle + stitch disabled-reason copy
+refreshed to point at the in-lane editor instead of the
+legacy wizard. Backend untouched at the route layer (route
+count still **74**); no new endpoints — just exposed existing
+PR I + PR AF routes through new in-lane UI.
+Earlier: The lane used to silently target
 "most recent" via internal `focused = sorted[0]`; clicking
 `+ New Campaign` left the prior campaign's brief + script
 bleeding through into `<LaneBriefEditor>` instead of mounting

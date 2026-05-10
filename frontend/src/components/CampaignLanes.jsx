@@ -94,6 +94,10 @@ export default function CampaignLanes({
   creatingNewCampaign = false,
   onSelectCampaign = null,
   onCancelCreateCampaign = null,
+  // PR DA (Demo Pillars) — characters slice for the Dialogue
+  // Scene speaker dropdowns. Workspace already loads this for
+  // its own header / library use; we just pass it through.
+  availableCharacters = [],
 }) {
   const [activeMode, setActiveModeState] = useState(() => getActiveMode())
 
@@ -143,6 +147,19 @@ export default function CampaignLanes({
   const handleBuildDialogueReels = async (campaignId) => {
     if (!campaignId) throw new Error('campaign id required')
     return propagate(await api.buildDialogueSceneReels(campaignId))
+  }
+  // PR DA (Demo Pillars) — per-line save + generate. Backend
+  // routes already exist (POST /dialogue/line/{line_id} +
+  // /dialogue/generate-line/{line_id}); these wrappers propagate
+  // the updated Campaign to the workspace's local slice so the
+  // lane's line list re-renders against fresh status pills.
+  const handleSaveDialogueLine = async (campaignId, lineId, body) => {
+    if (!campaignId || !lineId) throw new Error('campaign + line id required')
+    return propagate(await api.saveDialogueLine(campaignId, lineId, body))
+  }
+  const handleGenerateDialogueLine = async (campaignId, lineId) => {
+    if (!campaignId || !lineId) throw new Error('campaign + line id required')
+    return propagate(await api.generateDialogueLine(campaignId, lineId))
   }
   const handleUpdateBrief = async (campaignId, body) => {
     if (!campaignId) throw new Error('campaign id required')
@@ -397,6 +414,9 @@ export default function CampaignLanes({
           onBuildDialogueReels={handleBuildDialogueReels}
           onUpdateBrief={handleUpdateBrief}
           onCreateCampaign={handleCreateCampaign}
+          onSaveDialogueLine={handleSaveDialogueLine}
+          onGenerateDialogueLine={handleGenerateDialogueLine}
+          availableCharacters={availableCharacters}
         />
       )}
 

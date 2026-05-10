@@ -11,6 +11,7 @@ import CampaignLanes from './CampaignLanes.jsx'
 import CharacterCard from './CharacterCard.jsx'
 import KnowledgePanel from './KnowledgePanel.jsx'
 import OutputsGallery from './OutputsGallery.jsx'
+import RealtimeSpokesperson from './RealtimeSpokesperson.jsx'
 
 const TABS = [
   { id: 'identity', label: 'Identity' },
@@ -803,16 +804,24 @@ export default function SpokespersonWorkspace() {
             creatingNewCampaign={creatingNewCampaign}
             onSelectCampaign={handleSelectCampaign}
             onCancelCreateCampaign={handleCancelCreateCampaign}
+            availableCharacters={characters}
           />
         </section>
       )}
 
       {activeTab === 'conversations' && (
-        <TabComingSoon
-          testid="spokesperson-workspace-conversations"
-          title="Conversations"
-          summary="Realtime sessions and transcript replays for this spokesperson."
-          tease="Conversation history will appear here."
+        // PR DA (Demo Pillars) — mount the existing
+        // <RealtimeSpokesperson> WebRTC component against the
+        // selected campaign so operators can talk to the
+        // brand-aware avatar from inside the v2 workspace
+        // (was only reachable via /legacy CampaignGallery).
+        // RealtimeSpokesperson handles its own gated / idle /
+        // live / failed states and labels real vs mock clearly.
+        <ConversationsTab
+          activeSpokesperson={character}
+          linkedCampaigns={linkedCampaigns}
+          selectedCampaignId={selectedCampaignId}
+          onSelectCampaignsTab={() => setActiveTab('campaigns')}
         />
       )}
 
@@ -837,6 +846,126 @@ export default function SpokespersonWorkspace() {
     </main>
   )
 }
+
+/**
+ * PR DA (Demo Pillars) — Conversations tab. Wraps the existing
+ * `<RealtimeSpokesperson>` WebRTC component (was only mounted in
+ * the legacy CampaignGallery) against the operator's currently-
+ * selected campaign. Real WebRTC realtime when `RUNWAY_API_KEY`
+ * is set; gated state with explanatory copy otherwise.
+ *
+ * Three render states:
+ *   - **No avatar yet** → friendly empty state pointing the
+ *     operator at the Identity tab to bind a Runway avatar.
+ *   - **No campaign selected** → empty state pointing at the
+ *     Campaigns tab to pick or create a campaign.
+ *   - **Ready** → mounts <RealtimeSpokesperson> with the
+ *     selected campaign as context. The component itself
+ *     handles its own start/live/end/failed sub-states.
+ */
+function ConversationsTab({
+  activeSpokesperson,
+  linkedCampaigns,
+  selectedCampaignId,
+  onSelectCampaignsTab,
+}) {
+  const focused = selectedCampaignId
+    ? linkedCampaigns.find((c) => c.id === selectedCampaignId) || null
+    : null
+
+  const avatarReady =
+    activeSpokesperson?.runway_avatar_status === 'ready' ||
+    activeSpokesperson?.runway_avatar_status === 'mock'
+  const avatarStatus = activeSpokesperson?.runway_avatar_status || 'none'
+
+  let gateReason = ''
+  if (!activeSpokesperson?.runway_avatar_id) {
+    gateReason =
+      'No Runway avatar bound yet. Open the Identity tab and click Create Avatar first.'
+  } else if (!avatarReady) {
+    gateReason = `Runway avatar status is "${avatarStatus}" — wait until it's ready or rebind from Identity.`
+  } else if (!focused) {
+    gateReason =
+      'No campaign selected. Pick or create one from the Campaigns tab so the avatar has brand context.'
+  }
+
+  return (
+    <section
+      data-testid="spokesperson-workspace-conversations"
+      data-conversation-mode={focused ? 'live-ready' : 'gated'}
+      className="space-y-3"
+    >
+      <header className="rounded-2xl ring-1 ring-zinc-800 bg-zinc-950/40 p-3 space-y-1">
+        <h2 className="text-sm font-semibold text-zinc-100">Conversations</h2>
+        <p className="text-[11px] text-zinc-400 leading-snug">
+          Talk to {activeSpokesperson?.name || 'this spokesperson'} live
+          via Runway's realtime avatar. The avatar is briefed on the
+          selected campaign — ask it about the product, audience, or
+          pitch and hear it respond in character.{' '}
+          <span className="text-zinc-500">
+            Real WebRTC when{' '}
+            <span className="font-mono">RUNWAY_API_KEY</span> is set;
+            mock-mode shows the gated state.
+          </span>
+        </p>
+      </header>
+
+      {!focused && !gateReason.startsWith('No Runway avatar') && !gateReason.startsWith('Runway avatar status') && (
+        <div
+          data-testid="spokesperson-workspace-conversations-empty"
+          className="rounded-2xl ring-1 ring-zinc-800 bg-zinc-950/40 p-4 text-center space-y-2"
+        >
+          <p className="text-[11px] text-zinc-400 leading-snug">
+            No campaign selected. Pick a campaign so the avatar can
+            reference its brief.
+          </p>
+          <button
+            type="button"
+            onClick={onSelectCampaignsTab}
+            data-testid="spokesperson-workspace-conversations-go-campaigns"
+            className="text-xs rounded-md bg-pink-500/80 hover:bg-pink-500 text-zinc-100 px-3 py-1.5 font-semibold transition-colors"
+          >
+            Go to Campaigns →
+          </button>
+        </div>
+      )}
+
+      {focused && (
+        <div
+          data-testid="spokesperson-workspace-conversations-live"
+          className="rounded-2xl ring-1 ring-zinc-800 bg-zinc-950/40 p-3"
+        >
+          <p className="text-[10px] text-zinc-500 leading-snug pb-2">
+            Active campaign:{' '}
+            <span className="text-zinc-300 font-medium">
+              {focused.business || 'untitled'}
+            </span>
+            {focused.product ? (
+              <span className="text-zinc-400"> · {focused.product}</span>
+            ) : null}
+            <span className="font-mono text-zinc-600 ml-2">
+              {String(focused.id).slice(0, 8)}
+            </span>
+          </p>
+          <RealtimeSpokesperson
+            campaign={focused}
+            gateReason={gateReason || null}
+          />
+        </div>
+      )}
+
+      {!focused && (gateReason.startsWith('No Runway avatar') || gateReason.startsWith('Runway avatar status')) && (
+        <div
+          data-testid="spokesperson-workspace-conversations-gated"
+          className="rounded-2xl ring-1 ring-amber-500/30 bg-amber-500/[0.04] p-4 text-center space-y-2"
+        >
+          <p className="text-[11px] text-amber-200 leading-snug">{gateReason}</p>
+        </div>
+      )}
+    </section>
+  )
+}
+
 
 /**
  * PR CP — Danger zone. Explicit, discoverable delete affordance
