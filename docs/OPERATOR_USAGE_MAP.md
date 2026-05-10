@@ -1,7 +1,7 @@
 # AdSpark Studio — Operator Usage Map
 
 **Last updated:** 2026-05-09 (post `hackathon-submission-v13`,
-PR CA App Shell + Router + Spokesperson Library as Home).
+PR CB Spokesperson Library Polish + Create Spokesperson CTA).
 
 **Read order:** This is the top-to-bottom "how do I actually use
 this thing?" guide. New operators (humans or AI) should read
@@ -19,7 +19,13 @@ The frontend now has two top-level routes:
   `<SpokespersonStudio>` (PR BE through PR BU) inside the new
   `<AppShell>` + `<TopBar>` shell. Sections 1–11 below describe
   the working surfaces; on `/` they all live inside the
-  Library + lanes, **not** the legacy 4-stage wizard.
+  Library + lanes, **not** the legacy 4-stage wizard. PR CB
+  added the Library-level header (heading + tagline + 4-chip
+  stats row), the primary `+ Create Spokesperson` CTA (opens
+  a 4-field modal that reuses `POST /api/characters` + auto-
+  fires `POST /api/characters/{id}/generate-portrait`), and
+  per-tile summary chips (voice-state pill + linked-campaign
+  count + outputs count above each card's tab strip).
 - **`/legacy`** — Verbatim v1 four-stage wizard + saved-campaign
   gallery (frozen, PR A through PR AZ-era stack). Reachable via
   the top-bar **Legacy UI ↗** link. The 6 demo paths in section

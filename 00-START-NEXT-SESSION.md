@@ -12,17 +12,18 @@ PR BA `9d0a99d`; PR BB `8702660`; PR BC `9eae15f`; PR BD
 `42a8054`; PR BJ `c04aced`; PR BK `7185554`; PR BL `8967061`;
 PR BM `669a584`; PR BN `13bc608`; PR BO `5e7400f`; PR BP
 `18a296b`; PR BQ `74d5dc6`; PR BR `ae7c130`; PR BS `bcbc1d8`; PR BT `065a557`; PR BU
-`1f61fc0`; SESSION 053 real-API PR BU validation
-`9148cd9 docs: log PR BU real-mode credit burn`; PR CA App
-Shell + Router + Spokesperson Library as Home in flight on
-top — SESSION_012–SESSION_054 handoffs added).
+`1f61fc0`; SESSION 053 real-API PR BU validation `9148cd9`;
+PR CA `8681777 feat: app shell + router + spokesperson
+library as home (PR CA)`; PR CB Spokesperson Library Polish
++ Create Spokesperson CTA in flight on top —
+SESSION_012–SESSION_055 handoffs added).
 
 ## Where things stand
 
-- **Branch:** `main` at `9148cd9` (`docs: log PR BU
-  real-mode credit burn`) on `origin/main`. PR CA patch in
-  flight on top — no new commit / tag yet, both pending
-  explicit user approval.
+- **Branch:** `main` at `8681777` (`feat: app shell +
+  router + spokesperson library as home (PR CA)`) on
+  `origin/main`. PR CB patch in flight on top — no new
+  commit / tag yet, both pending explicit user approval.
 - **Latest tag:** still **`hackathon-submission-v13`** at `ec446e4`
   (PR AF). PR AG–BI shipped the full voice arc + audit trails
   + UX v2 foundation + SpokespersonStudio + Knowledge +
@@ -38,25 +39,25 @@ top — SESSION_012–SESSION_054 handoffs added).
   switches modes. **Default load remains v1**; v2 reachable
   via footer toggle or `?ux=v2`.
 - **Backend routes:** **70** application + FastAPI built-ins
-  (PR CA is frontend-only; no new backend routes since
-  PR BU's `POST /api/campaigns/{id}/cinematic-video`).
-- **Frontend build:** 438.88 KB initial JS / 120.98 KB gzip +
-  561.97 KB lazy `@runwayml/avatars-react` chunk (+39.20 KB
-  initial / +13.47 KB gzip vs PR BU — primarily
-  `react-router-dom@^7` + new `<AppShell>` / `<TopBar>` /
-  `<Library>` shell). The bundle increase is one-shot; PR CB
-  onward should stay flat.
-- **Playwright smoke:** `3 passed (~27.4 s)` against the mock
+  (PR CB is frontend-only; reuses the existing `POST
+  /api/characters` + `POST /api/characters/{id}/generate-portrait`
+  routes for the new Create Spokesperson flow).
+- **Frontend build:** 448.47 KB initial JS / 122.98 KB gzip +
+  561.97 KB lazy `@runwayml/avatars-react` chunk (+9.59 KB
+  initial / +2.00 KB gzip vs PR CA — CreateSpokespersonModal
+  + stats row + tile summary chips).
+- **Playwright smoke:** `3 passed (~25.6 s)` against the mock
   backend booted via `bash scripts/start-local-mock.sh`.
-  Test 1 (`@ /legacy`, ~25.6 s) — verbatim end-to-end
-  walkthrough of the v1 wizard at the new `/legacy` URL.
-  Test 2 (`@ /`, ~740 ms) — Spokesperson Library mounts at
-  the new homepage; legacy wizard surfaces (CharacterStudio
-  "+ Create Character" button, Stage 2 Campaign Brief
-  heading, ModeBanner) explicitly absent. Test 3
-  (top-bar Legacy UI round-trip, ~550 ms) — clicks the
-  top-bar Legacy link to land on /legacy, then the
-  "← Library" CTA to round-trip back to /.
+  Test 1 (`@ /legacy`, ~23.7 s) — verbatim v1 wizard
+  walkthrough. Test 2 (`@ /`, ~820 ms) — Spokesperson
+  Library: heading copy "Spokesperson Library", new
+  tagline copy, all four stats chips with numeric
+  `data-count`, primary `+ Create Spokesperson` CTA opens
+  CreateSpokespersonModal with all four form fields
+  (`name`, `template`, `voice`, `subject`) visible, then
+  cancel round-trip closes it without mutating fixture
+  state. Test 3 (top-bar Legacy round-trip, ~600 ms) —
+  / → /legacy → / via top-bar links.
 - **Real-mode validation:** PR BU end-to-end validated
   against real Runway on CEO Buzz / Brewster (task
   `b5d331ba-9844-42ab-b857-982920794a9c`, 5 s gen4.5,
@@ -87,7 +88,7 @@ top — SESSION_012–SESSION_054 handoffs added).
 
 ## What's implemented (full feature stack on `main`)
 
-### UX redesign foundation (PR BD — UX v2 Flag + Shared Helpers · PR BE — SpokespersonStudio Scaffold · PR BF — Knowledge Tab Wiring · PR BG — Appearances Tab Wiring · PR BH — Mode-First Creation Modal · PR BI — Spokesperson Lane Scaffold · PR BK — Cinematic Lane Scaffold · PR BL — Dialogue Lane Scaffold · PR BM — Lane Regression Pass · PR BN — Spokesperson Reels Action Wired · PR BO — Cinematic Voiced Action Wired · PR BP — All Remaining v2 Lane Actions Wired · PR BQ — V2 Lane Inline Brief Editing · PR BR — V2 Appearances Click-Through · PR BS — Click-Through Tab Hints · PR BT — Cinematic Video Async Action Wired · PR BU — Cinematic Video Persistence · PR CA — App Shell + Router + Spokesperson Library Home)
+### UX redesign foundation (PR BD — UX v2 Flag + Shared Helpers · PR BE — SpokespersonStudio Scaffold · PR BF — Knowledge Tab Wiring · PR BG — Appearances Tab Wiring · PR BH — Mode-First Creation Modal · PR BI — Spokesperson Lane Scaffold · PR BK — Cinematic Lane Scaffold · PR BL — Dialogue Lane Scaffold · PR BM — Lane Regression Pass · PR BN — Spokesperson Reels Action Wired · PR BO — Cinematic Voiced Action Wired · PR BP — All Remaining v2 Lane Actions Wired · PR BQ — V2 Lane Inline Brief Editing · PR BR — V2 Appearances Click-Through · PR BS — Click-Through Tab Hints · PR BT — Cinematic Video Async Action Wired · PR BU — Cinematic Video Persistence · PR CA — App Shell + Router + Spokesperson Library Home · PR CB — Library Polish + Create Spokesperson CTA)
 
 - **UX v2 feature flag** at `frontend/src/uxFlag.js`. Resolves
   precedence URL `?ux=v2|v1` > localStorage `adspark.ux` >
@@ -208,6 +209,27 @@ top — SESSION_012–SESSION_054 handoffs added).
   `spokesperson-lane-reels-status`,
   `spokesperson-lane-reels-link`. Reels button new attrs:
   `data-source-ready`, `data-busy`.
+- **Library Polish + Create Spokesperson CTA** (PR CB) —
+  turns the bare PR CA homepage into a real product home.
+  New `<CreateSpokespersonModal>` opens via the primary
+  `+ Create Spokesperson` CTA (4 fields: name, template,
+  voice_preset, optional subject) and reuses the existing
+  `POST /api/characters` + auto-fires
+  `POST /api/characters/{id}/generate-portrait` so the new
+  tile renders with a face. SpokespersonStudio header
+  rewritten: `Spokesperson Studio` → `Spokesperson Library`
+  (`<h1>` text-2xl), preview-UX pill removed, brief-pinned
+  tagline ("Create persistent AI spokespeople that star in
+  ads, hold conversations, and carry campaign memory."),
+  new 4-chip `library-stats-row` (spokespeople / linked
+  campaigns / cached outputs / transcript entries — counts
+  derive from the local slices). SpokespersonCard tiles get
+  a new at-a-glance summary strip above the tab strip:
+  voice-state pill (preset / cloned / applied / drift /
+  failed) + linked-campaign count + outputs count.
+  `summariseKnowledge()` extended with `outputCount`. v1
+  / `/legacy` untouched (still has its `+ Create Character`
+  + ModeBanner + four stages).
 - **App Shell + Router + Spokesperson Library Home** (PR CA)
   — frontend architecture refactor that flips `/` from the
   legacy 4-stage wizard to the Spokesperson Library. New

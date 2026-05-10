@@ -936,6 +936,62 @@ test('AdSpark Studio Spokesperson Library @ /', async ({ page }) => {
   const studio = page.getByTestId('spokesperson-studio')
   await expect(studio).toBeVisible()
   await expect(studio).toHaveAttribute('data-ux-mode', 'v2')
+  // PR CB — heading copy now reads "Spokesperson Library"
+  // (PR CA renamed it from "Spokesperson Studio"). The
+  // tagline + stats row + Create CTA all render alongside.
+  await expect(
+    studio.getByTestId('spokesperson-studio-heading'),
+  ).toContainText(/Spokesperson Library/i)
+  await expect(
+    studio.getByTestId('spokesperson-library-tagline'),
+  ).toContainText(
+    /Create persistent AI spokespeople that star in ads, hold conversations, and carry campaign memory\./i,
+  )
+  // PR CB — Library-level stats row. Each chip carries a
+  // testid + a numeric data-count. Smoke asserts the row
+  // renders all four chips and that data-count parses as a
+  // non-negative integer; exact values vary with the
+  // operator's fixture state.
+  const statsRow = studio.getByTestId('library-stats-row')
+  await expect(statsRow).toBeVisible()
+  for (const tid of [
+    'library-stat-spokespeople',
+    'library-stat-linked-campaigns',
+    'library-stat-outputs',
+    'library-stat-transcripts',
+  ]) {
+    const chip = statsRow.getByTestId(tid)
+    await expect(chip).toBeVisible()
+    const count = await chip.getAttribute('data-count')
+    expect(/^\d+$/.test(String(count || ''))).toBeTruthy()
+  }
+  // PR CB — primary "+ Create Spokesperson" CTA must be on
+  // the homepage. PR BH's "+ New Campaign" stays alongside.
+  const createBtn = studio.getByTestId('library-create-spokesperson')
+  await expect(createBtn).toBeVisible()
+  await expect(createBtn).toHaveText(/\+ Create Spokesperson/i)
+  await expect(
+    studio.getByTestId('spokesperson-new-campaign'),
+  ).toBeVisible()
+  // PR CB — clicking opens CreateSpokespersonModal; closing
+  // restores the homepage. We open + cancel without
+  // submitting so the smoke never mutates fixture state.
+  await createBtn.click()
+  const createModal = page.getByTestId('create-spokesperson-modal')
+  await expect(createModal).toBeVisible()
+  await expect(
+    createModal.getByTestId('create-spokesperson-name'),
+  ).toBeVisible()
+  await expect(
+    createModal.getByTestId('create-spokesperson-template'),
+  ).toBeVisible()
+  await expect(
+    createModal.getByTestId('create-spokesperson-voice'),
+  ).toBeVisible()
+  await createModal.getByTestId('create-spokesperson-cancel').click()
+  await expect(
+    page.getByTestId('create-spokesperson-modal'),
+  ).toHaveCount(0)
   // PR CA — legacy v1 wizard surfaces must be ABSENT on `/`.
   // The legacy "+ Create Character" lives at /legacy now.
   await expect(
@@ -950,14 +1006,10 @@ test('AdSpark Studio Spokesperson Library @ /', async ({ page }) => {
   await expect(
     page.getByRole('heading', { name: /^Mode$/, level: 3 }),
   ).toHaveCount(0)
-  await expect(
-    studio.getByTestId('spokesperson-studio-heading'),
-  ).toContainText(/Spokesperson Studio/i)
-  // Tagline copy is part of the brief: persistent AI spokespeople
-  // language. Lives inside the same panel as the heading.
-  await expect(studio).toContainText(
-    /Create persistent AI spokespeople/i,
-  )
+  // PR CB — heading + tagline already asserted above against
+  // the new "Spokesperson Library" copy. Older "Spokesperson
+  // Studio" assertion removed — the library renames the
+  // surface as part of the homepage polish.
 
   // Library must render either the grid (≥1 spokesperson card) or
   // the empty state. Asserting the disjunction keeps the smoke

@@ -120,11 +120,27 @@ function summariseKnowledge(linkedCampaigns) {
     if (!at) return acc
     return !acc || String(at) > String(acc) ? at : acc
   }, null)
+  // PR CB — count cached outputs across all linked campaigns
+  // for the tile-level summary chip. Mirrors the Library
+  // stats-row math so per-spokesperson + library-wide totals
+  // stay consistent.
+  const outputCount = campaigns.reduce((sum, c) => {
+    let n = 0
+    if (c.cached_video_url) n += 1
+    if (c.host_video_url) n += 1
+    if (c.voiced_commercial_url) n += 1
+    if (c.storyboard_video_url) n += 1
+    if (c.spokesperson_reels_url) n += 1
+    if (c.dialogue_scene_video_url) n += 1
+    if (c.dialogue_scene_reels_url) n += 1
+    return sum + n
+  }, 0)
   return {
     linkedCount: campaigns.length,
     groundedCount,
     transcriptCount,
     lastFetchedAt,
+    outputCount,
   }
 }
 
@@ -284,12 +300,85 @@ export default function SpokespersonCard({
   const c = character
   const knowledge = summariseKnowledge(linkedCampaigns)
 
+  // PR CB — tile-level summary chips. Surfaces the at-a-glance
+  // info the brief calls out: voice state, linked campaigns
+  // count, outputs count. The chips are read-only telemetry —
+  // every actionable affordance lives in the Identity tab below
+  // (which embeds the full CharacterCard). The summariseKnowledge
+  // helper already returns linked-campaign + output counts.
+  const voiceState = (() => {
+    if (c.custom_voice_status === 'ready') {
+      const drift = c.avatar_voice_drift_status
+      const patch = c.custom_voice_avatar_patch_status
+      if (drift === 'match') {
+        return { tone: 'emerald', label: 'voice · cloned · applied · match' }
+      }
+      if (drift === 'drift') {
+        return { tone: 'rose', label: 'voice · cloned · applied · drift' }
+      }
+      if (patch === 'applied' || patch === 'mock_patched') {
+        return { tone: 'emerald', label: 'voice · cloned · applied' }
+      }
+      return { tone: 'amber', label: 'voice · cloned · pending apply' }
+    }
+    if (c.custom_voice_status === 'mock') {
+      return { tone: 'zinc', label: 'voice · cloned (mock)' }
+    }
+    if (c.custom_voice_status === 'failed') {
+      return { tone: 'rose', label: 'voice · clone failed' }
+    }
+    return { tone: 'zinc', label: `voice · preset · ${c.voice_preset || 'vincent'}` }
+  })()
+  const voiceToneClass = {
+    emerald: 'bg-emerald-500/15 text-emerald-200 ring-emerald-400/40',
+    rose: 'bg-rose-500/15 text-rose-200 ring-rose-400/40',
+    amber: 'bg-amber-500/15 text-amber-200 ring-amber-400/40',
+    zinc: 'bg-zinc-800 text-zinc-400 ring-zinc-700',
+  }[voiceState.tone]
+
   return (
     <div
       className="rounded-lg ring-1 ring-pink-400/15 bg-zinc-950/40 p-1.5 space-y-1.5"
       data-testid="spokesperson-card"
       data-spokesperson-id={c.id}
     >
+      {/* PR CB — at-a-glance summary chips. Read-only; the real
+          voice / portrait / avatar affordances live inside the
+          Identity tab's CharacterCard below. Each chip carries a
+          stable testid + data attr so the smoke can assert
+          structure without coupling to copy. */}
+      <div
+        data-testid="spokesperson-card-summary"
+        data-linked-count={linkedCampaigns.length}
+        data-output-count={knowledge.outputCount || 0}
+        data-voice-tone={voiceState.tone}
+        className="flex flex-wrap items-center gap-1 px-1 pt-0.5"
+      >
+        <span
+          data-testid="spokesperson-summary-voice"
+          title={`voice_preset=${c.voice_preset || 'vincent'} · custom_voice_status=${c.custom_voice_status || 'none'} · drift=${c.avatar_voice_drift_status || 'unknown'}`}
+          className={`text-[9px] rounded-full px-2 py-0.5 font-mono ring-1 ${voiceToneClass}`}
+        >
+          {voiceState.label}
+        </span>
+        <span
+          data-testid="spokesperson-summary-linked"
+          title={`${linkedCampaigns.length} campaigns linked via character_id`}
+          className="text-[9px] rounded-full bg-zinc-800/70 text-zinc-300 ring-1 ring-zinc-700 px-2 py-0.5 font-mono"
+        >
+          {linkedCampaigns.length} campaigns
+        </span>
+        {knowledge.outputCount > 0 && (
+          <span
+            data-testid="spokesperson-summary-outputs"
+            title="Cached MP4 / MP3 outputs across all linked campaigns."
+            className="text-[9px] rounded-full bg-zinc-800/70 text-zinc-300 ring-1 ring-zinc-700 px-2 py-0.5 font-mono"
+          >
+            {knowledge.outputCount} outputs
+          </span>
+        )}
+      </div>
+
       {/* Tab strip — three lanes, Identity is selected by default. */}
       <div
         className="flex items-center gap-1 px-1 pt-0.5"

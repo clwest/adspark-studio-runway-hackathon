@@ -9,6 +9,7 @@ import {
   setActiveMode,
 } from '../uxFlag.js'
 import CampaignModeModal from './CampaignModeModal.jsx'
+import CreateSpokespersonModal from './CreateSpokespersonModal.jsx'
 import SpokespersonCard from './SpokespersonCard.jsx'
 import CinematicLane from './lanes/CinematicLane.jsx'
 import DialogueLane from './lanes/DialogueLane.jsx'
@@ -504,6 +505,36 @@ export default function SpokespersonStudio({
     setActiveModeState(null)
   }
 
+  // PR CB — Create Spokesperson modal state. Mirrors PR BH's
+  // mode modal pattern: visible boolean + open/close handlers
+  // + a success callback that swaps the new character into the
+  // local slice + activates it so the next "+ New Campaign"
+  // already targets them.
+  const [createOpen, setCreateOpen] = useState(false)
+  const handleOpenCreateSpokesperson = () => setCreateOpen(true)
+  const handleCloseCreateSpokesperson = () => setCreateOpen(false)
+  const handleSpokespersonCreated = (created) => {
+    if (!created) {
+      setCreateOpen(false)
+      return
+    }
+    setCharacters((cs) => {
+      // Replace if already present (portrait re-fetch fired
+      // and returned the same id), otherwise prepend so the
+      // new tile is visible on first scroll.
+      const existing = cs.findIndex((x) => x.id === created.id)
+      if (existing >= 0) {
+        const next = cs.slice()
+        next[existing] = created
+        return next
+      }
+      return [created, ...cs]
+    })
+    onSetActive?.(created.id)
+    onCharactersChanged?.()
+    setCreateOpen(false)
+  }
+
   const handleDelete = async (c) => {
     if (
       !confirm(
@@ -529,47 +560,127 @@ export default function SpokespersonStudio({
       data-testid="spokesperson-studio"
       data-ux-mode="v2"
     >
-      <div className="flex items-start justify-between gap-2 flex-wrap">
-        <div className="space-y-1">
-          <h3
-            className="font-semibold flex items-center gap-2"
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div className="space-y-1.5 min-w-0">
+          <h1
+            className="text-2xl font-bold tracking-tight text-zinc-100 flex items-center gap-2"
             data-testid="spokesperson-studio-heading"
           >
-            Spokesperson Studio
-            <span
-              className="text-[10px] rounded-full bg-pink-500/20 text-pink-300 px-2 py-0.5 font-mono"
-              title="UX v2 preview — gated by ?ux=v2 / localStorage adspark.ux"
-            >
-              preview UX
-            </span>
+            Spokesperson Library
             <span
               className="text-[10px] rounded-full bg-zinc-800 text-zinc-300 px-2 py-0.5 font-mono"
               title="Reuses the existing /api/characters store; backend unchanged."
             >
               Runway-powered
             </span>
-          </h3>
-          <p className="text-xs text-zinc-400 max-w-prose leading-relaxed">
-            Create persistent AI spokespeople that can star in ads,
-            hold conversations, and live across campaigns. The
-            preview UX surfaces them as durable identities first;
-            campaigns get attached on top.
+          </h1>
+          {/* PR CB — product sentence pinned per brief copy. */}
+          <p
+            data-testid="spokesperson-library-tagline"
+            className="text-xs text-zinc-400 max-w-prose leading-relaxed"
+          >
+            Create persistent AI spokespeople that star in ads, hold
+            conversations, and carry campaign memory.
           </p>
+          {/* PR CB — Stats row. Counts derive from the same
+              characters / campaigns slices the library renders, so
+              the surface is self-consistent without an extra
+              backend call. Each stat carries a stable testid +
+              data-count attr the smoke can assert. */}
+          {(() => {
+            const totalSpokespeople = characters.length
+            const linkedCampaignIds = new Set(
+              campaigns
+                .filter((c) => Boolean(c.character_id))
+                .map((c) => c.id),
+            )
+            const totalLinkedCampaigns = linkedCampaignIds.size
+            const totalOutputs = campaigns.reduce((acc, c) => {
+              let n = 0
+              if (c.cached_video_url) n += 1
+              if (c.host_video_url) n += 1
+              if (c.voiced_commercial_url) n += 1
+              if (c.storyboard_video_url) n += 1
+              if (c.spokesperson_reels_url) n += 1
+              if (c.dialogue_scene_video_url) n += 1
+              if (c.dialogue_scene_reels_url) n += 1
+              return acc + n
+            }, 0)
+            const totalTranscriptEntries = campaigns.reduce((acc, c) => {
+              const list = Array.isArray(c.realtime_transcript_history)
+                ? c.realtime_transcript_history
+                : []
+              return acc + list.length
+            }, 0)
+            const stats = [
+              {
+                testid: 'library-stat-spokespeople',
+                label: 'spokespeople',
+                value: totalSpokespeople,
+              },
+              {
+                testid: 'library-stat-linked-campaigns',
+                label: 'linked campaigns',
+                value: totalLinkedCampaigns,
+              },
+              {
+                testid: 'library-stat-outputs',
+                label: 'cached outputs',
+                value: totalOutputs,
+              },
+              {
+                testid: 'library-stat-transcripts',
+                label: 'transcript entries',
+                value: totalTranscriptEntries,
+              },
+            ]
+            return (
+              <div
+                data-testid="library-stats-row"
+                className="flex flex-wrap items-center gap-1.5 pt-1"
+              >
+                {stats.map((s) => (
+                  <span
+                    key={s.testid}
+                    data-testid={s.testid}
+                    data-count={s.value}
+                    className="text-[10px] rounded-md ring-1 ring-zinc-800 bg-zinc-950/40 text-zinc-300 px-2 py-0.5 font-mono"
+                    title={`${s.value} ${s.label}`}
+                  >
+                    <span className="text-zinc-100 font-semibold">
+                      {s.value}
+                    </span>{' '}
+                    <span className="text-zinc-500">{s.label}</span>
+                  </span>
+                ))}
+              </div>
+            )
+          })()}
         </div>
-        {/* PR BH — mode-first creation entry point. Visible only on
-            the v2 path (this whole component is v2-gated). The
-            modal persists the choice to localStorage; the placeholder
-            banner below the header explains the legacy creation flow
-            still owns the actual brief / generation steps until lane
-            builders ship in PR BJ–BL. */}
-        <button
-          type="button"
-          onClick={handleOpenCreateModal}
-          data-testid="spokesperson-new-campaign"
-          className="rounded-md bg-pink-500/80 hover:bg-pink-500 text-zinc-100 text-xs px-3 py-1.5 font-semibold transition-colors"
-        >
-          + New Campaign
-        </button>
+        {/* PR CB — primary CTAs row. "+ Create Spokesperson"
+            (left, primary) opens the new CreateSpokespersonModal;
+            "+ New Campaign" (right, secondary) keeps PR BH's
+            mode-first creation flow. Both live on the homepage so
+            the operator can branch into either creation path
+            without scrolling into a tile. */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={handleOpenCreateSpokesperson}
+            data-testid="library-create-spokesperson"
+            className="rounded-md bg-pink-500/80 hover:bg-pink-500 text-zinc-100 text-xs px-3 py-1.5 font-semibold transition-colors"
+          >
+            + Create Spokesperson
+          </button>
+          <button
+            type="button"
+            onClick={handleOpenCreateModal}
+            data-testid="spokesperson-new-campaign"
+            className="rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-200 ring-1 ring-zinc-700 text-xs px-3 py-1.5 transition-colors"
+          >
+            + New Campaign
+          </button>
+        </div>
       </div>
 
       {/* Selected mode pill + dismiss link. Renders only after the
@@ -816,6 +927,16 @@ export default function SpokespersonStudio({
         isOpen={modeModalOpen}
         onSelect={handleSelectMode}
         onClose={handleCloseCreateModal}
+      />
+
+      {/* PR CB — Create Spokesperson modal. Mirrors the legacy
+          CharacterStudio create form's API contract (POST
+          /api/characters + POST /api/characters/{id}/generate-portrait)
+          but with a tighter library-level surface (4 fields). */}
+      <CreateSpokespersonModal
+        isOpen={createOpen}
+        onClose={handleCloseCreateSpokesperson}
+        onCreated={handleSpokespersonCreated}
       />
     </section>
   )
