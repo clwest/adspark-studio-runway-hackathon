@@ -1,6 +1,66 @@
 # START NEXT SESSION — AdSpark Studio
 
-**Last touched:** 2026-05-10 (PR DD — Context-kit
+**Last touched:** 2026-05-10 (PR DE — Curate
+context-kit grounding so product and build tool stay
+separate. The PR DD revision raw-dumped repo docs
+(`docs/WHAT_IT_IS.md` full + head of START + INVENTORY
++ the latest 2 handoffs) verbatim into the realtime
+grounding document. Real upload landed on Donny Sparks'
+`d00dc42fe5cb` campaign at document id
+`351925df-d9b0-4641-8a83-e39a0fb9a03e` and grounded
+correctly, but the payload blended **Character OS**
+(the hackathon product) and **context-kit** (the
+separate AI context-management package used to
+coordinate the build) until they sounded like the same
+thing. PR DE rewrites
+`scripts/upload-context-kit-demo-grounding.py`'s
+`build_payload()` from a file-dump pipeline into a
+hand-curated 6-section narrative authored inline in
+the script's `SECTIONS` list. Sections: (1) What
+Character OS Is, (2) What context-kit Is, (3) How
+context-kit Helped Build Character OS, (4) What
+Character OS Can Do Today, (5) Demo Talking Points,
+(6) What Not To Conflate. A preamble at the top loads
+the spokesperson with explicit guardrails ("Do not
+describe Character OS as context-kit / context-kit as
+the product being demoed; context-kit helped the
+builders stay aligned; Character OS is the AI
+spokesperson platform") plus the canonical distinction
+line on a single unbroken Markdown blockquote line:
+*"Character OS is the hackathon product. context-kit
+is the separate AI context-management package used to
+coordinate the build."* Section 6 carries seven
+canonical Q&A pairs the avatar should fall back to
+when conflation comes up. Dropped helpers `_read`,
+`_head_only`, `_recent_handoffs` (no longer reading
+files at runtime); the `\n\n`-trim bug surface is
+gone entirely. `--dry-run` output rewritten to print
+section headings + final char count + canonical
+distinction line + first 1000 chars (was 500). Document
+length dropped from ~40k chars (capped) to **8,103
+chars** — well under the cap, deliberately tight.
+`docs/DEMO_CHECKLIST.md` Section 6 rewrote the demo
+copy: "Character OS Self-Demo" naming, the four
+canonical questions ("What is Character OS?" / "What
+is context-kit?" / "How did context-kit help build
+this?" / "Are Character OS and context-kit the same
+thing?") with expected answers, refresh instruction
+points at the `SECTIONS` list instead of repo docs.
+Four new pytests pin the curated structure:
+`test_grounding_document_has_required_sections`,
+`test_grounding_document_carries_canonical_distinction`,
+`test_grounding_document_carries_guardrails`,
+`test_grounding_document_under_cap`. Script loaded via
+`importlib.util.spec_from_file_location` because the
+hyphenated filename isn't importable with normal
+syntax. Pytest **32/32** (28 prior + 4 new PR DE).
+Drift guard OK. Hygiene clean. No real Runway calls
+fired — Donny's `d00dc42fe5cb` campaign still carries
+the PR DD raw-dump grounding doc; operator re-runs the
+script after this PR lands to refresh it with the
+curated version. No backend / model / storage / broker
+changes. Backend route count still **76**.
+Earlier: PR DD — Context-kit
 realtime grounding. New
 `POST /api/campaigns/{id}/realtime-document/raw`
 sibling to PR AI's `/realtime-document` route. The

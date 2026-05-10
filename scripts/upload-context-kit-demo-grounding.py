@@ -1,46 +1,44 @@
 #!/usr/bin/env python3
-"""PR DD — Context-kit demo grounding uploader.
+"""PR DD / PR DE — Character OS self-demo grounding uploader.
 
-Pipes a curated slice of the project's context-kit (the WHAT_IT_IS
-narrative + the head of START + INVENTORY + the latest 2–3 handoffs)
-into a campaign's Runway realtime grounding document via the
-PR DD raw attach route. Use this to set up a "How Character OS Was
-Built" demo campaign whose spokesperson can answer questions about
-the project itself.
+Composes a curated Markdown grounding document and POSTs it to a
+campaign's Runway realtime grounding slot via the PR DD raw attach
+route (`POST /api/campaigns/{id}/realtime-document/raw`). The
+spokesperson attached to that campaign then uses the document to
+answer questions about Character OS itself.
 
-The script is read-only against the repo and only writes via the new
-raw route — it never edits campaigns.json directly.
+## PR DE rationale
+
+The PR DD revision raw-dumped repo docs (`docs/WHAT_IT_IS.md` + head
+of START + INVENTORY + the latest 2 handoffs) verbatim. That payload
+blended **Character OS** (the hackathon product) and **context-kit**
+(the separate AI context-management tool used to coordinate the
+build) until they sounded like the same thing.
+
+PR DE replaces the raw dump with a curated 6-section narrative that
+keeps the product and the build tool strictly separated, names the
+distinction explicitly, and gives the spokesperson rules for how to
+answer.
+
+The repo docs were source material the human + AI authors read to
+write this narrative; they are no longer read at runtime. This avoids
+the truncation-bleed problem (raw handoff prose dominating the
+payload) and keeps the script's behaviour deterministic across
+sessions.
 
 ## Usage
 
-    # Dry-run preview (no HTTP call):
+    # Dry-run preview (no HTTP):
     python scripts/upload-context-kit-demo-grounding.py \\
-        --campaign-id 8ea08b2fc95d --dry-run
+        --campaign-id d00dc42fe5cb --dry-run
 
     # Real attach (mock or live depending on backend boot mode):
     python scripts/upload-context-kit-demo-grounding.py \\
-        --campaign-id 8ea08b2fc95d
+        --campaign-id d00dc42fe5cb
 
     # Against a non-default backend:
     python scripts/upload-context-kit-demo-grounding.py \\
-        --campaign-id 8ea08b2fc95d --base-url http://localhost:9000
-
-## What it includes
-
-In order:
-
-1. `docs/WHAT_IT_IS.md` — narrative anchor (full).
-2. `00-START-NEXT-SESSION.md` — head section only (everything before
-   the deep PR history dump, which is noise for grounding).
-3. `docs/INVENTORY.md` — head section only (the most recent PR block).
-4. The 2 most recent `docs/handoffs/SESSION_*.md` files by mtime.
-
-Each section gets a clear Markdown ``## File: <path>`` header so the
-avatar can cite where a fact came from. The full payload is trimmed to
-``DOCUMENT_MAX_CHARS`` (40,000) before POSTing — Runway's hard cap is
-~50k tokens but the AdSpark documents client trims to 40k chars for
-safety. If the trim line falls inside a section, that section gets a
-``[truncated]`` marker so the avatar knows.
+        --campaign-id d00dc42fe5cb --base-url http://localhost:9000
 """
 from __future__ import annotations
 
@@ -49,8 +47,6 @@ import json
 import sys
 import urllib.error
 import urllib.request
-from pathlib import Path
-from typing import Optional
 
 # Mirror backend/app/services/documents_client.DOCUMENT_MAX_CHARS so the
 # script makes the same trimming decision the route would. Duplicated
@@ -58,126 +54,256 @@ from typing import Optional
 # venv activated.
 DOCUMENT_MAX_CHARS = 40_000
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+
+# ---------------------------------------------------------------------
+# Curated narrative
+#
+# Each entry is ``(heading_without_hash_prefix, body_markdown)``. The
+# heading order is the section order in the assembled document. The
+# section bodies are authored prose, not file dumps. When product
+# reality changes substantially, update the prose here in a follow-up
+# PR — that's the single edit point.
+# ---------------------------------------------------------------------
+
+PREAMBLE = """\
+# Character OS — Self-Demo Grounding Document
+
+You are a spokesperson for **Character OS**. Use the facts below to
+answer questions about what Character OS is, what it does, and how it
+was built. Cite section names when helpful.
+
+## How To Answer Questions Using This Document
+
+Hard rules for your answers:
+
+- Do **not** describe Character OS as context-kit.
+- Do **not** describe context-kit as the product being demoed.
+- When asked about context-kit, say it is the separate AI
+  context-management package that helped the builders stay aligned
+  across many coding sessions.
+- When asked about Character OS, say it is the AI spokesperson
+  platform — the hackathon product itself.
+- If asked something this document does not cover, say so politely
+  and offer to discuss what is covered.
+
+**Core distinction (memorize this line and repeat it when asked):**
+
+> Character OS is the hackathon product. context-kit is the separate AI context-management package used to coordinate the build."""
 
 
-def _read(path: Path) -> Optional[str]:
-    if not path.exists() or not path.is_file():
-        return None
-    try:
-        return path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError) as exc:
-        print(f"warn: could not read {path}: {exc}", file=sys.stderr)
-        return None
+SECTIONS: list[tuple[str, str]] = [
+    (
+        "1. What Character OS Is",
+        """\
+Character OS is a Runway-powered **AI spokesperson platform** built
+for the Runway hackathon. Brands create **reusable AI characters** —
+a mascot, a founder, a coach, a local guide — and each character
+lives across many campaigns instead of being thrown away after one
+ad.
+
+A single saved Character can:
+
+- Star in a **Spokesperson Ad** — lip-synced talking-head video that
+  speaks the campaign's script.
+- Appear in a **Cinematic Commercial** — silent product or
+  atmosphere video with the character's voice muxed over.
+- Headline a **Dialogue Scene** alongside other Characters — a
+  multi-speaker skit stitched line by line.
+- Hold a **5-minute realtime conversation** with a viewer via WebRTC.
+
+The same Character carries its identity, voice, and brand knowledge
+across all of those surfaces. That persistence is the headline
+feature.""",
+    ),
+    (
+        "2. What context-kit Is",
+        """\
+context-kit is a **separate** package and discipline for keeping AI
+coding sessions oriented as a codebase grows. It is **not** Character
+OS. It is a tool the builders used during the hackathon.
+
+context-kit's job is to make sure every new AI coding session —
+whether yesterday, today, or six weeks from now — can pick up
+exactly where the last one left off, without losing the thread or
+re-deriving the design.
+
+It does this through a small set of anchor files at the repo root /
+docs root:
+
+- `00-START-NEXT-SESSION.md` — what state the project is in right
+  now.
+- `docs/WHAT_IT_IS.md` — the product's narrative.
+- `docs/INVENTORY.md` — the runtime map (every route, every file).
+- `docs/handoffs/SESSION_NNN_*.md` — one file per session capturing
+  what changed, why, and what to avoid next time.
+
+It also includes a drift guard
+(`scripts/check-context-kit-drift.sh`) that warns when the anchors
+haven't been refreshed against recent commits.
+
+context-kit is **package-able tooling**. It is reusable on other
+projects. The Character OS repo just happens to be one place it grew
+up.""",
+    ),
+    (
+        "3. How context-kit Helped Build Character OS",
+        """\
+The Character OS hackathon ran across many AI-assisted coding
+sessions. Without context-kit, each new session would have re-read
+the codebase from scratch, re-derived the design, and frequently
+undone prior decisions — slow, drifty, expensive in token usage.
+
+With context-kit:
+
+- Every session **started** by reading the anchors. The session
+  inherited the current state of the product immediately.
+- Every session **ended** by refreshing the anchors. The handoff doc
+  captured what changed and why.
+- The **drift guard** caught moments when the anchors lagged behind
+  the code — usually after a burst of feature PRs — and prompted a
+  `docs:` refresh commit before the next push.
+
+In other words, context-kit was the scaffolding that let many short
+AI sessions accumulate into one coherent product. Character OS is
+what got built on that scaffolding.
+
+context-kit did not write Character OS's code. context-kit kept the
+people and AI sessions writing the code on the same page.""",
+    ),
+    (
+        "4. What Character OS Can Do Today",
+        """\
+Character OS today supports the following operator-facing flows.
+Each one is wired end-to-end against Runway's API and runs offline in
+mock mode for safe demos:
+
+- **Create a Brand Spokesperson** — portrait generation, Runway
+  Avatar binding, optional cloned custom voice.
+- **Write a campaign brief** — business / product / audience / tone.
+  The brief is the persistent context for one or more ads.
+- **Compose multiple ad variants per campaign** — each variant has
+  its own title and script; the brief stays fixed. Renders are
+  scoped to the variant that produced them.
+- **Render a Spokesperson Ad** — lip-synced talking-head video.
+- **Render a Cinematic Commercial** — silent product visual muxed
+  with the spokesperson's voice track.
+- **Render a Dialogue Scene** — multi-character skit with each line
+  voiced by a different Character.
+- **Export to Reels** — 720×1280 vertical with burned-in captions
+  and brand-color letterbox.
+- **Open a Realtime Conversation** — 5-minute WebRTC session where
+  the spokesperson holds a live conversation, grounded in the
+  campaign's attached document.
+- **Attach a grounding document** — Markdown content that the
+  realtime spokesperson uses to answer questions factually. (This
+  very document is such a grounding doc.)
+- **Multilingual dub** the Brand Voice into 29 languages as sibling
+  audio samples.
+
+Every artefact — videos, voice clips, portraits — is cached locally
+so it survives Runway URL expiry.""",
+    ),
+    (
+        "5. Demo Talking Points",
+        """\
+When asked open-ended questions, lean on these framings:
+
+- "Character OS treats AI spokespeople as **persistent assets**, not
+  one-shot generations. The same character can ship a thousand ads."
+- "The key architectural move is **separating stable campaign
+  context from mutable scripts**. A brief is one thing; the many
+  ads you write against it are another."
+- "The realtime spokesperson is the same Character you would ship in
+  an ad. Identity stays consistent across video and live
+  conversation."
+- "Mock mode means the whole platform runs without API keys,
+  end-to-end. Demos never depend on credit availability."
+- "context-kit kept the build coherent. Many sessions, one product —
+  but context-kit is the tooling, not the product."
+
+Try to keep answers under twenty seconds of speaking time. If the
+viewer asks a follow-up, expand then.""",
+    ),
+    (
+        "6. What Not To Conflate",
+        """\
+If asked anything that sounds like it conflates Character OS and
+context-kit, gently correct. Canonical answers below — feel free to
+paraphrase for tone but keep the facts straight:
+
+- **"Is Character OS the same thing as context-kit?"**
+  → No. Character OS is the hackathon product. context-kit is the
+  separate AI context-management package used to coordinate the
+  build.
+
+- **"What is Character OS?"**
+  → Character OS is the AI spokesperson platform — brands create
+  reusable AI characters that star in ads and hold live
+  conversations.
+
+- **"What is context-kit?"**
+  → context-kit is a separate tool that helps AI coding sessions
+  stay oriented as a codebase grows. It uses a small set of anchor
+  files plus a drift guard.
+
+- **"How did context-kit help build this?"**
+  → context-kit let many short AI coding sessions accumulate into
+  one coherent product by keeping every session aligned with the
+  current state of the codebase.
+
+- **"Did you build context-kit during the hackathon?"**
+  → context-kit grew alongside the build, but its job is to help any
+  AI coding project — it is reusable tooling, not part of the
+  Character OS product.
+
+- **"Can I use context-kit through the Character OS UI?"**
+  → No. context-kit is repo-side tooling for builders. End users of
+  Character OS interact with the AI spokesperson platform.
+
+- **"Does context-kit power the realtime conversation?"**
+  → No. The realtime conversation is powered by Runway's
+  `/v1/realtime_sessions` plus a grounding document attached to the
+  campaign. context-kit's job is keeping the *builders* on track.
+
+If a question falls outside this document, say so and offer to talk
+about what is covered.""",
+    ),
+]
 
 
-def _head_only(text: str, max_chars: int) -> str:
-    """Take roughly the first `max_chars` characters but stop at a
-    paragraph boundary so the section doesn't end mid-sentence.
-
-    Note: START / INVENTORY both start with a title line + a blank +
-    one very long paragraph. A naive ``rfind("\\n\\n")`` lands on the
-    title break and yields ~30 chars. Require the cut to be at least
-    50% of ``max_chars`` before accepting it; otherwise fall back to a
-    single-newline cut, then to a hard slice.
-    """
-    if len(text) <= max_chars:
-        return text
-    min_cut = max_chars // 2
-    cut = text.rfind("\n\n", 0, max_chars)
-    if cut < min_cut:
-        cut = text.rfind("\n", 0, max_chars)
-    if cut < min_cut:
-        cut = max_chars
-    return text[:cut].rstrip()
+CANONICAL_DISTINCTION = (
+    "Character OS is the hackathon product. context-kit is the "
+    "separate AI context-management package used to coordinate the build."
+)
 
 
-def _recent_handoffs(n: int) -> list[Path]:
-    """Latest `n` handoff files by mtime. Filters out the one-off
-    SESSION_REAL_API* fixture that isn't a numbered handoff."""
-    handoffs_dir = REPO_ROOT / "docs" / "handoffs"
-    if not handoffs_dir.exists():
-        return []
-    files = [
-        p for p in handoffs_dir.glob("SESSION_*.md")
-        if p.name.startswith("SESSION_") and p.name[8:11].isdigit()
-    ]
-    files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-    return files[:n]
-
-
-def build_payload() -> tuple[list[tuple[Path, int]], str, bool]:
-    """Compose the full Markdown payload + return a per-file manifest.
+def build_payload() -> tuple[list[str], str]:
+    """Compose the curated grounding document.
 
     Returns:
-        manifest: list of ``(repo_relative_path, chars_after_section_trim)``.
-        content:  the assembled Markdown, already trimmed to 40k chars.
-        truncated: True if the 40k total cap fired (cut lands inside the
-                   tail section).
+        section_headings: list of section heading strings (without the
+                          ``## `` prefix). Used by the dry-run reporter
+                          and by the targeted pytest.
+        content:          the assembled Markdown ready to POST. Always
+                          well under ``DOCUMENT_MAX_CHARS`` because
+                          the narrative is hand-curated and small.
     """
-    sections: list[tuple[Path, str]] = []
+    parts: list[str] = [PREAMBLE]
+    headings: list[str] = ["How To Answer Questions Using This Document"]
+    for heading, body in SECTIONS:
+        parts.append(f"## {heading}\n\n{body.rstrip()}")
+        headings.append(heading)
+    content = "\n\n".join(parts).strip()
 
-    # 1. WHAT_IT_IS — full file
-    what = REPO_ROOT / "docs" / "WHAT_IT_IS.md"
-    text = _read(what)
-    if text:
-        sections.append((what, text))
-
-    # 2. START — head only (everything is dense PR history; cap at 6k)
-    start = REPO_ROOT / "00-START-NEXT-SESSION.md"
-    text = _read(start)
-    if text:
-        sections.append((start, _head_only(text, 6_000)))
-
-    # 3. INVENTORY — head only (recent PR block; cap at 8k)
-    inv = REPO_ROOT / "docs" / "INVENTORY.md"
-    text = _read(inv)
-    if text:
-        sections.append((inv, _head_only(text, 8_000)))
-
-    # 4. Latest 2 numbered handoffs (mtime sorted)
-    for p in _recent_handoffs(2):
-        text = _read(p)
-        if text:
-            sections.append((p, _head_only(text, 8_000)))
-
-    # Assemble Markdown with clear section headers.
-    lines: list[str] = [
-        "# AdSpark / Character OS — Project Context Pack",
-        "",
-        "This document is curated context-kit material the spokesperson "
-        "uses to answer questions about how the project was built. "
-        "When asked something covered below, cite the source filename.",
-        "",
-    ]
-    for path, text in sections:
-        rel = path.relative_to(REPO_ROOT)
-        lines.append(f"## File: {rel}")
-        lines.append("")
-        lines.append(text.strip())
-        lines.append("")
-
-    full = "\n".join(lines).strip()
-
-    # Trim to 40k chars at a paragraph boundary if possible.
-    if len(full) > DOCUMENT_MAX_CHARS:
-        cut = full.rfind("\n\n", 0, DOCUMENT_MAX_CHARS)
-        if cut == -1:
+    # Defensive only — the curated narrative is intentionally small
+    # (~7-8k chars). If a future edit blows past 40k, trim cleanly so
+    # the wire never sees an oversized body.
+    if len(content) > DOCUMENT_MAX_CHARS:
+        cut = content.rfind("\n\n", 0, DOCUMENT_MAX_CHARS)
+        if cut < DOCUMENT_MAX_CHARS // 2:
             cut = DOCUMENT_MAX_CHARS
-        trimmed = full[:cut].rstrip() + "\n\n[truncated to 40k chars]"
-        truncated = True
-    else:
-        trimmed = full
-        truncated = False
-
-    # Manifest reflects each section's post-section-trim size.
-    # The total-cap truncation flag is reported once (caller surfaces
-    # it) rather than smeared across every section.
-    manifest = [
-        (path.relative_to(REPO_ROOT), len(text))
-        for path, text in sections
-    ]
-    return manifest, trimmed, truncated
+        content = content[:cut].rstrip() + "\n\n[truncated to 40k chars]"
+    return headings, content
 
 
 def post_to_route(
@@ -187,8 +313,7 @@ def post_to_route(
     content: str,
 ) -> dict:
     """POST to the PR DD raw attach route. Returns the parsed JSON
-    response body. Raises urllib.error.HTTPError on non-2xx (caller
-    surfaces the message)."""
+    response body. Raises urllib.error.HTTPError on non-2xx."""
     url = f"{base_url.rstrip('/')}/api/campaigns/{campaign_id}/realtime-document/raw"
     body = json.dumps({"name": name, "content": content}).encode("utf-8")
     req = urllib.request.Request(
@@ -204,46 +329,45 @@ def post_to_route(
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(
         description=(
-            "Upload curated context-kit Markdown into a campaign's "
-            "realtime grounding document so the spokesperson can "
-            "explain how the project was built."
+            "Upload the curated Character OS self-demo grounding "
+            "document into a campaign so the attached spokesperson "
+            "can explain what Character OS is, what context-kit is, "
+            "and how the two relate without conflating them."
         )
     )
     parser.add_argument(
         "--campaign-id", required=True,
-        help="Target campaign id (e.g. 8ea08b2fc95d).",
+        help="Target campaign id (e.g. d00dc42fe5cb).",
     )
     parser.add_argument(
         "--base-url", default="http://localhost:8000",
         help="Backend base URL (default: http://localhost:8000).",
     )
     parser.add_argument(
-        "--name", default="context-kit-demo-grounding",
+        "--name", default="character-os-self-demo-grounding",
         help=(
             "Document name shown in Runway's dashboard / logs "
-            "(default: context-kit-demo-grounding)."
+            "(default: character-os-self-demo-grounding)."
         ),
     )
     parser.add_argument(
         "--dry-run", action="store_true",
-        help="Print manifest + first 500 chars; do not POST.",
+        help="Print section headings + char count + 1000-char preview; do not POST.",
     )
     args = parser.parse_args(argv)
 
-    manifest, content, truncated = build_payload()
-    raw_total = sum(chars for _, chars in manifest)
+    headings, content = build_payload()
 
-    print("Files included:")
-    for path, chars in manifest:
-        print(f"  - {path}  ({chars:,} chars)")
-    print(f"\nRaw section total: {raw_total:,} chars")
-    print(f"Final payload:     {len(content):,} chars (cap {DOCUMENT_MAX_CHARS:,})")
-    if truncated:
-        print("Tail section trimmed at 40k boundary (marker appended).")
+    print("Curated grounding document — section headings:")
+    for i, h in enumerate(headings):
+        marker = "preamble" if i == 0 else f"§{i}"
+        print(f"  [{marker}] {h}")
+    print(f"\nDocument length: {len(content):,} chars (cap {DOCUMENT_MAX_CHARS:,})")
+    print(f"Canonical distinction line: \"{CANONICAL_DISTINCTION}\"")
 
     if args.dry_run:
-        preview = content[:500]
-        print(f"\n--- first 500 chars ---\n{preview}\n--- end preview ---")
+        preview = content[:1000]
+        print(f"\n--- first 1000 chars ---\n{preview}\n--- end preview ---")
         print("\nDry-run: no POST sent.")
         return 0
 

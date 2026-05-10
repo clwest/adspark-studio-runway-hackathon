@@ -1,7 +1,35 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after **PR DD — Context-Kit Realtime Grounding**.
+context-kit refresh after **PR DE — Curated Self-Demo Grounding**.
+PR DD shipped the raw attach route + an uploader that file-dumped
+`docs/WHAT_IT_IS.md` + START head + INVENTORY head + the latest 2
+handoffs verbatim into the realtime grounding slot. The dump
+blended **Character OS** (the hackathon product) and **context-kit**
+(the separate AI context-management package used to coordinate the
+build) until they sounded like the same thing. PR DE rewrites
+`scripts/upload-context-kit-demo-grounding.py`'s `build_payload()`
+into a hand-curated 6-section narrative authored inline in the
+script's `SECTIONS` list — (1) What Character OS Is, (2) What
+context-kit Is, (3) How context-kit Helped Build Character OS,
+(4) What Character OS Can Do Today, (5) Demo Talking Points,
+(6) What Not To Conflate — plus a preamble that loads the
+spokesperson with explicit guardrails and the canonical
+distinction line on a single unbroken Markdown blockquote: *"Character
+OS is the hackathon product. context-kit is the separate AI
+context-management package used to coordinate the build."* Section
+6 carries seven canonical Q&A pairs covering the four required demo
+questions. Helpers `_read`, `_head_only`, `_recent_handoffs` removed;
+no runtime file reads. Document length dropped from ~40k chars
+(capped) to **8,103 chars** — way under cap, deliberately tight.
+Dry-run now prints section headings + char count + canonical
+distinction line + first 1000-char preview. Four new pytests pin the
+curated structure via `importlib.util.spec_from_file_location`
+loading. `docs/DEMO_CHECKLIST.md` Section 6 rewrote with the
+"Character OS Self-Demo" naming + the four canonical questions with
+expected answers. No backend / model / storage / broker changes;
+backend route count still **76**.
+Earlier: PR DD — Context-Kit Realtime Grounding.
 PR AI introduced `POST /api/campaigns/{id}/realtime-document` which
 runs the campaign record through `build_campaign_brief_markdown` —
 that shape (Audience / Tone / Selected concept / Commercial script /

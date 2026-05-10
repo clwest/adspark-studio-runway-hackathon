@@ -135,29 +135,34 @@ during the run-up.
 
 ---
 
-## 6. Context-Kit Self-Demo (optional bonus pillar, PR DD)
+## 6. Character OS Self-Demo (optional bonus pillar, PR DD + PR DE)
 
-Lets a spokesperson explain how AdSpark itself was built, grounded
-in the curated context-kit Markdown. Useful for the "what is this
-project" portion of a long-form walkthrough.
+Lets a spokesperson explain what Character OS is, what context-kit
+is, and how the two relate — without conflating them. Useful for the
+"what is this project" portion of a long-form walkthrough.
+
+The grounding document is a **curated 6-section narrative** authored
+in `scripts/upload-context-kit-demo-grounding.py` (PR DE replaced
+PR DD's raw-doc dump). Updating the prose requires editing the
+script's `SECTIONS` list, not the repo docs.
 
 Setup once:
 
-- [ ] Open any spokesperson with a ready avatar (Donny is fine) →
-      **Campaigns** tab → `+ New Campaign` → **🎙️ Spokesperson Ad**.
-- [ ] Fill a minimal brief — `Business: AdSpark Studio`,
-      `Product: Persistent AI spokesperson infrastructure`,
-      `Audience: Hackathon judges`,
+- [ ] Open any spokesperson with a ready avatar (Donny Sparks is the
+      canonical choice) → **Campaigns** tab → `+ New Campaign` →
+      **🎙️ Spokesperson Ad**.
+- [ ] Fill a minimal brief — `Business: How Character OS Was Built`,
+      `Product: Context-kit demo grounding for the realtime spokesperson`,
+      `Audience: Hackathon judges + future maintainers`,
       `Tone: Honest, technical, brief`. Save brief.
 - [ ] Note the campaign id from the URL or the campaigns list row.
-      We'll call this campaign **"How Character OS Was Built"**.
 - [ ] In a terminal:
 
   ```bash
   python scripts/upload-context-kit-demo-grounding.py \
-      --campaign-id <id> --dry-run     # preview manifest
+      --campaign-id <id> --dry-run     # section headings + 1000-char preview
   python scripts/upload-context-kit-demo-grounding.py \
-      --campaign-id <id>               # POST
+      --campaign-id <id>               # POST (one /v1/documents credit in real mode)
   ```
 
   Expected output ends with `runway_document_status: ready` (real
@@ -167,16 +172,38 @@ Run the demo:
 
 - [ ] Stay on the dedicated campaign → **Conversations** tab →
       **Start Conversation**.
-- [ ] Ask one of:
-      - "How was this project built?"
-      - "What does context-kit do?"
-      - "What changed during the hackathon?"
-- [ ] The avatar should ground answers in the uploaded Markdown
-      (cite filenames like `docs/WHAT_IT_IS.md` or
-      `docs/handoffs/SESSION_086_*.md`).
 
-To refresh after new PRs land, re-run the script — each upload
-replaces the campaign's grounding document.
+Suggested questions (avatar should answer cleanly without conflation):
+
+- [ ] **"What is Character OS?"**
+      Expected answer: *Character OS is the AI spokesperson platform
+      — the hackathon product where brands create reusable AI
+      characters that star in ads and hold live conversations.*
+
+- [ ] **"What is context-kit?"**
+      Expected answer: *context-kit is the separate AI
+      context-management package that helps AI coding sessions stay
+      oriented as a codebase grows — anchor files + drift guard.*
+
+- [ ] **"How did context-kit help build this?"**
+      Expected answer: *context-kit let many short AI coding sessions
+      accumulate into one coherent product by keeping every session
+      aligned with the current state of the codebase.*
+
+- [ ] **"Are Character OS and context-kit the same thing?"**
+      Expected answer: ***No.** Character OS is the hackathon
+      product. context-kit is the separate context-management tool
+      used to help build it.*
+
+If the avatar fuses the two ("Character OS is a context-kit for
+ads", "context-kit is how the spokesperson works"), the grounding is
+not landing — end the session, re-run the upload script, restart the
+conversation.
+
+To refresh after product or build-tool reality changes, edit the
+`SECTIONS` list in `scripts/upload-context-kit-demo-grounding.py`
+and re-run the script — each upload replaces the campaign's
+grounding document.
 
 ---
 

@@ -736,3 +736,98 @@ def test_realtime_document_raw_truncates_to_40k(client: TestClient):
     assert persisted_id == expected_id, (
         f"expected trimmed-content id {expected_id}, got {persisted_id}"
     )
+
+
+# ---- PR DE — curated grounding document structure --------------
+#
+# The upload script's `build_payload()` is the authoring surface for
+# the Character OS self-demo grounding document. PR DE rewrote it
+# from a raw repo-doc dump into a curated 6-section narrative that
+# explicitly separates Character OS (the hackathon product) from
+# context-kit (the build tool). This test pins the structure so a
+# future prose edit can't accidentally drop a required section or
+# the canonical distinction line.
+#
+# Imported via importlib because the script lives at
+# `scripts/upload-context-kit-demo-grounding.py` (hyphens in the
+# filename make it un-import-able with normal `import` syntax).
+
+
+def _load_uploader_module():
+    """Import the upload script as a module. The script intentionally
+    has zero non-stdlib deps so this works under the bare test
+    venv with no extra setup."""
+    import importlib.util
+    from pathlib import Path
+    repo_root = Path(__file__).resolve().parent.parent.parent
+    script = repo_root / "scripts" / "upload-context-kit-demo-grounding.py"
+    assert script.exists(), f"script missing: {script}"
+    spec = importlib.util.spec_from_file_location("ck_uploader", script)
+    assert spec is not None and spec.loader is not None, "spec_from_file_location returned None"
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_grounding_document_has_required_sections():
+    """All six numbered sections + the preamble heading land in the
+    assembled document. Catches a prose edit that drops a heading."""
+    mod = _load_uploader_module()
+    headings, content = mod.build_payload()
+
+    expected = [
+        "How To Answer Questions Using This Document",
+        "1. What Character OS Is",
+        "2. What context-kit Is",
+        "3. How context-kit Helped Build Character OS",
+        "4. What Character OS Can Do Today",
+        "5. Demo Talking Points",
+        "6. What Not To Conflate",
+    ]
+    assert headings == expected, headings
+    # Each heading also appears in the assembled Markdown.
+    for h in expected:
+        assert h in content, f"section heading missing from content: {h!r}"
+
+
+def test_grounding_document_carries_canonical_distinction():
+    """The exact distinction line lands in the document AND is the
+    value exported as CANONICAL_DISTINCTION (so the dry-run banner
+    and the document stay in sync)."""
+    mod = _load_uploader_module()
+    _, content = mod.build_payload()
+
+    expected = (
+        "Character OS is the hackathon product. context-kit is the "
+        "separate AI context-management package used to coordinate the build."
+    )
+    assert expected == mod.CANONICAL_DISTINCTION
+    assert expected in content, "canonical distinction line missing from document"
+
+
+def test_grounding_document_carries_guardrails():
+    """The 'Hard rules' guardrails the spokesperson reads at the top
+    must be present — these are the rules that prevent conflation."""
+    mod = _load_uploader_module()
+    _, content = mod.build_payload()
+
+    for must_have in [
+        "Do **not** describe Character OS as context-kit",
+        "Do **not** describe context-kit as the product being demoed",
+        "When asked about context-kit, say it is the separate",
+        "When asked about Character OS, say it is the AI spokesperson",
+    ]:
+        assert must_have in content, f"guardrail line missing: {must_have!r}"
+
+
+def test_grounding_document_under_cap():
+    """Curated narrative is intentionally small. If a future edit
+    blows past 40k chars, the script's defensive trim fires and adds
+    a `[truncated]` marker — the test prefers to catch that drift
+    here rather than at the wire."""
+    mod = _load_uploader_module()
+    _, content = mod.build_payload()
+    assert len(content) <= mod.DOCUMENT_MAX_CHARS, len(content)
+    assert "[truncated to 40k chars]" not in content, (
+        "curated narrative grew past 40k chars; trim back or restructure"
+    )
