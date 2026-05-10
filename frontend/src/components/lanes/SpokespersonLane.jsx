@@ -48,17 +48,20 @@ export default function SpokespersonLane({
   // PR CU — Save the commercial script inline so Step 2 has a real
   // CTA instead of a "go to legacy" instruction. POSTs /script.
   onSaveScript = null,
+  // PR DA — focused campaign + creating-new mode are now driven
+  // by the workspace's selection state (lifted state). Lane no
+  // longer derives "most recent" itself.
+  focusedCampaign = null,
+  creatingNew = false,
+  onCancelCreate = null,
 }) {
   const campaigns = Array.isArray(linkedCampaigns) ? linkedCampaigns : []
-  // Pick the most recently-touched campaign as the lane's "focused"
-  // record so the operator gets a concrete preview of brief +
-  // script + render state. ISO-string compare is correct.
-  const sorted = [...campaigns].sort((a, b) => {
-    const at = String(a.created_at || '')
-    const bt = String(b.created_at || '')
-    return bt.localeCompare(at)
-  })
-  const focused = sorted[0] || null
+  // PR DA — `focused` is now the operator-selected campaign passed
+  // in from the workspace. When the operator is creating a brand
+  // new campaign (`creatingNew=true`), focused is null on purpose
+  // so the lane mounts <LaneBriefCreator> with blank fields and
+  // doesn't bleed the previous campaign's brief / script through.
+  const focused = focusedCampaign
   const hasSpokesperson = Boolean(activeSpokesperson)
   const hasCampaign = Boolean(focused)
   const focusedScript = focused?.commercial_script || ''
@@ -219,6 +222,65 @@ export default function SpokespersonLane({
           </div>
         )}
       </header>
+
+      {/* PR DA — active-state banner. Surfaces which campaign the
+          lane is editing (or "New campaign" creating-new mode) so
+          the operator never confuses the form with a stale record. */}
+      <div
+        data-testid="spokesperson-lane-active-state"
+        data-mode={creatingNew ? 'new' : focused ? 'editing' : 'idle'}
+        className={
+          'rounded-lg px-2.5 py-1.5 ring-1 flex items-center justify-between gap-2 flex-wrap ' +
+          (creatingNew
+            ? 'ring-pink-400/40 bg-pink-500/10'
+            : focused
+            ? 'ring-emerald-400/30 bg-emerald-500/[0.06]'
+            : 'ring-zinc-800 bg-zinc-950/40')
+        }
+      >
+        <div className="text-[11px] leading-snug min-w-0">
+          {creatingNew ? (
+            <>
+              <span className="text-pink-100 font-semibold">
+                ✏️ New campaign
+              </span>{' '}
+              <span className="text-pink-200/80">
+                — fill the brief below to start. Previous campaigns
+                stay in the list above.
+              </span>
+            </>
+          ) : focused ? (
+            <>
+              <span className="text-emerald-100 font-semibold">
+                Editing: {focused.business || 'untitled'}
+              </span>
+              {focused.product && (
+                <span className="text-emerald-200/80">
+                  {' '}· {focused.product}
+                </span>
+              )}
+              <span className="text-zinc-500 font-mono ml-2">
+                {String(focused.id).slice(0, 8)}
+              </span>
+            </>
+          ) : (
+            <span className="text-zinc-400">
+              No campaign selected. Pick one from the list above or
+              click <span className="text-zinc-200 font-medium">+ New Campaign</span>.
+            </span>
+          )}
+        </div>
+        {creatingNew && onCancelCreate && (
+          <button
+            type="button"
+            onClick={onCancelCreate}
+            data-testid="spokesperson-lane-cancel-create"
+            className="text-[10px] text-zinc-500 hover:text-zinc-200 underline-offset-2 hover:underline"
+          >
+            cancel new campaign
+          </button>
+        )}
+      </div>
 
       {/* 3-step scaffold. Each step is a column on md+ screens, a
           stacked card on small screens. */}
@@ -433,6 +495,60 @@ export default function SpokespersonLane({
               Create or select a campaign to render a spokesperson ad.
             </p>
           )}
+          {/* PR DA — saved-renders disclosure for THIS campaign.
+              Distinct from the workspace Outputs tab gallery (which
+              shows every campaign's renders); this is scoped to
+              the active campaign so the operator can confirm prior
+              takes still exist after a new render. */}
+          {hasCampaign && (() => {
+            const adOutputs = Array.isArray(focused.outputs)
+              ? focused.outputs.filter((o) => o.kind === 'spokesperson_ad')
+              : []
+            if (adOutputs.length === 0) return null
+            return (
+              <details
+                data-testid="spokesperson-lane-saved-renders"
+                data-output-count={adOutputs.length}
+                className="rounded ring-1 ring-emerald-400/30 bg-emerald-500/[0.04] px-2 py-1 mt-1"
+              >
+                <summary className="text-[10px] text-emerald-200 cursor-pointer select-none hover:text-emerald-100">
+                  {adOutputs.length} saved render{adOutputs.length === 1 ? '' : 's'} for this campaign
+                </summary>
+                <ul className="space-y-1 pt-1.5">
+                  {adOutputs.slice(0, 5).map((o) => (
+                    <li
+                      key={o.id}
+                      data-testid="spokesperson-lane-saved-render-row"
+                      data-output-id={o.id}
+                      className="flex items-center justify-between gap-2 rounded bg-black/20 ring-1 ring-emerald-400/20 px-2 py-1"
+                    >
+                      <span className="text-[10px] text-emerald-100 truncate">
+                        {o.script
+                          ? (o.script.length > 60
+                              ? o.script.slice(0, 60) + '…'
+                              : o.script)
+                          : <span className="text-zinc-400 italic">no script captured</span>}
+                      </span>
+                      <a
+                        href={o.video_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        download
+                        className="text-[10px] text-spark hover:underline font-mono shrink-0"
+                      >
+                        open ↗
+                      </a>
+                    </li>
+                  ))}
+                  {adOutputs.length > 5 && (
+                    <li className="text-[9px] text-zinc-500 font-mono px-2">
+                      + {adOutputs.length - 5} more — see Outputs tab for the full history
+                    </li>
+                  )}
+                </ul>
+              </details>
+            )
+          })()}
         </div>
       </div>
 

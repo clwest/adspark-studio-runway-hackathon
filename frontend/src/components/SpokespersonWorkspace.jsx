@@ -61,6 +61,14 @@ export default function SpokespersonWorkspace() {
   const [activeTab, setActiveTab] = useState('identity')
   const [busyAction, setBusyAction] = useState(null)
   const [modeModalOpen, setModeModalOpen] = useState(false)
+  // PR DA — campaign selection state. The lane edits whichever
+  // campaign is *selected*, not "most recent" by default. When
+  // `creatingNewCampaign` is true the lane mounts the empty
+  // <LaneBriefCreator> regardless of which campaigns exist —
+  // operator just clicked `+ New Campaign` and shouldn't see the
+  // prior campaign's brief / script bleed through.
+  const [selectedCampaignId, setSelectedCampaignId] = useState(null)
+  const [creatingNewCampaign, setCreatingNewCampaign] = useState(false)
 
   // PR CC — pin the active spokesperson to the URL id on mount
   // so any subsequent navigation to / picks them up. Mirrors
@@ -132,6 +140,26 @@ export default function SpokespersonWorkspace() {
   const linkedCampaigns = (campaigns || []).filter(
     (c) => c.character_id === id,
   )
+
+  // PR DA — when no campaign is selected and the operator hasn't
+  // explicitly clicked "+ New Campaign", default to the newest
+  // linked campaign so first-load shows something concrete. If
+  // the previously-selected campaign was deleted (or detached),
+  // auto-recover by re-selecting the newest.
+  useEffect(() => {
+    if (creatingNewCampaign) return
+    const ids = linkedCampaigns.map((c) => c.id)
+    if (ids.length === 0) {
+      if (selectedCampaignId !== null) setSelectedCampaignId(null)
+      return
+    }
+    if (!selectedCampaignId || !ids.includes(selectedCampaignId)) {
+      const newest = [...linkedCampaigns].sort((a, b) =>
+        String(b.created_at || '').localeCompare(String(a.created_at || '')),
+      )[0]
+      setSelectedCampaignId(newest?.id || null)
+    }
+  }, [creatingNewCampaign, linkedCampaigns, selectedCampaignId])
 
   // PR CC — Identity tab handlers. Mirror the SpokespersonStudio
   // shape exactly so /api/characters + voice clone + portrait +
@@ -234,9 +262,28 @@ export default function SpokespersonWorkspace() {
   // dismisses the modal and mounts the matching lane.
   const handleOpenCreateCampaign = () => {
     setActiveTab('campaigns')
+    // PR DA — entering creating-new mode clears the selection so
+    // the lane mounts <LaneBriefCreator> with blank fields, not
+    // <LaneBriefEditor> against the previously-selected campaign.
+    setCreatingNewCampaign(true)
+    setSelectedCampaignId(null)
     setModeModalOpen(true)
   }
   const handleCloseCreateCampaign = () => setModeModalOpen(false)
+  // PR DA — campaign-row click. Switches the active campaign and
+  // exits creating-new mode so the lane shows the picked record's
+  // brief / script / outputs.
+  const handleSelectCampaign = (campaignId) => {
+    if (!campaignId) return
+    setSelectedCampaignId(campaignId)
+    setCreatingNewCampaign(false)
+  }
+  // PR DA — operator dismisses the "New campaign" empty form
+  // without saving (e.g. clicked "+ New Campaign" by mistake).
+  const handleCancelCreateCampaign = () => {
+    setCreatingNewCampaign(false)
+    // The auto-select-newest effect will pick a campaign next render.
+  }
 
   // PR CE — propagate a single updated Campaign from
   // `<CampaignLanes>` handlers into our local slice so lanes
@@ -638,7 +685,7 @@ export default function SpokespersonWorkspace() {
                   ? 'No campaigns linked yet — pick a mode to start one for this spokesperson.'
                   : `${linkedCampaigns.length} linked campaign${
                       linkedCampaigns.length === 1 ? '' : 's'
-                    }. Each lane below targets the most-recent campaign.`}
+                    }. Pick a campaign below, or create a new one. The lane edits the selected campaign.`}
               </p>
             </div>
             <button
@@ -662,31 +709,87 @@ export default function SpokespersonWorkspace() {
                     String(a.created_at || ''),
                   ),
                 )
-                .map((c) => (
-                  <li
-                    key={c.id}
-                    data-testid="spokesperson-workspace-campaigns-row"
-                    data-campaign-id={c.id}
-                    className="rounded-md ring-1 ring-zinc-800 bg-zinc-950/50 px-2 py-1.5 flex items-center justify-between gap-2"
-                  >
-                    <span className="font-mono text-[10px] text-zinc-400 shrink-0">
-                      {String(c.id).slice(0, 8)}
-                    </span>
-                    <span className="truncate flex-1">
-                      {c.business || 'untitled'}
-                      {c.product ? (
-                        <span className="text-zinc-500"> · {c.product}</span>
-                      ) : null}
-                    </span>
-                    <span className="font-mono text-[9px] text-zinc-500 shrink-0">
-                      {c.cached_video_url ||
-                      c.host_video_url ||
-                      c.dialogue_scene_video_url
-                        ? 'rendered'
-                        : 'draft'}
-                    </span>
-                  </li>
-                ))}
+                .map((c) => {
+                  // PR DA — click-to-select. The active row gets a
+                  // pink ring so the operator always knows which
+                  // campaign the lane below is editing.
+                  const isActive =
+                    !creatingNewCampaign && c.id === selectedCampaignId
+                  const adOutputCount = Array.isArray(c.outputs)
+                    ? c.outputs.filter((o) => o.kind === 'spokesperson_ad').length
+                    : 0
+                  const isRendered = Boolean(
+                    c.host_video_url ||
+                      c.cached_video_url ||
+                      c.dialogue_scene_video_url ||
+                      adOutputCount > 0,
+                  )
+                  return (
+                    <li
+                      key={c.id}
+                      data-testid="spokesperson-workspace-campaigns-row"
+                      data-campaign-id={c.id}
+                      data-active={isActive ? 'true' : 'false'}
+                      className={
+                        'rounded-md px-2 py-1.5 flex items-center justify-between gap-2 transition-colors cursor-pointer ring-1 ' +
+                        (isActive
+                          ? 'ring-pink-400/50 bg-pink-500/10'
+                          : 'ring-zinc-800 bg-zinc-950/50 hover:ring-pink-400/30 hover:bg-zinc-900/40')
+                      }
+                      onClick={() => handleSelectCampaign(c.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          handleSelectCampaign(c.id)
+                        }
+                      }}
+                      role="button"
+                      tabIndex={0}
+                      aria-pressed={isActive}
+                    >
+                      <span className="font-mono text-[10px] text-zinc-400 shrink-0">
+                        {String(c.id).slice(0, 8)}
+                      </span>
+                      <span className="truncate flex-1">
+                        {c.business || 'untitled'}
+                        {c.product ? (
+                          <span className="text-zinc-500"> · {c.product}</span>
+                        ) : null}
+                      </span>
+                      {adOutputCount > 0 && (
+                        <span
+                          className="font-mono text-[9px] text-emerald-300 shrink-0"
+                          title={`${adOutputCount} saved Spokesperson Ad render${adOutputCount === 1 ? '' : 's'}`}
+                        >
+                          {adOutputCount}× saved
+                        </span>
+                      )}
+                      <span
+                        className={
+                          'font-mono text-[9px] shrink-0 ' +
+                          (isRendered ? 'text-emerald-300' : 'text-zinc-500')
+                        }
+                      >
+                        {isRendered ? 'rendered' : 'draft'}
+                      </span>
+                      {isActive ? (
+                        <span
+                          className="text-[9px] rounded-full bg-pink-500/30 text-pink-100 px-2 py-0.5 font-mono shrink-0"
+                          aria-label="active campaign"
+                        >
+                          active
+                        </span>
+                      ) : (
+                        <span
+                          className="text-[9px] text-pink-300/70 font-mono shrink-0"
+                          aria-hidden="true"
+                        >
+                          edit →
+                        </span>
+                      )}
+                    </li>
+                  )
+                })}
             </ul>
           )}
           <CampaignLanes
@@ -696,6 +799,10 @@ export default function SpokespersonWorkspace() {
             modalOpen={modeModalOpen}
             onModalClose={handleCloseCreateCampaign}
             onCampaignsChanged={handleCampaignsChanged}
+            selectedCampaignId={selectedCampaignId}
+            creatingNewCampaign={creatingNewCampaign}
+            onSelectCampaign={handleSelectCampaign}
+            onCancelCreateCampaign={handleCancelCreateCampaign}
           />
         </section>
       )}

@@ -1,8 +1,37 @@
 # START NEXT SESSION — AdSpark Studio
 
-**Last touched:** 2026-05-10 (PR CY — append-only
-output history. Spokesperson Ad re-renders used to
-overwrite the prior MP4 + the single-value
+**Last touched:** 2026-05-10 (PR DA — multi-ad /
+reviewable Spokesperson campaigns. The lane used to
+silently target "most recent" via internal
+`focused = sorted[0]`, so clicking `+ New Campaign`
+left the prior campaign's brief / script bleeding
+through into `<LaneBriefEditor>` instead of mounting
+the empty `<LaneBriefCreator>`. Workspace now lifts
+two pieces of state — `selectedCampaignId` +
+`creatingNewCampaign` — and threads them through
+`<CampaignLanes>` to `<SpokespersonLane>`. The lane
+reads `focusedCampaign` from props (no internal
+sort). Workspace campaigns list rows are now
+clickable with an active-row pink ring + `active`
+pill, an `N× saved` chip showing per-campaign render
+count, an emerald `rendered` / zinc `draft` pill, and
+an `edit →` affordance. Header copy: "Pick a campaign
+below, or create a new one. The lane edits the
+selected campaign." New active-state banner inside
+the lane: pink "✏️ New campaign" when creating,
+emerald "Editing: <business>" when editing existing.
+Step 3 mounts a saved-renders `<details>` scoped to
+the selected campaign. After `<LaneBriefCreator>`
+save, the new campaign auto-selects. Cancel-new-
+campaign auto-recovers to newest. Mock probe
+confirmed two campaigns isolated at the data layer
+— bug was purely in the frontend selection logic.
+Pytest 20/20, smoke 3/3, build 505.92 KB initial /
+136.99 KB gzip (+4.28 KB / +1.23 KB). No real Runway
+calls fired. Backend route count still **74**.
+Earlier: PR CY — append-only output history.
+Spokesperson Ad re-renders used to overwrite the
+prior MP4 + the single-value
 `host_video_url` URL, so the Outputs gallery only ever
 showed the latest take. New `Campaign.outputs:
 list[OutputRecord]` field captures every successful
@@ -242,9 +271,11 @@ gen4_image_turbo broken upstream, switched to
 gen4_image `cc38d7d`; PR CU Fix Campaign Creation
 Dead-End `ea4ba88`; PR CV Runway API Contract Audit
 `71e72b2`; PR CW Clean Portrait Prompt Composer
-`d9e556c`; PR CX Minimum Viable Knowledge Flow +
-PR CY Append-Only Output History both in flight on
-top — SESSION_012–SESSION_082 handoffs added).
+`d9e556c`; PR CX Minimum Viable Knowledge Flow
+`80e32ca`; PR CY Append-Only Output History
+`2630532`; PR DA Multi-Ad / Reviewable Spokesperson
+Campaigns in flight on top —
+SESSION_012–SESSION_083 handoffs added).
 
 ## Where things stand
 

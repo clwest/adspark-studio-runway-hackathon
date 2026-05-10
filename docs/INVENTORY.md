@@ -1,7 +1,31 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after **PR CY — Append-Only Output History**.
+context-kit refresh after **PR DA — Multi-Ad / Reviewable
+Spokesperson Campaigns**. The lane used to silently target
+"most recent" via internal `focused = sorted[0]`; clicking
+`+ New Campaign` left the prior campaign's brief + script
+bleeding through into `<LaneBriefEditor>` instead of mounting
+the empty `<LaneBriefCreator>`. Workspace now lifts two pieces
+of state — `selectedCampaignId` + `creatingNewCampaign` —
+threaded through `<CampaignLanes>` into `<SpokespersonLane>`.
+The lane reads `focusedCampaign` from props with zero internal
+sorting. Workspace campaigns list rows are now clickable with
+an active pink ring + `active` pill, an `N× saved` chip showing
+per-campaign render count, an emerald `rendered` / zinc `draft`
+pill, and an `edit →` affordance. New active-state banner
+inside the lane flips pink ("✏️ New campaign") when creating
+or emerald ("Editing: <business>") when editing existing. Step
+3 mounts a saved-renders `<details>` scoped to the selected
+campaign. After `<LaneBriefCreator>` save, the new campaign
+auto-selects. Cancel-new-campaign auto-recovers to newest.
+Header copy: "Pick a campaign below, or create a new one. The
+lane edits the selected campaign." (was "Each lane below
+targets the most-recent campaign."). Mock probe confirmed two
+campaigns isolated at the data layer. Backend route count
+still **74**. Cinematic / Dialogue lanes untouched (scope was
+Spokesperson Ad only).
+Earlier: PR CY — Append-Only Output History.
 Spokesperson Ad re-renders used to overwrite the prior MP4
 (canonical filename `data/host/{id}.mp4` plus single-value
 `host_video_url` URL), so the Outputs gallery only ever showed

@@ -89,6 +89,11 @@ export default function CampaignLanes({
   modalOpen = false,
   onModalClose,
   onCampaignsChanged,
+  // PR DA — campaign-selection state lifted to the workspace.
+  selectedCampaignId = null,
+  creatingNewCampaign = false,
+  onSelectCampaign = null,
+  onCancelCreateCampaign = null,
 }) {
   const [activeMode, setActiveModeState] = useState(() => getActiveMode())
 
@@ -152,6 +157,16 @@ export default function CampaignLanes({
   // *placeholders* — the legacy wizard refines them. The brief
   // editor surfaces the four fields the operator just typed for
   // continued editing.
+  // PR DA — focused-campaign derivation lives here so the lane
+  // (and the Cinematic / Dialogue siblings) all see the same
+  // selected record. When `creatingNewCampaign` is true we
+  // deliberately pass null so the lane mounts <LaneBriefCreator>
+  // with blank fields.
+  const focusedCampaign =
+    !creatingNewCampaign && selectedCampaignId
+      ? linkedCampaigns.find((c) => c.id === selectedCampaignId) || null
+      : null
+
   const handleCreateCampaign = async ({ business, product = '', audience = '', tone = '' } = {}) => {
     if (!activeSpokesperson?.id) {
       throw new Error('active spokesperson required to attach the new campaign')
@@ -192,7 +207,12 @@ export default function CampaignLanes({
       // so the operator can retry.
       throw new Error(`Campaign ${created.id} saved but attach failed: ${e?.message || e}`)
     }
-    return propagate(final)
+    propagate(final)
+    // PR DA — newly-created campaign becomes the selected one so
+    // the lane immediately re-mounts in editor mode against the
+    // record the operator just wrote.
+    if (final?.id) onSelectCampaign?.(final.id)
+    return final
   }
 
   // PR CU — Save commercial script inline so Step 2 has a real
@@ -352,6 +372,9 @@ export default function CampaignLanes({
           onUpdateBrief={handleUpdateBrief}
           onCreateCampaign={handleCreateCampaign}
           onSaveScript={handleSaveScript}
+          focusedCampaign={focusedCampaign}
+          creatingNew={creatingNewCampaign}
+          onCancelCreate={onCancelCreateCampaign}
         />
       )}
       {activeMode === CAMPAIGN_MODES.CINEMATIC && (
