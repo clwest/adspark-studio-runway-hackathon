@@ -1,13 +1,33 @@
 # START NEXT SESSION — AdSpark Studio
 
-**Last touched:** 2026-05-10 (PR CR — fixed portrait
-negation bug + surfaced Runway `failureCode`. Donny
-Sparks reproduced `INTERNAL.BAD_OUTPUT.CODE01` against
-the PR CP cont. negation tail ("no horror, no
-distortion, no extra limbs, no melted anatomy, no
-uncanny realism"); diffusion models misread inline
-negations as content directives. Rewrote
-`_BRAND_SAFE_TAIL` + frontend `_FINISHERS` to
+**Last touched:** 2026-05-10 (PR CS — capture failed
+portrait prompt + add safe-retry preset. Donny Sparks
+`d2fdf899e8d8` hit `INTERNAL.BAD_OUTPUT.CODE01` from
+"stylized, editorial, studio light, muted palette;
+premium modern tech-startup hoodie with subtle
+creative-agency styling, indiana jones style hat" — IP
+reference + adjective overload. New
+`Character.portrait_last_error` field captures the
+failure text; route now persists `portrait_prompt` +
+`portrait_last_error` on failure (was lost) and logs
+the resolved prompt + character name + style chips at
+WARNING for diagnosis. New
+`_SAFE_RETRY_TEMPLATES[template]` + `safe_retry: bool`
+on the request body fill a simpler ~280-char preset
+that bypasses character.style entirely — the field
+where unstable concepts pile up. Frontend failure
+banner shows the failed prompt in a `<details>` +
+adds an amber "Try safer prompt" button. Workspace
+audit `<details>` flips to rose styling with a
+`runway · …` error caption when `portrait_last_error`
+is set. Pytest 7/7 passed (5 PR CR + 2 new PR CS),
+smoke 3/3, build 483.49 KB initial / 131.88 KB gzip.
+No real Runway calls fired. Earlier: PR CR — fixed
+portrait negation bug + surfaced Runway `failureCode`,
+Donny Sparks reproduced `INTERNAL.BAD_OUTPUT.CODE01`
+against the PR CP cont. negation tail; diffusion
+models misread inline negations as content directives.
+Rewrote `_BRAND_SAFE_TAIL` + frontend `_FINISHERS` to
 positive-only phrasing. Donny rendered cleanly under
 the new template (549 KB PNG). Single auto-retry on
 `INTERNAL.*` failure codes added as belt-and-braces.
@@ -66,9 +86,10 @@ Data + Portraits + Stats Accuracy `b0d4bf2`; PR CP
 Restore Delete Spokesperson + Endpoint Audit `82b695f`;
 PR CP cont. portrait template hardening `58a73f2`;
 PR CQ Sharpen Demo Seed Subjects + Tiny Prompt Audit
-`d8dcca5`; PR CR Portrait Negation Bug + Failure-Code
-Surfacing in flight on top —
-SESSION_012–SESSION_075 handoffs added).
+`d8dcca5`; PR CR Portrait Negation Bug + Avatar
+Reliability `ab8f8b7`; PR CS Capture Failed Prompt +
+Safe-Retry Preset in flight on top —
+SESSION_012–SESSION_076 handoffs added).
 
 ## Where things stand
 

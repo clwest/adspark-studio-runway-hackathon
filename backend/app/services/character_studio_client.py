@@ -130,18 +130,84 @@ TEMPLATE_DEFAULTS: dict[str, dict[str, str]] = {
 }
 
 
+# PR CS — Safe-retry preset. When `gen4_image_turbo` rejects a
+# portrait as `INTERNAL.BAD_OUTPUT.CODE01` (typically because the
+# character's `style` chain stacks unstable concepts — celebrity / IP
+# references like "indiana jones style hat", or adjective overload
+# like "stylized, editorial, studio light, muted palette; premium
+# modern tech-startup hoodie with subtle creative-agency styling"),
+# the operator can re-fire with `safe_retry=True`. Safe-retry:
+#
+# - **Bypasses character.style entirely** — this is the field where
+#   chip-stacks + IP references accumulate; it's the most common
+#   trigger for BAD_OUTPUT.
+# - Uses a short, declarative template (~280 chars vs ~720 for the
+#   default mascot template) — fewer comma chains, no negations.
+# - Keeps the persona's `subject` (concrete creature description)
+#   so the regen still depicts the right character.
+#
+# Templates are intentionally generic so any subject (donkey mascot,
+# bison spokesperson, founder, coach) renders predictably. The
+# point is reliable render, not perfect art.
+_SAFE_RETRY_TEMPLATES: dict[str, str] = {
+    "mascot": (
+        "Polished 3D brand mascot portrait of {subject}. "
+        "Adult brand-mascot character design with simple modern "
+        "attire. Calm confident expression. Clean neutral studio "
+        "background. Head and shoulders. Professional advertising "
+        "character design. Balanced facial proportions. Soft "
+        "studio lighting."
+    ),
+    "founder": (
+        "Polished commercial portrait of {subject}. Photorealistic "
+        "professional founder with simple modern attire. Calm "
+        "confident expression. Clean neutral studio background. "
+        "Head and shoulders. Professional advertising character "
+        "design. Balanced facial proportions. Soft studio lighting."
+    ),
+    "coach": (
+        "Polished commercial portrait of {subject}. Photorealistic "
+        "professional coach with simple modern attire. Calm "
+        "confident expression. Clean neutral studio background. "
+        "Head and shoulders. Professional advertising character "
+        "design. Balanced facial proportions. Soft studio lighting."
+    ),
+    "local_guide": (
+        "Polished commercial portrait of {subject}. Photorealistic "
+        "professional local-business spokesperson with simple "
+        "modern attire. Calm confident expression. Clean neutral "
+        "studio background. Head and shoulders. Professional "
+        "advertising character design. Balanced facial proportions. "
+        "Soft studio lighting."
+    ),
+}
+
+
 def build_prompt(
     template: str,
     subject: Optional[str] = None,
     style: Optional[str] = None,
     *,
     prompt_override: Optional[str] = None,
+    safe_retry: bool = False,
 ) -> str:
     """Assemble the portrait prompt. ``prompt_override`` wins over
     everything; otherwise we fill the named template.
+
+    PR CS — when ``safe_retry=True`` we bypass ``style`` entirely and
+    fill a simpler ``_SAFE_RETRY_TEMPLATES`` entry. The character's
+    ``subject`` is still honoured. Operator-triggered after a
+    ``BAD_OUTPUT`` failure so we don't double-bill credits on the
+    same unstable prompt.
     """
     if prompt_override and prompt_override.strip():
         return prompt_override.strip()[:1000]
+    if safe_retry:
+        tpl = _SAFE_RETRY_TEMPLATES.get(template) or _SAFE_RETRY_TEMPLATES["mascot"]
+        defaults = TEMPLATE_DEFAULTS.get(template) or TEMPLATE_DEFAULTS["mascot"]
+        return tpl.format(
+            subject=(subject or defaults["subject"]).strip(),
+        )[:1000]
     tpl = PORTRAIT_TEMPLATES.get(template) or PORTRAIT_TEMPLATES["mascot"]
     defaults = TEMPLATE_DEFAULTS.get(template) or TEMPLATE_DEFAULTS["mascot"]
     return tpl.format(
@@ -398,14 +464,23 @@ def generate_portrait(
     subject: Optional[str] = None,
     style: Optional[str] = None,
     prompt_override: Optional[str] = None,
+    safe_retry: bool = False,
 ) -> PortraitResult:
-    """Public entry. Mock-safe; never raises."""
+    """Public entry. Mock-safe; never raises.
+
+    PR CS — when ``safe_retry=True`` we delegate to a simpler
+    `_SAFE_RETRY_TEMPLATES` entry that ignores ``style`` (the
+    field where unstable concepts pile up). ``prompt_override``
+    still wins if explicitly set so the operator's typed text
+    survives.
+    """
     chosen_template = (template or character.template or "mascot").lower()
     prompt = build_prompt(
         chosen_template,
         subject=subject if subject is not None else character.subject,
         style=style if style is not None else character.style,
         prompt_override=prompt_override,
+        safe_retry=safe_retry,
     )
 
     if settings.runway_mock:

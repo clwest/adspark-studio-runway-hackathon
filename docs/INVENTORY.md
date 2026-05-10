@@ -1,8 +1,31 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after **PR CR — Portrait Negation Bug +
-Failure-Code Surfacing**. Donny Sparks (an anthropomorphic
+context-kit refresh after **PR CS — Capture Failed Portrait
+Prompt + Safe-Retry Preset**. Donny Sparks `d2fdf899e8d8`
+reproduced `INTERNAL.BAD_OUTPUT.CODE01` against a `style`
+field containing "indiana jones style hat" + dense adjective
+chains — IP reference + chip-stack overload. New
+`Character.portrait_last_error` field captures the failure
+text; the `/api/characters/{id}/generate-portrait` route now
+persists `portrait_prompt` + `portrait_last_error` on failure
+(previously lost) and logs the resolved prompt + character
+name + style_chips + flags at WARNING for diagnosis. New
+`_SAFE_RETRY_TEMPLATES` (one per archetype) + `safe_retry:
+bool` request-body field fill a ~280-char preset that
+**bypasses `character.style` entirely** — the field where
+unstable concepts accumulate. The character's `subject`
+survives so the regen still depicts the right
+creature/person. The CreateSpokespersonFlow failure banner
+gets a `<details>` showing the failed prompt + Runway
+`runway · …` caption + an amber **"Try safer prompt"** button
+that fires `safe_retry=true` (deliberately drops the
+operator-typed `prompt_override` too). The workspace Identity
+audit `<details>` flips to rose styling with a `runway · …`
+caption when `portrait_last_error` is set. Two new pytests
+(`test_safe_retry_uses_simpler_prompt` +
+`test_default_path_still_includes_style`) pin the contract.
+Backend route count still **71**. Earlier: Donny Sparks (an anthropomorphic
 donkey marketing mascot) reproduced
 `INTERNAL.BAD_OUTPUT.CODE01` against the PR CP cont.
 brand-safe tail's negation list ("No horror, no

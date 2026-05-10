@@ -98,6 +98,13 @@ class GeneratePortraitBody(BaseModel):
     subject: Optional[str] = Field(default=None, max_length=300)
     style: Optional[str] = Field(default=None, max_length=300)
     prompt_override: Optional[str] = Field(default=None, max_length=1000)
+    # PR CS — safe-retry preset bypasses character.style and fills a
+    # simpler `_SAFE_RETRY_TEMPLATES` entry. Operator-triggered after
+    # BAD_OUTPUT failures (style chip stacks + IP references like
+    # "indiana jones style hat" are the historical trigger). Has no
+    # effect when `prompt_override` is also supplied — explicit
+    # operator-typed text always wins.
+    safe_retry: bool = Field(default=False)
 
 
 class CreateAvatarBody(BaseModel):
@@ -252,6 +259,7 @@ def post_generate_portrait(
         )
 
     portrait_path = store.portrait_path(character_id)
+    safe_retry = bool(body.safe_retry) if body else False
     result = studio_generate_portrait(
         record,
         portrait_path,
@@ -260,6 +268,7 @@ def post_generate_portrait(
         subject=body.subject if body else None,
         style=body.style if body else None,
         prompt_override=body.prompt_override if body else None,
+        safe_retry=safe_retry,
     )
 
     if result.status == "ok":
@@ -268,14 +277,42 @@ def post_generate_portrait(
             portrait_url=result.portrait_url,
             portrait_source=result.portrait_source,
             portrait_prompt=result.portrait_prompt,
+            portrait_last_error=None,  # PR CS — clear on success
             template=template,
             subject=(body.subject if body else None) or record.subject,
             style=(body.style if body else None) or record.style,
             mock_mode=result.mock_mode,
         )
     else:
+        # PR CS — capture the failed prompt + error on the Character
+        # record so the workspace audit `<details>` (and any UI
+        # failure banner) can surface what was sent without a
+        # log dive. Style-chips + prompt_override flag are
+        # logged here for diagnosis; the persisted prompt itself
+        # carries the resolved text.
+        style_chips = []
+        if isinstance(record.metadata, dict):
+            chips = record.metadata.get("visual_style_chips") or []
+            if isinstance(chips, list):
+                style_chips = [c for c in chips if isinstance(c, str)]
         logger.warning(
-            "portrait failed character=%s err=%s", character_id, result.error,
+            "portrait failed character=%s name=%r template=%s "
+            "style_chips=%s prompt_override_used=%s safe_retry=%s "
+            "prompt_len=%d err=%s prompt=%r",
+            character_id,
+            record.name,
+            template,
+            style_chips,
+            bool((body.prompt_override or "").strip()) if body else False,
+            safe_retry,
+            len(result.portrait_prompt or ""),
+            result.error,
+            (result.portrait_prompt or "")[:600],
+        )
+        store.update(
+            character_id,
+            portrait_prompt=result.portrait_prompt,
+            portrait_last_error=result.error,
         )
         raise HTTPException(
             status_code=502 if not result.mock_mode else 500,

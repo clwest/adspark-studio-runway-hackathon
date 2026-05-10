@@ -517,21 +517,61 @@ export default function SpokespersonWorkspace() {
                 {character?.portrait_prompt ? (
                   <details
                     data-testid="spokesperson-workspace-portrait-prompt"
-                    className="rounded-lg ring-1 ring-zinc-800 bg-zinc-950/60 px-3 py-1.5"
+                    data-failed={
+                      character.portrait_last_error ? 'true' : 'false'
+                    }
+                    className={
+                      'rounded-lg px-3 py-1.5 ring-1 ' +
+                      (character.portrait_last_error
+                        ? 'ring-rose-500/40 bg-rose-950/20'
+                        : 'ring-zinc-800 bg-zinc-950/60')
+                    }
                   >
-                    <summary className="text-[10px] text-zinc-400 cursor-pointer select-none hover:text-zinc-200">
-                      Last portrait prompt sent to{' '}
+                    <summary
+                      className={
+                        'text-[10px] cursor-pointer select-none ' +
+                        (character.portrait_last_error
+                          ? 'text-rose-300 hover:text-rose-100'
+                          : 'text-zinc-400 hover:text-zinc-200')
+                      }
+                    >
+                      {character.portrait_last_error
+                        ? 'Last portrait FAILED — prompt sent to '
+                        : 'Last portrait prompt sent to '}
                       <span className="font-mono">gen4_image_turbo</span>{' '}
-                      <span className="text-zinc-600">
+                      <span
+                        className={
+                          character.portrait_last_error
+                            ? 'text-rose-400/70'
+                            : 'text-zinc-600'
+                        }
+                      >
                         ({character.portrait_prompt.length} chars)
                       </span>
                     </summary>
                     <pre
                       data-testid="spokesperson-workspace-portrait-prompt-text"
-                      className="text-[10px] text-zinc-300 font-mono whitespace-pre-wrap leading-snug pt-2 break-words"
+                      className={
+                        'text-[10px] font-mono whitespace-pre-wrap leading-snug pt-2 break-words ' +
+                        (character.portrait_last_error
+                          ? 'text-rose-100'
+                          : 'text-zinc-300')
+                      }
                     >
                       {character.portrait_prompt}
                     </pre>
+                    {/* PR CS — failure-specific runway error caption.
+                        Shows the [code=…] / task=… surface so the
+                        operator has the diagnostic line right next
+                        to the prompt that produced it. */}
+                    {character.portrait_last_error && (
+                      <p
+                        data-testid="spokesperson-workspace-portrait-prompt-error"
+                        className="text-[10px] text-rose-300/80 font-mono leading-snug pt-1.5 break-words"
+                      >
+                        runway · {character.portrait_last_error}
+                      </p>
+                    )}
                   </details>
                 ) : (
                   <p

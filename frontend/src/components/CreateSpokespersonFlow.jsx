@@ -254,14 +254,21 @@ export default function CreateSpokespersonFlow({
 
   // PR CJ — retry the portrait task on the partially-created
   // character. No new createCharacter call.
-  const tryGeneratePortrait = async (characterId) => {
+  // PR CS — accept `safeRetry` so the failure-banner button can
+  // re-fire with the simpler `_SAFE_RETRY_TEMPLATES` preset that
+  // bypasses character.style.
+  const tryGeneratePortrait = async (characterId, { safeRetry = false } = {}) => {
     setError('')
     setBusy(true)
     setPhase('portrait')
     const promptOverride = form.portrait_prompt?.trim() || null
     try {
       const next = await api.generateCharacterPortrait(characterId, {
-        prompt_override: promptOverride || undefined,
+        // Safe retry deliberately drops the operator-edited textarea
+        // override — the override is the most likely source of the
+        // unstable concept that broke the previous attempt.
+        prompt_override: safeRetry ? undefined : (promptOverride || undefined),
+        safe_retry: safeRetry || undefined,
       })
       let final = next
       if (form.create_avatar) {
@@ -330,6 +337,14 @@ export default function CreateSpokespersonFlow({
   const handleRetryPortrait = async () => {
     if (!createdCharacter || busy) return
     await tryGeneratePortrait(createdCharacter.id)
+  }
+
+  // PR CS — operator-triggered safer retry that bypasses both the
+  // textarea override AND character.style. Use after an
+  // `INTERNAL.BAD_OUTPUT.CODE01` to give the model a stable prompt.
+  const handleSafeRetryPortrait = async () => {
+    if (!createdCharacter || busy) return
+    await tryGeneratePortrait(createdCharacter.id, { safeRetry: true })
   }
 
   const handleSkipPortrait = async () => {
@@ -464,11 +479,41 @@ export default function CreateSpokespersonFlow({
                 {createdCharacter?.name}
               </span>{' '}
               was saved — Runway just couldn't render the face this
-              time. Retry in place, or save without a portrait
-              (you can render it later from the spokesperson's
-              Identity tab).
+              time. Try the safer preset (drops the style chips +
+              fashion text), retry as-is, or save without a portrait.
             </p>
-            <div className="flex items-center justify-end gap-2">
+            {/* PR CS — surface the failed prompt so the operator
+                can see what triggered the rejection without
+                spelunking logs. ``portrait_prompt`` is now persisted
+                on failure (route stores it before raising 502). */}
+            {createdCharacter?.portrait_prompt ? (
+              <details
+                data-testid="create-spokesperson-portrait-failed-prompt"
+                className="rounded-md ring-1 ring-rose-500/30 bg-rose-950/20 px-2 py-1.5"
+              >
+                <summary className="text-[10px] text-rose-300 cursor-pointer select-none hover:text-rose-100">
+                  Show prompt that failed
+                  <span className="text-rose-400/70">
+                    {' '}({createdCharacter.portrait_prompt.length} chars)
+                  </span>
+                </summary>
+                <pre
+                  data-testid="create-spokesperson-portrait-failed-prompt-text"
+                  className="text-[10px] text-rose-100 font-mono whitespace-pre-wrap leading-snug pt-1.5 break-words"
+                >
+                  {createdCharacter.portrait_prompt}
+                </pre>
+                {createdCharacter.portrait_last_error && (
+                  <p
+                    data-testid="create-spokesperson-portrait-failed-runway-error"
+                    className="text-[10px] text-rose-300/80 font-mono leading-snug pt-1.5 break-words"
+                  >
+                    runway · {createdCharacter.portrait_last_error}
+                  </p>
+                )}
+              </details>
+            ) : null}
+            <div className="flex items-center justify-end gap-2 flex-wrap">
               <button
                 type="button"
                 onClick={handleSkipPortrait}
@@ -480,12 +525,22 @@ export default function CreateSpokespersonFlow({
               </button>
               <button
                 type="button"
+                onClick={handleSafeRetryPortrait}
+                disabled={busy}
+                data-testid="create-spokesperson-safe-retry-portrait"
+                className="text-xs rounded-md ring-1 ring-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-100 px-3 py-1.5 font-semibold transition-colors disabled:opacity-60"
+                title="Re-fire with a simpler positive-only template that drops the style chips + fashion text. Best for INTERNAL.BAD_OUTPUT failures."
+              >
+                {busy ? 'Retrying…' : 'Try safer prompt'}
+              </button>
+              <button
+                type="button"
                 onClick={handleRetryPortrait}
                 disabled={busy}
                 data-testid="create-spokesperson-retry-portrait"
                 className="text-xs rounded-md bg-pink-500/80 hover:bg-pink-500 text-zinc-100 px-3 py-1.5 font-semibold transition-colors disabled:opacity-60"
               >
-                {busy ? 'Retrying…' : 'Retry portrait'}
+                {busy ? 'Retrying…' : 'Retry as-is'}
               </button>
             </div>
           </footer>

@@ -427,6 +427,12 @@ class Character(BaseModel):
     portrait_url: Optional[str] = None  # /api/characters/{id}/portrait
     portrait_source: Optional[PortraitSource] = None
     portrait_prompt: Optional[str] = None
+    # PR CS — capture the most recent portrait failure so the operator
+    # can diagnose `INTERNAL.BAD_OUTPUT.CODE01` etc. without spelunking
+    # logs. Cleared on success. Format mirrors the
+    # `_portrait_task_attempt` raised string:
+    # `portrait task FAILED: <reason> [code=<failureCode>] (task=<id>)`.
+    portrait_last_error: Optional[str] = None
 
     # Runway avatar binding
     runway_avatar_id: Optional[str] = None

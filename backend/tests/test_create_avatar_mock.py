@@ -140,3 +140,75 @@ def test_create_avatar_409_when_portrait_file_is_empty(
     resp = client.post(f"/api/characters/{cid}/create-avatar", json={})
     assert resp.status_code == 409
     assert "empty" in resp.json()["detail"].lower()
+
+
+# ---- PR CS — safe-retry preset + persist-on-failure --------------
+
+
+def test_safe_retry_uses_simpler_prompt(client: TestClient):
+    """`safe_retry=True` should bypass character.style and render a
+    short, declarative prompt — not the full PORTRAIT_TEMPLATES
+    chain. Mock-mode persists the resolved prompt, so we can read it
+    back from the Character record.
+    """
+    resp = client.post(
+        "/api/characters",
+        json={
+            "name": "Safe Retry Donkey",
+            "template": "mascot",
+            "subject": "an anthropomorphic donkey marketing mascot",
+            "style": (
+                "stylized, editorial, studio light, muted palette; "
+                "premium modern tech-startup hoodie, indiana jones "
+                "style hat"
+            ),
+            "voice_preset": "drew",
+        },
+    )
+    assert resp.status_code == 200
+    cid = resp.json()["id"]
+    resp = client.post(
+        f"/api/characters/{cid}/generate-portrait",
+        json={"safe_retry": True},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    prompt = body["portrait_prompt"]
+    assert prompt
+    # Safe-retry preamble lands at the top of the prompt.
+    assert prompt.startswith("Polished 3D brand mascot portrait of"), prompt
+    # The unstable IP reference must not survive — safe-retry drops
+    # `style` entirely.
+    assert "indiana jones" not in prompt.lower(), (
+        "safe_retry must bypass character.style entirely; got: " + prompt
+    )
+    assert "muted palette" not in prompt.lower(), prompt
+    # Sanity: prompt is short enough that diffusion won't choke.
+    assert len(prompt) < 600, f"safe-retry prompt too long ({len(prompt)})"
+
+
+def test_default_path_still_includes_style(client: TestClient):
+    """Counter-test: when `safe_retry=False` (default), character.style
+    is still composed into the resolved prompt. This pins the
+    behaviour so a future cleanup doesn't accidentally drop style
+    from the happy path.
+    """
+    resp = client.post(
+        "/api/characters",
+        json={
+            "name": "Default Path Donkey",
+            "template": "mascot",
+            "subject": "an anthropomorphic donkey",
+            "style": "muted palette, premium modern hoodie",
+            "voice_preset": "drew",
+        },
+    )
+    cid = resp.json()["id"]
+    resp = client.post(
+        f"/api/characters/{cid}/generate-portrait",
+        json={},  # no safe_retry
+    )
+    assert resp.status_code == 200, resp.text
+    prompt = resp.json()["portrait_prompt"]
+    assert "muted palette" in prompt.lower(), prompt
+    assert "premium modern hoodie" in prompt.lower(), prompt
