@@ -1,8 +1,17 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after PR CH (Demo Campaign Fixtures for
-New Spokespeople) on top of PR AG–CG / SESSION 011 anchors.
+context-kit refresh after **PR CI — Demo Spokesperson Portrait
+Generation Pass** (real Runway image gen) on top of
+PR AG–CH / SESSION 011 anchors. Three of the four PR CG demo
+spokespeople now have real Runway portraits persisted on
+disk: Brewster Bolt (481 KB), Clara Vale (650 KB), Mina
+Spark (711 KB). Rex Roadside's portrait failed Runway
+upstream both attempts (`portrait task FAILED`) and remains
+blank — operator can retry from the in-app `Generate
+Portrait` button. Logged in
+`docs/handoffs/SESSION_REAL_API_CREDIT_BURN.md` ·
+SESSION 063 follow-up section.
 Backend route count remains **70** (PR CH is fixture-only).
 Library now seats **7 spokespeople** (PR CG: Brewster Bolt,
 Clara Vale, Rex Roadside, Mina Spark + 3 pre-existing) and

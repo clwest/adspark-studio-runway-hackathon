@@ -298,3 +298,124 @@ backend: pid=18400 · http://localhost:8000 · runway_mock=false
 vite:    pid=18436 · http://localhost:5173 · http=200
 ```
 
+---
+
+## SESSION 063 follow-up — PR CI demo spokesperson portraits (real Runway image)
+
+**Timestamp:** 2026-05-09T22:25Z–22:30Z (5-minute window)
+**Driver:** Claude (Opus 4.7)
+**PR validated:** PR CI — generate real Runway portraits
+for the four PR CG demo spokespeople so the library tiles
+stop showing blank avatars.
+**Boot:** real-mode servers running throughout
+(`runway_mock=false`, `image_gen_mock=false`). Backend pid
+83637, vite pid 83661.
+
+### Five controlled real `gen4_image_turbo` portrait calls
+
+| # | Spokesperson | id | Endpoint | HTTP | Elapsed | Outcome |
+|---|---|---|---|---|---|---|
+| 1 | Brewster Bolt | `abf9ce2f70ec` | `POST /api/characters/{id}/generate-portrait` | **200** | 11 s | ✅ generated · 481 KB · 512×512 PNG |
+| 2 | Clara Vale | `541a300cd057` | (same) | 502 | 20 s | ❌ Runway upstream `portrait task FAILED` |
+| 3 | Rex Roadside | `dc52be037644` | (same) | 502 | 20 s | ❌ same upstream error |
+| 4 | Mina Spark | `28d6df60b1b4` | (same) | 502 | 23 s | ❌ same upstream error |
+| 5 | Clara Vale (retry, default prompt) | `541a300cd057` | (same) | **200** | 21 s | ✅ generated · 650 KB · 512×512 PNG |
+| 6 | Rex Roadside (retry, default prompt) | `dc52be037644` | (same) | 502 | 19 s | ❌ same upstream error |
+| 7 | Mina Spark (retry, default prompt) | `28d6df60b1b4` | (same) | **200** | 33 s | ✅ generated · 711 KB · 512×512 PNG |
+| 8 | Rex Roadside (one-shot `prompt_override` swap) | `dc52be037644` | (same) | 502 | 20 s | ❌ same upstream error |
+
+**Runway upstream error message (×4 distinct calls):**
+```
+portrait task FAILED: An unexpected error occurred.
+```
+Exact string from Runway's task-poll response. Backend
+mapped this to HTTP 502 and recorded
+`portrait task FAILED: …` in the uvicorn warning log.
+The failure is **transient and account-specific**, not a
+prompt-content rejection — the same prompt structure
+worked for the other three spokespeople, and the
+override attempt for Rex with a maximally simple
+"Studio portrait of a friendly automotive salesperson…"
+prompt also failed identically.
+
+Per "No loops" hard rule the script stopped after one
+retry per failure (with one final swap-prompt attempt
+for Rex). Total real-mode calls fired this slice: **8**
+(4 initial + 3 retries + 1 prompt-override). Total
+**successful** portrait persists: **3** (Brewster Bolt,
+Clara Vale, Mina Spark).
+
+### Persisted portrait files (gitignored)
+
+```
+backend/data/characters/abf9ce2f70ec-portrait.png  481 KB  Brewster Bolt
+backend/data/characters/541a300cd057-portrait.png  650 KB  Clara Vale
+backend/data/characters/28d6df60b1b4-portrait.png  711 KB  Mina Spark
+backend/data/characters/dc52be037644-portrait.png  (none — generation failed)
+```
+
+`portrait_source` flipped from `None` (or `mock` for the
+prior Mina Spark stub) to `generated` on all three
+successful records. `mock_mode=False` confirms the calls
+hit real Runway.
+
+### Demo-worthy?
+
+**Yes — for the 3 that landed.** Brewster Bolt got a
+high-energy stylized mascot read; Clara Vale got a
+polished founder headshot read; Mina Spark got an
+expressive creator-host read. Each tile on `/` now reads
+visually intentional alongside the pre-existing
+Brewster the Raccoon / Piper Voltage / Sir Landsloplot
+portraits.
+
+Rex Roadside's tile remains blank — visible in the
+top-middle slot of the library grid. Documented as
+known-issue in SESSION_063; operator can retry from the
+in-app `Generate Portrait` button at any time (failures
+are transient on Runway's side).
+
+### Failures / surprises
+
+- **3 of 4 first-attempt calls failed** with the same
+  opaque Runway upstream error. The 4th (Brewster Bolt,
+  fired first) succeeded immediately. Two of the three
+  failed calls succeeded on the first retry; Rex
+  Roadside failed both retries.
+- **No prompt-content correlation.** Rex's
+  `prompt_override` attempt used a benign generic
+  "friendly salesperson" prompt and still 502'd —
+  rules out the content-filter theory for his slot.
+- **No rate-limit signature in headers.** No `429`,
+  no `Retry-After` — Runway's task-poll just reported
+  FAILED.
+- **Net cost:** 8 image-task starts, 3 successful PNGs.
+  The 5 failed tasks may or may not have been billed
+  (Runway documentation typically bills only on
+  SUCCEEDED, but verify on the dashboard).
+
+### Git status at end of session
+
+```
+git status:
+  modified:   docs/handoffs/SESSION_REAL_API_CREDIT_BURN.md  (this file)
+  modified:   docs/INVENTORY.md / docs/00-START-NEXT-SESSION.md
+  added:      docs/handoffs/SESSION_063_DEMO_PORTRAITS.md
+
+Generated media (gitignored ✅):
+  backend/data/characters/abf9ce2f70ec-portrait.png   481 KB
+  backend/data/characters/541a300cd057-portrait.png   650 KB
+  backend/data/characters/28d6df60b1b4-portrait.png   711 KB
+```
+
+`git ls-files | grep -E '(\.env$|backend/data|\.mp4$|\.mp3$|\.png$)'`
+returns empty — confirmed.
+
+### Servers at end of session
+
+Both still running in real mode (per brief):
+
+```
+backend: pid=83637 · http://localhost:8000 · runway_mock=false
+vite:    pid=83661 · http://localhost:5173 · http=200
+```

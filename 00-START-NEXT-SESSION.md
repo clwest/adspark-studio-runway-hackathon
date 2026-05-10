@@ -15,16 +15,20 @@ PR BM `669a584`; PR BN `13bc608`; PR BO `5e7400f`; PR BP
 `1f61fc0`; SESSION 053 real-API PR BU validation `9148cd9`;
 PR CA `8681777`; PR CB `766648c`; PR CC `0b292e0`; PR CD
 `d002b8c`; PR CE `1586400`; SESSION 059 V2 UI manual QA
-`16fa39f`; PR CF `6ad1bf7`; PR CG `3f2987b chore: demo spokespeople
-fixtures seeder (PR CG)`; PR CH Demo Campaign Fixtures in
-flight on top — SESSION_012–SESSION_062 handoffs added).
+`16fa39f`; PR CF `6ad1bf7`; PR CG `3f2987b`; PR CH `1f3b91a chore:
+demo campaign fixtures for new spokespeople (PR CH)`; PR CI
+Demo Spokesperson Portrait Generation Pass in flight on
+top — SESSION_012–SESSION_063 handoffs added).
 
 ## Where things stand
 
-- **Branch:** `main` at `3f2987b` (`chore: demo
-  spokespeople fixtures seeder (PR CG)`) on `origin/main`.
-  PR CH patch in flight on top — no new commit / tag yet,
-  both pending explicit user approval.
+- **Branch:** `main` at `1f3b91a` (`chore: demo campaign
+  fixtures for new spokespeople (PR CH)`) on `origin/main`.
+  PR CI is a docs-only follow-up — fired 8 controlled real
+  Runway image-gen calls, persisted 3 portraits to disk
+  (gitignored), no source changes. Findings captured in
+  `docs/handoffs/SESSION_063_DEMO_PORTRAITS.md` +
+  appended to `SESSION_REAL_API_CREDIT_BURN.md`.
 - **Latest tag:** still **`hackathon-submission-v13`** at `ec446e4`
   (PR AF). PR AG–BI shipped the full voice arc + audit trails
   + UX v2 foundation + SpokespersonStudio + Knowledge +
