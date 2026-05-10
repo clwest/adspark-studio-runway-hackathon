@@ -1,7 +1,23 @@
 # START NEXT SESSION — AdSpark Studio
 
-**Last touched:** 2026-05-10 (PR CS — capture failed
-portrait prompt + add safe-retry preset. Donny Sparks
+**Last touched:** 2026-05-10 (PR CT — regression audit
+proved `gen4_image_turbo` is broken upstream on Runway
+for our account. Direct payload probe with our exact
+body shape + a clean human-founder prompt failed
+`INTERNAL.BAD_OUTPUT.CODE01` at every aspect ratio
+(1280:720, 720:1280, 1024:1024). Switched to
+`gen4_image` (non-turbo); same payload, same prompts —
+Donny `23b969f1288b` rendered cleanly on the first
+attempt (447 KB) under the same prompt that was
+failing minutes earlier. PR CR / PR CS prompt work was
+correct; the underlying model was broken. No further
+prompt tuning needed. New `scripts/diagnose-portrait.py`
+diagnostic dumps the resolved prompt + request shape
++ disk state without firing any real call. Pytest 7/7,
+smoke 3/3, build 483.49 KB initial / 131.88 KB gzip,
+real Runway burn ≈ $0.125 across 5 probes. Earlier:
+PR CS — capture failed portrait prompt + add safe-retry
+preset. Donny Sparks
 `d2fdf899e8d8` hit `INTERNAL.BAD_OUTPUT.CODE01` from
 "stylized, editorial, studio light, muted palette;
 premium modern tech-startup hoodie with subtle
@@ -88,8 +104,10 @@ PR CP cont. portrait template hardening `58a73f2`;
 PR CQ Sharpen Demo Seed Subjects + Tiny Prompt Audit
 `d8dcca5`; PR CR Portrait Negation Bug + Avatar
 Reliability `ab8f8b7`; PR CS Capture Failed Prompt +
-Safe-Retry Preset in flight on top —
-SESSION_012–SESSION_076 handoffs added).
+Safe-Retry Preset `e34b4ba`; PR CT Regression Audit —
+gen4_image_turbo broken upstream, switched to
+gen4_image — in flight on top —
+SESSION_012–SESSION_077 handoffs added).
 
 ## Where things stand
 

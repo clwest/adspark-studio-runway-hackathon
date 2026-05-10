@@ -42,7 +42,24 @@ from ..models import Character
 
 logger = logging.getLogger(__name__)
 
-_IMAGE_MODEL = "gen4_image_turbo"
+# PR CT — switched from `gen4_image_turbo` to `gen4_image` after a
+# regression audit (SESSION_077) found `gen4_image_turbo` was
+# returning `INTERNAL.BAD_OUTPUT.CODE01` on every prompt at every
+# aspect ratio (1280:720, 720:1280, 1024:1024) for our account.
+# Direct Runway probes with our exact payload shape confirmed the
+# failure is upstream, not in our request construction:
+#
+#   gen4_image_turbo + 1280:720 + seed → FAILED (BAD_OUTPUT)
+#   gen4_image_turbo + 720:1280 + seed → FAILED (BAD_OUTPUT)
+#   gen4_image_turbo + 1024:1024 + seed → FAILED (BAD_OUTPUT)
+#   gen4_image       + 1280:720 + seed → SUCCEEDED ✅
+#
+# `gen4_image` produces the same family of outputs at slightly
+# higher quality and noticeably slower latency (10–20 s vs 5–10 s
+# for turbo). Schema is identical — same `referenceImages`
+# requirement, same `promptText` field, same ratio set. We can
+# revert to turbo if/when Runway resolves the upstream issue.
+_IMAGE_MODEL = "gen4_image"
 _MAX_IMAGE_BYTES = 16 * 1024 * 1024
 _MAX_PORTRAIT_RATIO = "1280:720"  # landscape; predictable face crop on Runway side
 

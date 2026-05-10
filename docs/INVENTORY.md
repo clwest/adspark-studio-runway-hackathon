@@ -1,8 +1,30 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after **PR CS — Capture Failed Portrait
-Prompt + Safe-Retry Preset**. Donny Sparks `d2fdf899e8d8`
+context-kit refresh after **PR CT — Regression Audit:
+gen4_image_turbo broken upstream**. PR CP cont. through PR CS
+spent hours prompt-tuning under the assumption that
+`INTERNAL.BAD_OUTPUT.CODE01` failures were prompt content
+issues. The user requested a proper regression audit and the
+audit found **the model itself was broken on Runway's side**.
+Direct probes bypassing all of our code with a clean human-
+founder prompt + our exact payload shape returned
+`INTERNAL.BAD_OUTPUT.CODE01` at every aspect ratio
+(1280:720, 720:1280, 1024:1024) under `gen4_image_turbo`,
+while the same call under **`gen4_image` (non-turbo)
+SUCCEEDED** with an output URL. The fix is one line:
+`_IMAGE_MODEL = "gen4_image"` in
+`backend/app/services/character_studio_client.py`. Donny
+`23b969f1288b` then rendered cleanly on the first attempt
+(447 KB) under the same prompt that had been failing
+repeatedly under turbo. PR CR / PR CS prompt work was
+correct — the positive-only templates + safe_retry preset
+both apply cleanly to `gen4_image`. New
+`scripts/diagnose-portrait.py` (executable) prints the
+resolved prompt, request shape (no secrets, no base64),
+persisted state, last error, and on-disk portrait file
+size without firing a real Runway call. Backend route
+count still **71**. Earlier: Donny Sparks `d2fdf899e8d8`
 reproduced `INTERNAL.BAD_OUTPUT.CODE01` against a `style`
 field containing "indiana jones style hat" + dense adjective
 chains — IP reference + chip-stack overload. New
