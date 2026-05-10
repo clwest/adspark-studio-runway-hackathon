@@ -11,16 +11,17 @@ PR BA `9d0a99d`; PR BB `8702660`; PR BC `9eae15f`; PR BD
 `af48e28`; SESSION REAL-API `4a68278`; PR BH `600eec9`; PR BI
 `42a8054`; PR BJ `c04aced`; PR BK `7185554`; PR BL `8967061`;
 PR BM `669a584`; PR BN `13bc608`; PR BO `5e7400f`; PR BP
-`18a296b`; PR BQ `74d5dc6`; PR BR `ae7c130`; PR BS `bcbc1d8`; PR BT `065a557 feat: wire
-v2 cinematic video async action (PR BT)`; PR BU Persist V2
-Cinematic Video Result to Campaign in flight on top —
-SESSION_012–SESSION_052 handoffs added).
+`18a296b`; PR BQ `74d5dc6`; PR BR `ae7c130`; PR BS `bcbc1d8`; PR BT `065a557`; PR BU
+`1f61fc0`; SESSION 053 real-API PR BU validation
+`9148cd9 docs: log PR BU real-mode credit burn`; PR CA App
+Shell + Router + Spokesperson Library as Home in flight on
+top — SESSION_012–SESSION_054 handoffs added).
 
 ## Where things stand
 
-- **Branch:** `main` at `065a557` (`feat: wire v2 cinematic
-  video async action (PR BT)`) on `origin/main`. PR BU patch
-  in flight on top — no new commit / tag yet, both pending
+- **Branch:** `main` at `9148cd9` (`docs: log PR BU
+  real-mode credit burn`) on `origin/main`. PR CA patch in
+  flight on top — no new commit / tag yet, both pending
   explicit user approval.
 - **Latest tag:** still **`hackathon-submission-v13`** at `ec446e4`
   (PR AF). PR AG–BI shipped the full voice arc + audit trails
@@ -37,30 +38,31 @@ SESSION_012–SESSION_052 handoffs added).
   switches modes. **Default load remains v1**; v2 reachable
   via footer toggle or `?ux=v2`.
 - **Backend routes:** **70** application + FastAPI built-ins
-  (PR BU adds `POST /api/campaigns/{id}/cinematic-video` —
-  the smallest field-specific endpoint to persist a freshly-
-  generated cinematic video; reuses existing
-  `VideoCache.fetch` + `update_cache_fields` plumbing v1
-  already uses at create time).
-- **Frontend build:** 399.68 KB initial JS / 107.51 KB gzip +
-  561.97 KB lazy `@runwayml/avatars-react` chunk (+1.81 KB
-  initial / +0.44 KB gzip vs PR BT — persist call wiring,
-  phase-aware status copy, persisted-vs-session link
-  fallback, `data-persisted` attr).
-- **Playwright smoke:** `3 passed (~29.7 s)` against the mock
-  backend booted via `bash scripts/start-local-mock.sh`. v1
-  test ~25.3 s. v2 test ~2.9 s now also asserts the
-  Cinematic Video button carries the new
-  `data-persisted="true|false"` attribute alongside PR BT's
-  `data-burns-credits` / `data-source-ready`. Toggle
-  round-trip ~834 ms unchanged.
-- **Backend probes (PR BU):** confirmed end-to-end against
-  the mock backend — 404 on missing campaign, 422 on missing
-  `video_url`, 502 on broken upstream URL (with
-  `cache_status="failed"` + `cache_error` persisted in
-  tandem), and happy-path persist + `GET /api/campaigns`
-  reload showing `cached_video_url=/api/campaigns/{id}/video`
-  + `cache_status="ok"`.
+  (PR CA is frontend-only; no new backend routes since
+  PR BU's `POST /api/campaigns/{id}/cinematic-video`).
+- **Frontend build:** 438.88 KB initial JS / 120.98 KB gzip +
+  561.97 KB lazy `@runwayml/avatars-react` chunk (+39.20 KB
+  initial / +13.47 KB gzip vs PR BU — primarily
+  `react-router-dom@^7` + new `<AppShell>` / `<TopBar>` /
+  `<Library>` shell). The bundle increase is one-shot; PR CB
+  onward should stay flat.
+- **Playwright smoke:** `3 passed (~27.4 s)` against the mock
+  backend booted via `bash scripts/start-local-mock.sh`.
+  Test 1 (`@ /legacy`, ~25.6 s) — verbatim end-to-end
+  walkthrough of the v1 wizard at the new `/legacy` URL.
+  Test 2 (`@ /`, ~740 ms) — Spokesperson Library mounts at
+  the new homepage; legacy wizard surfaces (CharacterStudio
+  "+ Create Character" button, Stage 2 Campaign Brief
+  heading, ModeBanner) explicitly absent. Test 3
+  (top-bar Legacy UI round-trip, ~550 ms) — clicks the
+  top-bar Legacy link to land on /legacy, then the
+  "← Library" CTA to round-trip back to /.
+- **Real-mode validation:** PR BU end-to-end validated
+  against real Runway on CEO Buzz / Brewster (task
+  `b5d331ba-9844-42ab-b857-982920794a9c`, 5 s gen4.5,
+  persisted via PR BU); see SESSION_REAL_API_CREDIT_BURN.md
+  for the full log. PR CA itself fired no real Runway
+  calls.
   ```bash
   bash scripts/start-local-mock.sh
   (cd frontend && npm run test:e2e)
@@ -85,7 +87,7 @@ SESSION_012–SESSION_052 handoffs added).
 
 ## What's implemented (full feature stack on `main`)
 
-### UX redesign foundation (PR BD — UX v2 Flag + Shared Helpers · PR BE — SpokespersonStudio Scaffold · PR BF — Knowledge Tab Wiring · PR BG — Appearances Tab Wiring · PR BH — Mode-First Creation Modal · PR BI — Spokesperson Lane Scaffold · PR BK — Cinematic Lane Scaffold · PR BL — Dialogue Lane Scaffold · PR BM — Lane Regression Pass · PR BN — Spokesperson Reels Action Wired · PR BO — Cinematic Voiced Action Wired · PR BP — All Remaining v2 Lane Actions Wired · PR BQ — V2 Lane Inline Brief Editing · PR BR — V2 Appearances Click-Through · PR BS — Click-Through Tab Hints · PR BT — Cinematic Video Async Action Wired · PR BU — Cinematic Video Persistence)
+### UX redesign foundation (PR BD — UX v2 Flag + Shared Helpers · PR BE — SpokespersonStudio Scaffold · PR BF — Knowledge Tab Wiring · PR BG — Appearances Tab Wiring · PR BH — Mode-First Creation Modal · PR BI — Spokesperson Lane Scaffold · PR BK — Cinematic Lane Scaffold · PR BL — Dialogue Lane Scaffold · PR BM — Lane Regression Pass · PR BN — Spokesperson Reels Action Wired · PR BO — Cinematic Voiced Action Wired · PR BP — All Remaining v2 Lane Actions Wired · PR BQ — V2 Lane Inline Brief Editing · PR BR — V2 Appearances Click-Through · PR BS — Click-Through Tab Hints · PR BT — Cinematic Video Async Action Wired · PR BU — Cinematic Video Persistence · PR CA — App Shell + Router + Spokesperson Library Home)
 
 - **UX v2 feature flag** at `frontend/src/uxFlag.js`. Resolves
   precedence URL `?ux=v2|v1` > localStorage `adspark.ux` >
@@ -206,6 +208,31 @@ SESSION_012–SESSION_052 handoffs added).
   `spokesperson-lane-reels-status`,
   `spokesperson-lane-reels-link`. Reels button new attrs:
   `data-source-ready`, `data-busy`.
+- **App Shell + Router + Spokesperson Library Home** (PR CA)
+  — frontend architecture refactor that flips `/` from the
+  legacy 4-stage wizard to the Spokesperson Library. New
+  `react-router-dom@^7` dep introduces three routes:
+  `/` (Library), `/legacy` (the verbatim v1 wizard +
+  gallery, frozen), `/legacy/*` (alias). New
+  `<AppShell>` wraps a persistent `<TopBar>` (logo, tiny
+  `mock | live` health pill, **Legacy UI ↗** link / **←
+  Library** return CTA) + a routed `<Outlet>`. Old
+  `App.jsx` body cloned into `<LegacyApp>` minus the
+  `isUxV2()` ternary and the footer UX toggle (now gone).
+  New `<Library>` is a thin wrapper around
+  `<SpokespersonStudio>`. One-shot localStorage migration:
+  `adspark.ux === "v1"` redirects to /legacy once + clears
+  the key; `?ux=v1` query does the same; `?ux=v2` is
+  stripped silently. SpokespersonStudio threads `null` to
+  SpokespersonCard's `onOpenCampaign` when its parent
+  doesn't provide one — so the v2 Appearances "Open in
+  gallery →" affordance reads its disabled placeholder
+  state on `/` (PR BR/BS click-through preserved on
+  /legacy; PR CB will land the workspace Campaigns tab as
+  the new target). All 70 backend routes intact, all
+  generation pipelines untouched, all gitignored media
+  reachable via existing URL fields. v1 default load is
+  now /, not the wizard.
 - **V2 Cinematic Video Persistence** (PR BU) — fresh outputs
   from PR BT now survive page reloads. New `POST
   /api/campaigns/{id}/cinematic-video` route (smallest

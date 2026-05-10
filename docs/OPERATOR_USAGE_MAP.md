@@ -1,13 +1,37 @@
 # AdSpark Studio — Operator Usage Map
 
 **Last updated:** 2026-05-09 (post `hackathon-submission-v13`,
-PR AF Multi-Character Dialogue Scene Builder).
+PR CA App Shell + Router + Spokesperson Library as Home).
 
 **Read order:** This is the top-to-bottom "how do I actually use
 this thing?" guide. New operators (humans or AI) should read
-sections 1–4 to understand the flow, then jump to whichever ad
+sections 0–4 to understand the flow, then jump to whichever ad
 mode (5 / 6 / 9) or surface (7 / 8) they want to demo. Section 12
 has six end-to-end demo paths with timings and credit estimates.
+
+---
+
+## 0. Where things live (PR CA routing reference)
+
+The frontend now has two top-level routes:
+
+- **`/`** — Spokesperson Library. The default homepage. Mounts
+  `<SpokespersonStudio>` (PR BE through PR BU) inside the new
+  `<AppShell>` + `<TopBar>` shell. Sections 1–11 below describe
+  the working surfaces; on `/` they all live inside the
+  Library + lanes, **not** the legacy 4-stage wizard.
+- **`/legacy`** — Verbatim v1 four-stage wizard + saved-campaign
+  gallery (frozen, PR A through PR AZ-era stack). Reachable via
+  the top-bar **Legacy UI ↗** link. The 6 demo paths in section
+  12 still walk through this surface today; PR CB will move
+  them to the new workspace.
+- **`/legacy/*`** — Aliased to `/legacy` for now; PR CB will land
+  `/legacy/gallery` as a direct deep-link to the gallery anchor.
+- **`*`** — Anything else redirects to `/`.
+
+Legacy `?ux=v1` deep-links and `localStorage.adspark.ux === "v1"`
+both redirect to `/legacy` once on first load and clear the key.
+The footer "Try preview UX / Use classic UX" toggle is gone.
 
 **Companion docs:**
 - `docs/WHAT_IT_IS.md` — narrative anchor.

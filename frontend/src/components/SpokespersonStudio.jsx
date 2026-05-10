@@ -772,7 +772,14 @@ export default function SpokespersonStudio({
               // via character_id; empty array when nothing matches.
               linkedCampaigns={campaignsByCharacter[c.id] || []}
               // PR BR — Appearances click-through bubbles up.
-              onOpenCampaign={handleOpenCampaign}
+              // PR CA — only thread the wrapped handler when
+              // the parent (App / Library) actually provides
+              // onOpenCampaign. On the `/` Library route the
+              // gallery isn't mounted (PR CB lands the
+              // workspace Campaigns tab), so the affordance
+              // reads its disabled placeholder state instead
+              // of dispatching nowhere.
+              onOpenCampaign={onOpenCampaign ? handleOpenCampaign : null}
             />
           ))}
         </div>

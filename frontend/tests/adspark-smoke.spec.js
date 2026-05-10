@@ -12,7 +12,7 @@ const IGNORED_CONSOLE_ERRORS = [
   /net::ERR_/i,
 ]
 
-test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
+test('AdSpark Studio mock-mode end-to-end smoke @ /legacy', async ({ page }) => {
   const consoleErrors = []
   const pageErrors = []
   page.on('console', (msg) => {
@@ -22,8 +22,12 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
     pageErrors.push(`${err.name}: ${err.message}`)
   })
 
-  // 1. Load the app
-  await page.goto('/')
+  // PR CA — the v1 four-stage wizard + saved-campaign gallery
+  // moved from `/` to `/legacy`. The end-to-end smoke still
+  // exercises that surface verbatim; only the entry URL
+  // changed. `/` is now the Spokesperson Library — separate
+  // smoke test below covers it.
+  await page.goto('/legacy')
 
   // 2. Hero / title visible
   await expect(page.getByRole('heading', { name: /AdSpark/i })).toBeVisible()
@@ -855,16 +859,13 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
     newestCard.getByText(/Dialogue Scene Reels · 720×1280 · Captioned/i),
   ).toBeVisible()
 
-  // 13c. PR BD — UX v2 preview toggle in the footer. Default load
-  //      resolves to v1 (legacy UX), so the toggle must read
-  //      "Try preview UX →" and carry data-ux-mode="v1". Clicking
-  //      it would reload the page; we just assert the affordance
-  //      exists in its default state without flipping the flag so
-  //      the rest of the smoke continues against the legacy path.
-  const uxToggle = page.getByTestId('ux-mode-toggle')
-  await expect(uxToggle).toBeVisible()
-  await expect(uxToggle).toHaveAttribute('data-ux-mode', 'v1')
-  await expect(uxToggle).toHaveText(/Try preview UX/i)
+  // 13c. PR CA — the v1 footer "Try preview UX / Use classic
+  //      UX" toggle is gone. The top-bar "← Library" CTA is
+  //      now the only round-trip back to `/`. (Detailed
+  //      assertions live in the dedicated round-trip test.)
+  await expect(
+    page.getByTestId('app-shell-home-cta'),
+  ).toBeVisible()
 
   // 13. Console / page errors — page errors are always fatal; console errors
   //     are filtered to drop video-network noise.
@@ -887,7 +888,7 @@ test('AdSpark Studio mock-mode end-to-end smoke', async ({ page }) => {
 // the same as the v1 path which the primary smoke above already
 // covers. Resilient to fixture state: passes whether the library
 // has zero characters (empty state) or N (library grid).
-test('AdSpark Studio UX v2 SpokespersonStudio scaffold', async ({ page }) => {
+test('AdSpark Studio Spokesperson Library @ /', async ({ page }) => {
   const consoleErrors = []
   const pageErrors = []
   page.on('console', (msg) => {
@@ -897,17 +898,26 @@ test('AdSpark Studio UX v2 SpokespersonStudio scaffold', async ({ page }) => {
     pageErrors.push(`${err.name}: ${err.message}`)
   })
 
-  // Load with ?ux=v2 so getUxMode() resolves to v2 immediately
-  // (the URL param both sets the flag and persists it to
-  // localStorage on first read).
-  await page.goto('/?ux=v2')
+  // PR CA — `/` is now the Spokesperson Library by default.
+  // No `?ux=v2` query parameter required. The footer toggle
+  // is gone; the top-bar Legacy UI link replaces it
+  // (covered by Test 3 below).
+  await page.goto('/')
 
-  // Footer toggle must reflect the active mode + offer the
-  // classic-UX escape hatch.
-  const uxToggle = page.getByTestId('ux-mode-toggle')
-  await expect(uxToggle).toBeVisible()
-  await expect(uxToggle).toHaveAttribute('data-ux-mode', 'v2')
-  await expect(uxToggle).toHaveText(/Use classic UX/i)
+  // PR CA — TopBar must be present and offer the Legacy UI
+  // link as the only escape hatch back to the v1 wizard.
+  const topbar = page.getByTestId('app-shell-topbar')
+  await expect(topbar).toBeVisible()
+  await expect(
+    topbar.getByTestId('app-shell-legacy-link'),
+  ).toBeVisible()
+  await expect(
+    topbar.getByTestId('app-shell-health-pill'),
+  ).toBeVisible()
+
+  // PR CA — the new Library route wraps SpokespersonStudio.
+  // The route container must mount alongside the studio.
+  await expect(page.getByTestId('library-route')).toBeVisible()
 
   // PR BH — v2 surface should clear any leftover activeMode from a
   // previous run so the smoke starts in a known empty-pill state.
@@ -921,17 +931,24 @@ test('AdSpark Studio UX v2 SpokespersonStudio scaffold', async ({ page }) => {
   })
   await page.reload()
 
-  // Stage 1 panel must be the v2 SpokespersonStudio scaffold,
-  // NOT the legacy CharacterStudio. The studio heading carries
-  // the "Spokesperson Studio" copy + the "preview UX" badge.
+  // Spokesperson Library mounts the SpokespersonStudio scaffold
+  // (the v2 surface graduated to default-home in PR CA).
   const studio = page.getByTestId('spokesperson-studio')
   await expect(studio).toBeVisible()
   await expect(studio).toHaveAttribute('data-ux-mode', 'v2')
-  // PR BM — legacy CharacterStudio's "+ Create Character" button
-  // must NOT render in v2 mode. If both surfaces mount the
-  // flag-aware swap regressed.
+  // PR CA — legacy v1 wizard surfaces must be ABSENT on `/`.
+  // The legacy "+ Create Character" lives at /legacy now.
   await expect(
     page.getByRole('button', { name: /^\+ Create Character$/i }),
+  ).toHaveCount(0)
+  // PR CA — no Stage 2 Campaign Brief on `/`.
+  await expect(
+    page.getByRole('heading', { name: /Campaign Brief/i }),
+  ).toHaveCount(0)
+  // PR CA — no ModeBanner on `/`. The TopBar's tiny health
+  // pill replaces the legacy mode panel.
+  await expect(
+    page.getByRole('heading', { name: /^Mode$/, level: 3 }),
   ).toHaveCount(0)
   await expect(
     studio.getByTestId('spokesperson-studio-heading'),
@@ -1046,61 +1063,17 @@ test('AdSpark Studio UX v2 SpokespersonStudio scaffold', async ({ page }) => {
       ).toContainText(
         /^(Cinematic|Spokesperson Ad|Dialogue Scene|Storyboard|Realtime|Mixed|Draft)$/,
       )
-      // PR BR — Click-through is now wired. Button must be enabled
-      // (App.jsx threads onOpenCampaign through SpokespersonStudio).
-      // PR BS — capture the inferred mode from the row's mode
-      // pill so we can assert the matching data-active-tab
-      // landed on the highlighted CampaignCard.
+      // PR CA — on `/`, the Library route deliberately does
+      // not wire `onOpenCampaign` (no gallery on this route;
+      // PR CB lands the workspace Campaigns tab). The
+      // Appearances row's "Open in gallery →" affordance
+      // therefore shows its disabled placeholder state. The
+      // PR BR/BS click-through is preserved for /legacy via
+      // direct gallery-card interactions; it lands again in
+      // PR CB on `/`.
       const firstRow = appearanceRows.first()
-      const inferredModeText =
-        (await firstRow
-          .getByTestId('spokesperson-appearance-mode')
-          .textContent()) || ''
       const openBtn = firstRow.getByTestId('spokesperson-appearance-open')
-      await expect(openBtn).toBeEnabled()
-      // Click → status banner appears with the campaign label;
-      // CampaignCard with matching id flips
-      // data-opened-from-v2="true" for ~2 s while the highlight
-      // ring shows.
-      await openBtn.click()
-      const openStatus = page.getByTestId('spokesperson-open-status')
-      await expect(openStatus).toBeVisible()
-      await expect(openStatus).toContainText(/Opened campaign in gallery/i)
-      // The matching CampaignCard should flip its
-      // data-opened-from-v2 attribute. Match by data-campaign-id
-      // attribute since the gallery doesn't expose a single-
-      // campaign testid otherwise.
-      const focusedCard = page.locator(
-        'li[data-testid="campaign-card"][data-opened-from-v2="true"]',
-      )
-      await expect(focusedCard).toHaveCount(1, { timeout: 1_500 })
-      // PR BS — verify the activeTab landed on the resolved
-      // mode→tab mapping. Spokesperson Ad → character;
-      // Cinematic / Storyboard → visuals; Dialogue Scene →
-      // dialogue; Realtime → realtime; Mixed / Draft →
-      // overview.
-      const expectedTab =
-        /Spokesperson Ad/i.test(inferredModeText)
-          ? 'character'
-          : /Cinematic|Storyboard/i.test(inferredModeText)
-          ? 'visuals'
-          : /Dialogue Scene/i.test(inferredModeText)
-          ? 'dialogue'
-          : /Realtime/i.test(inferredModeText)
-          ? 'realtime'
-          : 'overview'
-      await expect(focusedCard).toHaveAttribute(
-        'data-active-tab',
-        expectedTab,
-      )
-      // Status banner exposes the same mode for telemetry /
-      // future tooling.
-      const bannerMode = await openStatus.getAttribute('data-mode')
-      // Banner mode echoes the row's mode pill text (already
-      // matches one of the seven literal mode strings).
-      expect(bannerMode || '').toMatch(
-        /^(Cinematic|Spokesperson Ad|Dialogue Scene|Storyboard|Realtime|Mixed|Draft)$/i,
-      )
+      await expect(openBtn).toBeDisabled()
     } else {
       await expect(appearanceEmpty).toContainText(
         /No appearances yet/i,
@@ -1436,7 +1409,7 @@ test('AdSpark Studio UX v2 SpokespersonStudio scaffold', async ({ page }) => {
 // footer triggers a full reload + the new mode mounts on the
 // next paint. Catches a class of regression where the flag is
 // persisted but a v2-gated component fails to remount.
-test('AdSpark Studio footer UX toggle round-trip', async ({ page }) => {
+test('AdSpark Studio top-bar Legacy UI round-trip', async ({ page }) => {
   const consoleErrors = []
   const pageErrors = []
   page.on('console', (msg) => {
@@ -1446,7 +1419,9 @@ test('AdSpark Studio footer UX toggle round-trip', async ({ page }) => {
     pageErrors.push(`${err.name}: ${err.message}`)
   })
 
-  // Start clean — no persisted UX choice from prior tests.
+  // PR CA — `/` is the new home. Clear any stale localStorage
+  // before assertions so the one-shot `adspark.ux === "v1"`
+  // migration logic in <AppShell> doesn't redirect us.
   await page.goto('/')
   await page.evaluate(() => {
     try {
@@ -1456,45 +1431,47 @@ test('AdSpark Studio footer UX toggle round-trip', async ({ page }) => {
   })
   await page.reload()
 
-  // v1 default: legacy CharacterStudio mounted, no
-  // SpokespersonStudio testid.
-  await expect(
-    page.getByRole('button', { name: /^\+ Create Character$/i }),
-  ).toBeVisible()
-  await expect(page.getByTestId('spokesperson-studio')).toHaveCount(0)
-
-  // Footer toggle reads "Try preview UX" with data-ux-mode="v1".
-  const toggle = page.getByTestId('ux-mode-toggle')
-  await expect(toggle).toBeVisible()
-  await expect(toggle).toHaveAttribute('data-ux-mode', 'v1')
-  await expect(toggle).toHaveText(/Try preview UX/i)
-
-  // Click → page reloads → v2 surfaces.
-  await Promise.all([
-    page.waitForLoadState('load'),
-    toggle.click(),
-  ])
+  // PR CA — `/` mounts the Spokesperson Library (NOT the
+  // legacy wizard). The library route container + studio
+  // testids are present; the legacy "+ Create Character"
+  // button is not.
+  await expect(page.getByTestId('library-route')).toBeVisible()
   await expect(page.getByTestId('spokesperson-studio')).toBeVisible()
   await expect(
     page.getByRole('button', { name: /^\+ Create Character$/i }),
   ).toHaveCount(0)
-  // Toggle now reads "Use classic UX" with data-ux-mode="v2".
-  const toggleV2 = page.getByTestId('ux-mode-toggle')
-  await expect(toggleV2).toHaveAttribute('data-ux-mode', 'v2')
-  await expect(toggleV2).toHaveText(/Use classic UX/i)
 
-  // Flip back to classic.
-  await Promise.all([
-    page.waitForLoadState('load'),
-    toggleV2.click(),
-  ])
+  // PR CA — top-bar Legacy UI link is the only canonical
+  // round-trip mechanism between /home and /legacy now that
+  // the footer toggle is gone.
+  const legacyLink = page.getByTestId('app-shell-legacy-link')
+  await expect(legacyLink).toBeVisible()
+  await expect(legacyLink).toHaveText(/Legacy UI/i)
+
+  // Click → SPA navigation → /legacy mounts the v1 wizard.
+  await legacyLink.click()
+  await expect(page).toHaveURL(/\/legacy$/)
   await expect(
     page.getByRole('button', { name: /^\+ Create Character$/i }),
   ).toBeVisible()
+  // PR CA — SpokespersonStudio must NOT render on /legacy.
   await expect(page.getByTestId('spokesperson-studio')).toHaveCount(0)
-  const toggleBack = page.getByTestId('ux-mode-toggle')
-  await expect(toggleBack).toHaveAttribute('data-ux-mode', 'v1')
-  await expect(toggleBack).toHaveText(/Try preview UX/i)
+  await expect(page.getByTestId('library-route')).toHaveCount(0)
+
+  // Top-bar swaps to a "← Library" CTA so the round-trip
+  // back to / is one click away.
+  const homeCta = page.getByTestId('app-shell-home-cta')
+  await expect(homeCta).toBeVisible()
+  await expect(homeCta).toHaveText(/Library/i)
+
+  // Round-trip back to /.
+  await homeCta.click()
+  await expect(page).toHaveURL(/\/$|\/\?/)
+  await expect(page.getByTestId('library-route')).toBeVisible()
+  await expect(page.getByTestId('spokesperson-studio')).toBeVisible()
+  await expect(
+    page.getByRole('button', { name: /^\+ Create Character$/i }),
+  ).toHaveCount(0)
 
   // Console / page errors stay clean across the round-trip too.
   const realConsoleErrors = consoleErrors.filter(

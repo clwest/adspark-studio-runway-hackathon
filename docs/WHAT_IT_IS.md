@@ -1,11 +1,24 @@
 # AdSpark Studio — What It Is
 
-A RunwayML hackathon build. AdSpark is **AI Campaign + Character +
-Dialogue Studio** — a brand fills out a creative brief and gets a
-complete cinematic ad package, **plus reusable AI brand characters
-and a multi-character dialogue scene builder** that turns those
-characters into recurring Office-style branded content. Everything
-is powered by Runway's API.
+A RunwayML hackathon build. AdSpark is **persistent AI spokesperson
+infrastructure** — brands create reusable AI characters that can
+star in cinematic ads, deliver lip-synced talking-head pitches,
+hold real-time conversations, and headline multi-character
+dialogue scenes. Each spokesperson lives across campaigns and ad
+modes; campaigns are produced *for* a spokesperson, not as
+one-off generations. Everything is powered by Runway's API.
+
+## The frontend reset (PR CA)
+
+The homepage at `/` is now the **Spokesperson Library**: a tile
+grid of every saved AI spokesperson, with their Identity /
+Knowledge / Appearances tabs and per-mode lanes for new
+campaigns. The legacy 4-stage "fill a brief, get an ad" wizard
+moved to `/legacy` and is reachable via the top-bar
+**Legacy UI ↗** link for demo emergencies. PR CB+ will replace
+the legacy click-through with a dedicated workspace per
+spokesperson (Identity / Knowledge / Campaigns / Conversations
+/ Outputs).
 
 ## The headline architecture: three ad modes
 
