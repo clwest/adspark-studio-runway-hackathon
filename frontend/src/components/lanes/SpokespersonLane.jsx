@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import { formatHistoryTimestamp } from '../../uiHelpers.js'
-import LaneBriefCreator from './LaneBriefCreator.jsx'
-import LaneBriefEditor from './LaneBriefEditor.jsx'
+import Step1CampaignPanel from './Step1CampaignPanel.jsx'
 
 /**
  * PR BI — Spokesperson Ad lane scaffold (gated v2).
@@ -318,40 +317,29 @@ export default function SpokespersonLane({
       {/* 3-step scaffold. Each step is a column on md+ screens, a
           stacked card on small screens. */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
-        {/* Step 1 — Brief */}
-        <div
-          data-testid="spokesperson-lane-step-brief"
-          className="rounded-lg ring-1 ring-zinc-800 bg-zinc-950/50 p-2.5 space-y-1"
-        >
-          <div className="flex items-center justify-between gap-1">
-            <span className="text-[10px] uppercase tracking-wide text-zinc-500 font-mono">
-              Step 1 · Brief
-            </span>
-            {hasCampaign && (
-              <span className="text-[9px] text-zinc-600 font-mono">
-                latest
-              </span>
-            )}
-          </div>
-          {hasCampaign ? (
-            // PR BQ — inline brief editor (4 fields + save / cancel).
-            // Lives directly inside Step 1 so the operator never
-            // round-trips back to the classic UX for brief edits.
-            <LaneBriefEditor
-              campaign={focused}
-              onSave={onUpdateBrief}
-            />
-          ) : (
-            // PR CU — replace the dead-end copy with an actionable
-            // empty-state CTA + inline create form.
-            <LaneBriefCreator
-              onCreate={onCreateCampaign}
-              modeLabel="spokesperson ad"
-              testidPrefix="spokesperson"
-              hasSpokesperson={hasSpokesperson}
-            />
-          )}
-        </div>
+        {/* Step 1 — Campaign Setup / Summary (PR DI) */}
+        <Step1CampaignPanel
+          focused={focused}
+          hasSpokesperson={hasSpokesperson}
+          onCreate={onCreateCampaign}
+          onSave={onUpdateBrief}
+          modeLabel="spokesperson ad"
+          testidPrefix="spokesperson"
+          counts={
+            focused
+              ? {
+                  adVariants: Array.isArray(focused.ad_variants)
+                    ? focused.ad_variants.length
+                    : 0,
+                  outputs: Array.isArray(focused.outputs)
+                    ? focused.outputs.filter(
+                        (o) => o?.kind === 'spokesperson_ad',
+                      ).length
+                    : 0,
+                }
+              : null
+          }
+        />
 
         {/* Step 2 — Ad Variants (PR DC) */}
         <Step2AdVariants

@@ -1,7 +1,35 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after **PR DH — Direct-a-Scene Dialogue Lane**.
+context-kit refresh after **PR DI — Campaign Context One-Time
+Setup**. UX-only slice across all three v2 campaign lanes
+(Spokesperson Ad / Cinematic / Dialogue). Step 1 was always an
+editable 4-field brief form that kept inviting re-edits even after
+save — made every campaign feel mutable and the lane feel like a
+repeated form. PR DI introduces a three-state Step 1: (a) no
+campaign → inline create CTA; (b) campaign exists, not editing →
+compact read-only **Campaign Summary** card (business / product
+preview / audience preview / tone + counts row scoped per lane) +
+an explicit `Edit Campaign` button; (c) campaign exists, operator
+clicked Edit → existing brief editor with a `← Done editing
+(discard unsaved)` exit affordance below it. Step 1 label flips
+between "Campaign Setup" (creating/editing) and "Campaign
+Summary" (collapsed). Auto-exits edit mode on focused-campaign
+change + on successful Save. New
+`frontend/src/components/lanes/Step1CampaignPanel.jsx` encapsulates
+the three-state logic + internal `<CampaignSummary>` sub-component.
+All three lanes drop in one component instead of repeating the
+conditional. Counts scoped per lane: Spokesperson surfaces
+`ad_variants` count + spokesperson_ad-kind outputs; Cinematic
+surfaces total outputs; Dialogue surfaces dialogue line count.
+Zero backend changes; existing testids preserved
+(`{prefix}-lane-step-brief`); new testids for summary card +
+counts + done-editing affordance. Vite build 534.23 KB initial /
+144.03 KB gzip (+2.72 KB / +0.73 KB). Mock smoke **3/3**. Pytest
+36/36. Backend route count still **76**. Zero Runway calls fired.
+Donny's `d00dc42fe5cb` self-demo campaign preserved across the
+mock-smoke cycle.
+Earlier: PR DH — Direct-a-Scene Dialogue Lane.
 UX-only slice on `frontend/src/components/lanes/DialogueLane.jsx`.
 The lane mental model went from "fill a form, click procedural
 buttons" to "pick cast → write scene → render each actor → stitch

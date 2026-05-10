@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 import { formatHistoryTimestamp } from '../../uiHelpers.js'
-import LaneBriefCreator from './LaneBriefCreator.jsx'
-import LaneBriefEditor from './LaneBriefEditor.jsx'
+import Step1CampaignPanel from './Step1CampaignPanel.jsx'
 
 /**
  * PR BK — Cinematic Ad lane scaffold (gated v2).
@@ -329,35 +328,24 @@ export default function CinematicLane({
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
-        {/* Step 1 — Brief */}
-        <div
-          data-testid="cinematic-lane-step-brief"
-          className="rounded-lg ring-1 ring-zinc-800 bg-zinc-950/50 p-2.5 space-y-1"
-        >
-          <div className="flex items-center justify-between gap-1">
-            <span className="text-[10px] uppercase tracking-wide text-zinc-500 font-mono">
-              Step 1 · Brief
-            </span>
-            {hasCampaign && (
-              <span className="text-[9px] text-zinc-600 font-mono">
-                latest
-              </span>
-            )}
-          </div>
-          {hasCampaign ? (
-            <LaneBriefEditor
-              campaign={focused}
-              onSave={onUpdateBrief}
-            />
-          ) : (
-            <LaneBriefCreator
-              onCreate={onCreateCampaign}
-              modeLabel="cinematic ad"
-              testidPrefix="cinematic"
-              hasSpokesperson={hasSpokesperson}
-            />
-          )}
-        </div>
+        {/* Step 1 — Campaign Setup / Summary (PR DI) */}
+        <Step1CampaignPanel
+          focused={focused}
+          hasSpokesperson={hasSpokesperson}
+          onCreate={onCreateCampaign}
+          onSave={onUpdateBrief}
+          modeLabel="cinematic ad"
+          testidPrefix="cinematic"
+          counts={
+            focused
+              ? {
+                  outputs: Array.isArray(focused.outputs)
+                    ? focused.outputs.length
+                    : 0,
+                }
+              : null
+          }
+        />
 
         {/* Step 2 — Visual Source */}
         <div

@@ -1,7 +1,57 @@
 # START NEXT SESSION — AdSpark Studio
 
-**Last touched:** 2026-05-10 (PR DH — Make Dialogue
-Scene lane feel like directing a scene. UX-focused
+**Last touched:** 2026-05-10 (PR DI — Make Campaign
+Context One-Time Setup, Then Work From Scripts/Scenes.
+UX slice across all three v2 campaign lanes
+(Spokesperson Ad / Cinematic / Dialogue). Step 1 was
+always an editable 4-field brief form that kept
+inviting re-edits even after the brief was saved —
+made every campaign feel mutable and made the lane
+feel like a repeated form, not a creative workflow.
+PR DI introduces a three-state Step 1: (a) no campaign
+→ inline `<LaneBriefCreator>` empty-state CTA
+(unchanged behaviour, just relabeled "Campaign
+Setup"); (b) campaign exists, not editing → new
+compact read-only **Campaign Summary** card showing
+business / product preview / audience preview / tone
++ an optional counts row (ad variants / saved
+renders / dialogue lines, scoped per lane) + an
+explicit `Edit Campaign` button; (c) campaign exists,
+operator clicked Edit → `<LaneBriefEditor>` with the
+existing Save/Cancel UI + a new `← Done editing
+(discard unsaved)` exit affordance below it. Step 1
+label flips contextually — "Step 1 · Campaign Setup"
+during creation/edit, "Step 1 · Campaign Summary"
+when collapsed. New
+`frontend/src/components/lanes/Step1CampaignPanel.jsx`
+encapsulates the entire three-state logic + the
+internal `<CampaignSummary>` sub-component so each
+lane drops in one component instead of repeating the
+conditional. Auto-exits edit mode on focused-campaign
+change (operator can't be stuck mid-edit when they
+switch campaigns) and on successful Save (returns to
+summary card without manual click). All three lanes
+(SpokespersonLane / CinematicLane / DialogueLane)
+import the new panel and pass lane-specific counts:
+Spokesperson Ad surfaces `ad_variants.length` + count
+of `outputs[]` with kind `spokesperson_ad`; Cinematic
+surfaces total `outputs[].length`; Dialogue surfaces
+`dialogue_lines.length`. Zero backend changes; zero
+new routes; zero models touched. Testids preserved
+(`{prefix}-lane-step-brief` still hits the same
+panel; new testids
+`{prefix}-lane-campaign-summary`,
+`{prefix}-lane-campaign-summary-edit`,
+`{prefix}-lane-campaign-summary-counts`,
+`{prefix}-lane-step-brief-done-editing`). Vite build
+**534.23 KB initial / 144.03 KB gzip** (+2.72 KB /
++0.73 KB vs PR DH from the new component). Mock smoke
+**3/3 passed**. Pytest **36/36** (unchanged —
+frontend-only). Drift OK. Hygiene clean. Backend route
+count still **76**. No real Runway calls fired.
+Donny's `d00dc42fe5cb` self-demo campaign preserved
+across the mock-smoke cycle. Earlier: PR DH — Make
+Dialogue Scene lane feel like directing a scene. UX-focused
 slice; zero backend changes; only
 `frontend/src/components/lanes/DialogueLane.jsx`
 modified. Lane mental model rewired from "fill a form,
