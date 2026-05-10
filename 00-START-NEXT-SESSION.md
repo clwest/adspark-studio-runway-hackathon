@@ -14,17 +14,19 @@ PR BM `669a584`; PR BN `13bc608`; PR BO `5e7400f`; PR BP
 `18a296b`; PR BQ `74d5dc6`; PR BR `ae7c130`; PR BS `bcbc1d8`; PR BT `065a557`; PR BU
 `1f61fc0`; SESSION 053 real-API PR BU validation `9148cd9`;
 PR CA `8681777`; PR CB `766648c`; PR CC `0b292e0`; PR CD
-`d002b8c feat: home library only — strip campaign controls
-off / (PR CD)`; PR CE Workspace Campaigns Tab Mounts
-Campaign Lanes in flight on top — SESSION_012–SESSION_058
-handoffs added).
+`d002b8c`; PR CE `1586400 feat: workspace campaigns tab
+mounts campaign lanes (PR CE)`; SESSION 059 V2 UI manual
+QA in flight on top — SESSION_012–SESSION_059 handoffs
+added).
 
 ## Where things stand
 
-- **Branch:** `main` at `d002b8c` (`feat: home library
-  only — strip campaign controls off / (PR CD)`) on
-  `origin/main`. PR CE patch in flight on top — no new
-  commit / tag yet, both pending explicit user approval.
+- **Branch:** `main` at `1586400` (`feat: workspace
+  campaigns tab mounts campaign lanes (PR CE)`) on
+  `origin/main`. SESSION 059 (V2 UI manual QA) is a
+  docs-only follow-up; no source changes, just findings +
+  next-3-fix punch list captured in
+  `docs/handoffs/SESSION_059_V2_UI_MANUAL_QA.md`.
 - **Latest tag:** still **`hackathon-submission-v13`** at `ec446e4`
   (PR AF). PR AG–BI shipped the full voice arc + audit trails
   + UX v2 foundation + SpokespersonStudio + Knowledge +

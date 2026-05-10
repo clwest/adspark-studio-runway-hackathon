@@ -1,10 +1,20 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after PR CE (Workspace Campaigns Tab
-Mounts Campaign Lanes) on top of the PR AG–CD / SESSION 011
-anchors. Backend route count remains **70** (PR CE is
-frontend-only — pure component extraction). The frontend
+context-kit refresh after **SESSION 059 — V2 UI Manual QA**
+(post PR CE) on top of the PR AG–CE / SESSION 011 anchors.
+Backend route count remains **70** (SESSION 059 is QA-only —
+no code changes, no commits to source). The QA pass walked
+every checklist surface listed in the brief; findings are
+in `docs/handoffs/SESSION_059_V2_UI_MANUAL_QA.md` and the
+3-fix punch list at the bottom drives the next slice.
+**v2 demo-readiness is ~80% per the QA**: architecture works
+end-to-end (library → workspace → Campaigns tab → lanes all
+behave; real Runway assets survive reloads at /legacy), but
+stale lane copy + dev-jargon "scaffold · PR BX" pills + the
+duplicated CharacterCard surface (library tile vs workspace
+Identity tab) need polish before v2 fully replaces the
+legacy wizard for demos. The frontend
 preserves the three-route shape established by PR CA: `/`
 mounts the **Spokesperson Library** (library-only after
 PR CD), `/spokespeople/:id` mounts the **Spokesperson
