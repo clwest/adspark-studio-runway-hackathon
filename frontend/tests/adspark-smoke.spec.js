@@ -1048,9 +1048,15 @@ test('AdSpark Studio UX v2 SpokespersonStudio scaffold', async ({ page }) => {
       )
       // PR BR — Click-through is now wired. Button must be enabled
       // (App.jsx threads onOpenCampaign through SpokespersonStudio).
-      const openBtn = appearanceRows
-        .first()
-        .getByTestId('spokesperson-appearance-open')
+      // PR BS — capture the inferred mode from the row's mode
+      // pill so we can assert the matching data-active-tab
+      // landed on the highlighted CampaignCard.
+      const firstRow = appearanceRows.first()
+      const inferredModeText =
+        (await firstRow
+          .getByTestId('spokesperson-appearance-mode')
+          .textContent()) || ''
+      const openBtn = firstRow.getByTestId('spokesperson-appearance-open')
       await expect(openBtn).toBeEnabled()
       // Click → status banner appears with the campaign label;
       // CampaignCard with matching id flips
@@ -1068,6 +1074,33 @@ test('AdSpark Studio UX v2 SpokespersonStudio scaffold', async ({ page }) => {
         'li[data-testid="campaign-card"][data-opened-from-v2="true"]',
       )
       await expect(focusedCard).toHaveCount(1, { timeout: 1_500 })
+      // PR BS — verify the activeTab landed on the resolved
+      // mode→tab mapping. Spokesperson Ad → character;
+      // Cinematic / Storyboard → visuals; Dialogue Scene →
+      // dialogue; Realtime → realtime; Mixed / Draft →
+      // overview.
+      const expectedTab =
+        /Spokesperson Ad/i.test(inferredModeText)
+          ? 'character'
+          : /Cinematic|Storyboard/i.test(inferredModeText)
+          ? 'visuals'
+          : /Dialogue Scene/i.test(inferredModeText)
+          ? 'dialogue'
+          : /Realtime/i.test(inferredModeText)
+          ? 'realtime'
+          : 'overview'
+      await expect(focusedCard).toHaveAttribute(
+        'data-active-tab',
+        expectedTab,
+      )
+      // Status banner exposes the same mode for telemetry /
+      // future tooling.
+      const bannerMode = await openStatus.getAttribute('data-mode')
+      // Banner mode echoes the row's mode pill text (already
+      // matches one of the seven literal mode strings).
+      expect(bannerMode || '').toMatch(
+        /^(Cinematic|Spokesperson Ad|Dialogue Scene|Storyboard|Realtime|Mixed|Draft)$/i,
+      )
     } else {
       await expect(appearanceEmpty).toContainText(
         /No appearances yet/i,

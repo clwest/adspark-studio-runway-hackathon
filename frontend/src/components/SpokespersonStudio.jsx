@@ -80,21 +80,27 @@ export default function SpokespersonStudio({
   const [openStatus, setOpenStatus] = useState({
     campaignId: null,
     label: '',
+    mode: null,
   })
   useEffect(() => {
     if (!openStatus.campaignId) return undefined
     const t = setTimeout(
-      () => setOpenStatus({ campaignId: null, label: '' }),
+      () => setOpenStatus({ campaignId: null, label: '', mode: null }),
       2_500,
     )
     return () => clearTimeout(t)
   }, [openStatus.campaignId])
-  const handleOpenCampaign = (campaignId) => {
+  const handleOpenCampaign = (campaignId, inferredMode = null) => {
     if (!campaignId) return
-    onOpenCampaign?.(campaignId)
+    // PR BS — bubble the inferred mode up so App.jsx can resolve
+    // a target tab inside the saved CampaignCard (cinematic →
+    // visuals, spokesperson → character, dialogue → dialogue,
+    // realtime → realtime, mixed/draft → overview, storyboard →
+    // visuals).
+    onOpenCampaign?.(campaignId, inferredMode)
     const match = campaigns.find((x) => x.id === campaignId)
     const label = match?.business || `campaign ${String(campaignId).slice(0, 6)}`
-    setOpenStatus({ campaignId, label })
+    setOpenStatus({ campaignId, label, mode: inferredMode })
   }
 
   // PR BF — fetch campaigns alongside characters so the Knowledge
@@ -664,11 +670,13 @@ export default function SpokespersonStudio({
         <p
           data-testid="spokesperson-open-status"
           data-campaign-id={openStatus.campaignId}
+          data-mode={openStatus.mode || ''}
           className="text-[10px] text-emerald-300 font-mono leading-snug"
           role="status"
           aria-live="polite"
         >
-          Opened campaign in gallery: {openStatus.label}.
+          Opened campaign in gallery: {openStatus.label}
+          {openStatus.mode ? ` · ${openStatus.mode} tab` : ''}.
         </p>
       )}
 

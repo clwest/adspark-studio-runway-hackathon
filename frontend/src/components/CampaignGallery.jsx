@@ -135,6 +135,11 @@ function CampaignCard({
   // animation lands so a future click can re-fire cleanly.
   isOpenedFromV2 = false,
   onClearOpen,
+  // PR BS — companion target tab id resolved from the inferred
+  // mode (set by App.jsx's _tabFromInferredMode). When set, the
+  // card flips activeTab to this value once when the v2 jump
+  // fires. Null leaves activeTab alone.
+  openTargetTab = null,
 }) {
   const concept = c.selected_concept || {}
   // Preview preference: any finished format → cached → original presigned URL.
@@ -194,13 +199,30 @@ function CampaignCard({
     if (cardRef.current) {
       cardRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
     }
+    // PR BS — flip activeTab to the resolved target whenever the
+    // v2 jump fires AND the target is one of the seven valid tab
+    // ids. Falls back to leaving activeTab alone otherwise.
+    if (
+      openTargetTab &&
+      [
+        'overview',
+        'visuals',
+        'character',
+        'voice',
+        'dialogue',
+        'realtime',
+        'exports',
+      ].includes(openTargetTab)
+    ) {
+      setActiveTab(openTargetTab)
+    }
     setOpenHighlight(true)
     const t = window.setTimeout(() => {
       setOpenHighlight(false)
       onClearOpen?.()
     }, 2200)
     return () => window.clearTimeout(t)
-  }, [isOpenedFromV2, onClearOpen])
+  }, [isOpenedFromV2, openTargetTab, onClearOpen])
   const [busyFormat, setBusyFormat] = useState(null) // null | "landscape" | "reels" | "square"
   const [avatarBusy, setAvatarBusy] = useState(false)
   const [hostBusy, setHostBusy] = useState(false)
@@ -3560,6 +3582,7 @@ function CampaignCard({
       data-testid="campaign-card"
       data-campaign-id={c.id}
       data-opened-from-v2={openHighlight ? 'true' : 'false'}
+      data-active-tab={activeTab}
       className={`rounded-xl ring-1 p-4 bg-studio-900/60 space-y-3 shadow-panel transition-shadow ${
         openHighlight
           ? 'ring-pink-400/70 shadow-[0_0_0_2px_rgba(244,114,182,0.25),0_0_28px_rgba(244,114,182,0.25)]'
@@ -3813,6 +3836,11 @@ export default function CampaignGallery({
   // PR BR — v2 Appearances click-through targets.
   openCampaignId = null,
   onClearOpen,
+  // PR BS — target tab id resolved from the inferred mode by
+  // App.jsx. Null leaves the matched CampaignCard's activeTab
+  // alone; otherwise a known tab id flips activeTab when the
+  // v2 jump fires.
+  openCampaignTab = null,
 }) {
   const [overrides, setOverrides] = useState({})
   const [deletedIds, setDeletedIds] = useState(new Set())
@@ -3868,6 +3896,11 @@ export default function CampaignGallery({
               onClearNewest={onClearNewest}
               isOpenedFromV2={Boolean(openCampaignId) && c.id === openCampaignId}
               onClearOpen={onClearOpen}
+              openTargetTab={
+                Boolean(openCampaignId) && c.id === openCampaignId
+                  ? openCampaignTab
+                  : null
+              }
             />
           ))}
         </ul>

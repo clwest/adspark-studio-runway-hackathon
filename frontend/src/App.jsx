@@ -37,6 +37,36 @@ import SpokespersonStudio from './components/SpokespersonStudio.jsx'
 const POLL_INTERVAL_MS = 5000
 const POLL_MAX_ATTEMPTS = 60
 
+// PR BS — Inferred-mode → CampaignCard tab id mapping for the
+// v2 Appearances click-through. The inferred-mode set
+// (Cinematic / Spokesperson Ad / Dialogue Scene / Storyboard /
+// Realtime / Mixed / Draft) comes from SpokespersonCard's
+// `inferCampaignMode(campaign)`; CampaignCard's `activeTab`
+// state knows the seven tab ids (overview / visuals /
+// character / voice / dialogue / realtime / exports). Returns
+// null when the mode doesn't have a clear target — caller
+// leaves activeTab alone in that case.
+function _tabFromInferredMode(mode) {
+  switch (String(mode || '').toLowerCase()) {
+    case 'spokesperson':
+    case 'spokesperson ad':
+      return 'character'
+    case 'cinematic':
+    case 'storyboard':
+      return 'visuals'
+    case 'dialogue':
+    case 'dialogue scene':
+      return 'dialogue'
+    case 'realtime':
+      return 'realtime'
+    case 'mixed':
+    case 'draft':
+      return 'overview'
+    default:
+      return null
+  }
+}
+
 // Load once at module init so the very first render already reflects the
 // persisted choices — avoids a default→restored flicker that the smoke test
 // would otherwise race against on reload.
@@ -92,6 +122,19 @@ export default function App() {
   // animation lands. Independent of `newestSavedId` so a v2
   // jump never confuses the just-saved focus state.
   const [openCampaignId, setOpenCampaignId] = useState(null)
+  // PR BS — companion target tab. When the v2 click-through
+  // resolves an inferred mode (cinematic / spokesperson /
+  // dialogue / storyboard / realtime / mixed / draft) we map
+  // it to one of the existing CampaignCard tab ids
+  // (overview / visuals / character / voice / dialogue /
+  // realtime) so the saved card lands on the right surface
+  // for the operator's intent. `null` = leave the card's
+  // existing activeTab alone.
+  const [openCampaignTab, setOpenCampaignTab] = useState(null)
+  const handleV2OpenCampaign = (campaignId, inferredMode) => {
+    setOpenCampaignId(campaignId)
+    setOpenCampaignTab(_tabFromInferredMode(inferredMode))
+  }
   const [busy, setBusy] = useState({ concepts: false, runway: false, image: false, upload: false })
   const [error, setError] = useState('')
   // PR AC follow-up — when an error appears, scroll its banner into
@@ -478,7 +521,9 @@ export default function App() {
               // openCampaignId triggers a scroll + flash highlight
               // on the matching CampaignCard inside the gallery
               // surface (same `campaigns` data both surfaces share).
-              onOpenCampaign={(id) => setOpenCampaignId(id)}
+              // PR BS — also resolves the target tab from the
+              // inferred mode passed by SpokespersonCard.
+              onOpenCampaign={handleV2OpenCampaign}
             />
           ) : (
             <CharacterStudio
@@ -682,7 +727,15 @@ export default function App() {
             // onClearOpen so a re-click later re-fires the
             // animation cleanly.
             openCampaignId={openCampaignId}
-            onClearOpen={() => setOpenCampaignId(null)}
+            // PR BS — target tab id resolved from the inferred
+            // mode. CampaignCard flips its activeTab when this
+            // matches a known tab id; null leaves the existing
+            // tab alone.
+            openCampaignTab={openCampaignTab}
+            onClearOpen={() => {
+              setOpenCampaignId(null)
+              setOpenCampaignTab(null)
+            }}
           />
         </Stage>
 

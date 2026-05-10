@@ -538,12 +538,18 @@ export default function SpokespersonCard({
                           no handler is wired. */}
                       <button
                         type="button"
-                        onClick={() => onOpenCampaign?.(cm.id)}
+                        // PR BS — pass the inferred mode so App.jsx
+                        // can resolve the most relevant
+                        // CampaignCard tab to open (cinematic →
+                        // visuals, spokesperson → character,
+                        // dialogue → dialogue, realtime → realtime,
+                        // mixed/draft → overview).
+                        onClick={() => onOpenCampaign?.(cm.id, mode)}
                         disabled={!onOpenCampaign}
                         data-testid="spokesperson-appearance-open"
                         title={
                           onOpenCampaign
-                            ? 'Scroll to + highlight this campaign in the saved gallery below.'
+                            ? `Scroll to + highlight this campaign in the saved gallery below; opens the ${mode} tab.`
                             : 'Click-through handler not wired.'
                         }
                         className={
