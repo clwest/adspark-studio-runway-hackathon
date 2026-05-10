@@ -103,17 +103,14 @@ export default function CampaignModeModal({ isOpen, onSelect, onClose }) {
           <div className="space-y-1">
             <h3
               id="campaign-mode-modal-title"
-              className="text-base font-semibold text-zinc-100 flex items-center gap-2"
+              className="text-base font-semibold text-zinc-100"
             >
-              New Campaign
-              <span className="text-[10px] rounded-full bg-pink-500/20 text-pink-300 px-2 py-0.5 font-mono">
-                preview UX
-              </span>
+              Choose campaign type
             </h3>
             <p className="text-xs text-zinc-400 max-w-prose leading-relaxed">
-              Pick a lane up front. Each mode is purpose-built for a
-              different output shape; you can always create another
-              campaign in a different mode later.
+              Each type is purpose-built for a different output shape.
+              Pick one to start; you can always create another
+              campaign in a different type later.
             </p>
           </div>
           <button
@@ -159,13 +156,8 @@ export default function CampaignModeModal({ isOpen, onSelect, onClose }) {
         </div>
 
         <p className="text-[10px] text-zinc-600 leading-relaxed">
-          Selection persists locally as{' '}
-          <span className="font-mono text-zinc-400">
-            adspark.activeMode
-          </span>
-          . Lane-specific builders ship in PR BJ–BL — until then,
-          campaign creation continues to use the legacy 4-stage flow
-          underneath while the chosen lane is surfaced as a pill.
+          Your selection is remembered for this spokesperson — the
+          matching builder mounts inside the workspace below.
         </p>
       </div>
     </div>

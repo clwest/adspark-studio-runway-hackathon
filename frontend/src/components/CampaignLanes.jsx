@@ -155,7 +155,7 @@ export default function CampaignLanes({
     if (!camp) throw new Error('campaign not found in local slice')
     const promptText = (camp.runway_prompt || '').trim()
     if (!promptText) {
-      throw new Error('campaign has no runway_prompt — re-save in classic UX')
+      throw new Error('This campaign has no saved prompt — re-save it in the legacy wizard before regenerating.')
     }
     const referenceImage = (camp.reference_image_url || '').trim() || null
     const start = await api.startRunway({

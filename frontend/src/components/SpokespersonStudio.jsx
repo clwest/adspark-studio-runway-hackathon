@@ -339,7 +339,7 @@ export default function SpokespersonStudio({
     }
     const promptText = (camp.runway_prompt || '').trim()
     if (!promptText) {
-      throw new Error('campaign has no runway_prompt — re-save in classic UX')
+      throw new Error('This campaign has no saved prompt — re-save it in the legacy wizard before regenerating.')
     }
     const referenceImage = (camp.reference_image_url || '').trim() || null
     const start = await api.startRunway({
@@ -867,9 +867,10 @@ export default function SpokespersonStudio({
               No spokespeople yet
             </div>
             <p className="text-[11px] text-zinc-500 max-w-sm leading-relaxed">
-              The classic Character Studio (toggle UX in the footer)
-              still owns creation — picker + portrait + voice clone
-              flows ship into the preview UX in subsequent slices.
+              Click <span className="text-pink-300">+ Create
+              Spokesperson</span> above to add the first one. Each
+              spokesperson carries their own portrait, voice, and
+              campaign history.
             </p>
           </div>
         </div>

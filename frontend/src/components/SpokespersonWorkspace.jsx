@@ -459,10 +459,10 @@ export default function SpokespersonWorkspace() {
         <TabComingSoon
           testid="spokesperson-workspace-knowledge"
           title="Knowledge"
-          summary={`This spokesperson has ${linkedCampaigns.length} linked campaign${
+          summary={`Grounding documents and transcript history for this spokesperson. ${linkedCampaigns.length} linked campaign${
             linkedCampaigns.length === 1 ? '' : 's'
-          }. The Knowledge panel surfaces grounding documents + transcript history; the wiring lands in PR CD.`}
-          tease="Knowledge panel lands next."
+          } feed this view.`}
+          tease="Knowledge sources will appear here."
         />
       )}
 
@@ -548,7 +548,7 @@ export default function SpokespersonWorkspace() {
           testid="spokesperson-workspace-conversations"
           title="Conversations"
           summary="Realtime sessions and transcript replays for this spokesperson."
-          tease="Realtime conversations land next."
+          tease="Conversation history will appear here."
         />
       )}
 
@@ -556,8 +556,8 @@ export default function SpokespersonWorkspace() {
         <TabComingSoon
           testid="spokesperson-workspace-outputs"
           title="Outputs"
-          summary="Unified gallery of cinematic, spokesperson ad, dialogue, reels, and voice outputs across every linked campaign."
-          tease="Output gallery lands next."
+          summary="Cinematic visuals, spokesperson ads, dialogue scenes, reels, and voice clips across every linked campaign — one playable gallery."
+          tease="Generated videos and reels will appear here."
         />
       )}
 

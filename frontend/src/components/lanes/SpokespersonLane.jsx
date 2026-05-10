@@ -157,19 +157,12 @@ export default function SpokespersonLane({
         <div className="space-y-0.5">
           <h4 className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
             <span aria-hidden="true">🎙️</span>
-            Spokesperson Ad lane
-            <span
-              className="text-[10px] rounded-full bg-emerald-500/20 text-emerald-200 ring-1 ring-emerald-400/40 px-2 py-0.5 font-mono"
-              title="Mounted while localStorage.adspark.activeMode === 'spokesperson'"
-            >
-              scaffold · PR BI
-            </span>
+            Build a spokesperson ad
           </h4>
           <p className="text-[11px] text-zinc-400 leading-snug max-w-prose">
-            Lip-synced talking-avatar render + captioned vertical
-            reels export. Generation lives behind PR BJ; for now this
-            lane previews what the Brief → Script → Render flow will
-            look like.
+            Render this spokesperson speaking your script directly to
+            camera, then export a captioned vertical reel. Real Runway
+            credits when you click Generate.
           </p>
         </div>
         {hasSpokesperson && (
@@ -238,22 +231,22 @@ export default function SpokespersonLane({
                 {scriptPreview}
               </pre>
               <p className="text-[10px] text-zinc-500 leading-snug">
-                Lane uses the saved Commercial Script (PR AC). Editor
-                inline-mounts in PR BJ; today, edit via the classic
-                Stage 3 PromptPreview.
+                The spokesperson speaks this script verbatim during
+                render. Inline editing lands in a follow-up slice;
+                use the legacy wizard if you need to rewrite it now.
               </p>
             </>
           ) : (
             <>
               <p className="text-[11px] text-zinc-400 leading-snug">
                 {hasCampaign
-                  ? 'No Commercial Script saved on this campaign yet.'
-                  : 'The Commercial Script editor lives in classic UX Stage 3 PromptPreview.'}
+                  ? 'No script saved on this campaign yet.'
+                  : 'Create or select a campaign to author a script.'}
               </p>
               <p className="text-[10px] text-zinc-500 leading-snug">
-                Lane uses the saved Commercial Script (PR AC). The
-                spokesperson speaks it verbatim during avatar_videos
-                render.
+                The spokesperson will speak the saved script verbatim
+                during render. Authoring lives in the legacy wizard
+                until inline editing ships.
               </p>
             </>
           )}

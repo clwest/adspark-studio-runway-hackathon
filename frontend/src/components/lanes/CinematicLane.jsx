@@ -152,9 +152,9 @@ export default function CinematicLane({
   const storyDisabledReason = !hasCampaign
     ? 'Pick a linked campaign first.'
     : storyShots.length === 0
-    ? 'Plan a storyboard first via classic UX (3 shots required).'
+    ? 'Plan a storyboard first in the legacy wizard (3 shots required).'
     : !storyAllReady
-    ? `${storyShots.filter((s) => s.status === 'ok').length}/${storyShots.length} shots ready — generate the rest in classic UX before stitching.`
+    ? `${storyShots.filter((s) => s.status === 'ok').length}/${storyShots.length} shots ready — generate the rest in the legacy wizard before stitching.`
     : !onStitchStoryboard
     ? 'Wire the v2 onStitchStoryboard handler before this button can fire.'
     : ''
@@ -224,7 +224,7 @@ export default function CinematicLane({
   const videoDisabledReason = !hasCampaign
     ? 'Pick a linked campaign first.'
     : !videoPromptReady
-    ? 'Campaign has no runway_prompt — re-save in classic UX.'
+    ? 'This campaign has no saved prompt — re-save it in the legacy wizard so we have something to send to Runway.'
     : !onGenerateCinematicVideo
     ? 'Wire the v2 onGenerateCinematicVideo handler before this button can fire.'
     : ''
@@ -296,19 +296,13 @@ export default function CinematicLane({
         <div className="space-y-0.5">
           <h4 className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
             <span aria-hidden="true">🎬</span>
-            Cinematic Ad lane
-            <span
-              className="text-[10px] rounded-full bg-fuchsia-500/20 text-fuchsia-200 ring-1 ring-fuchsia-400/40 px-2 py-0.5 font-mono"
-              title="Mounted while localStorage.adspark.activeMode === 'cinematic'"
-            >
-              scaffold · PR BK
-            </span>
+            Create a cinematic video
           </h4>
           <p className="text-[11px] text-zinc-400 leading-snug max-w-prose">
-            Silent image_to_video cut + voiced cinematic mux +
-            optional 3-shot storyboard concat. The Cinematic lane
-            previews the Brief → Visual Source → Render flow; render
-            handlers ship in a follow-up slice.
+            Generate a polished image-to-video cut for this campaign,
+            mux in the spokesperson's narration, and optionally
+            stitch a 3-shot storyboard. Real Runway credits when you
+            click Generate.
           </p>
         </div>
         {hasSpokesperson && (
@@ -369,23 +363,25 @@ export default function CinematicLane({
           {focused?.cached_video_url ? (
             <>
               <div className="text-[11px] text-emerald-200 leading-snug">
-                Silent visual cut cached
+                Silent visual cached and ready
               </div>
               <p className="text-[10px] text-zinc-500 leading-snug">
-                Sourced from `image_to_video` (gen4_turbo / gen4.5).
-                Re-render via the classic gallery's Visuals tab.
+                Click Regenerate Real Cinematic Video below to refresh
+                the silent cut in place — the new MP4 saves directly
+                onto this campaign.
               </p>
             </>
           ) : (
             <>
               <p className="text-[11px] text-zinc-400 leading-snug">
                 {hasCampaign
-                  ? 'No silent visual cached on this campaign yet.'
-                  : 'Visual source picker (Generate / Upload / Use Character / Text-only) lives in classic UX Stage 3.'}
+                  ? 'No cinematic visual on this campaign yet.'
+                  : 'Create or select a campaign to render a cinematic visual.'}
               </p>
               <p className="text-[10px] text-zinc-500 leading-snug">
-                Visual flows through `image_to_video` for the silent
-                cinematic cut; PR S/X mux adds host-clip audio.
+                Click Generate Real Cinematic Video below to render a
+                new silent cut. Voiced and storyboard mixes layer on
+                top once the silent cut is cached.
               </p>
             </>
           )}

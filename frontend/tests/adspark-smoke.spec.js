@@ -1313,6 +1313,62 @@ test('AdSpark Studio Spokesperson Library @ /', async ({ page }) => {
     await page.goto('/')
   }
 
+  // PR CF — Copy cleanup. Visible v2 surfaces must not leak
+  // dev jargon. Walk the homepage + each lane (with the
+  // workspace mode modal opened in-place) and assert the
+  // forbidden strings never appear in the rendered text.
+  const FORBIDDEN_JARGON = [
+    /scaffold ·/i,
+    /preview UX/i,
+    /\blands next\b/i,
+    /\bships in PR\b/i,
+    /\bclassic UX\b/i,
+    /\bclassic gallery\b/i,
+    /\bPR B[A-Z]\b/, // PR BI / PR BJ / PR BK ... in user-visible text
+  ]
+  const assertNoJargon = async (label) => {
+    const body = (await page.textContent('body')) || ''
+    for (const rx of FORBIDDEN_JARGON) {
+      expect(
+        body,
+        `[PR CF] dev jargon ${rx} leaked on ${label}`,
+      ).not.toMatch(rx)
+    }
+  }
+  // Homepage scrub
+  await assertNoJargon('/ (library)')
+  // Mode modal + each lane scrub. Resilient to fixture state.
+  if (cardTotal > 0) {
+    const firstCardId = await page
+      .getByTestId('spokesperson-card')
+      .first()
+      .getAttribute('data-spokesperson-id')
+    await page.goto(`/spokespeople/${firstCardId}`)
+    await page
+      .getByTestId('spokesperson-workspace-tab-campaigns')
+      .click()
+    await page
+      .getByTestId('spokesperson-workspace-campaigns-new')
+      .click()
+    await expect(page.getByTestId('campaign-mode-modal')).toBeVisible()
+    await assertNoJargon('campaign-mode-modal')
+    for (const mode of ['spokesperson', 'cinematic', 'dialogue']) {
+      await page.getByTestId(`campaign-mode-card-${mode}`).click()
+      await expect(page.getByTestId(`${mode}-lane`)).toBeVisible()
+      await assertNoJargon(`${mode}-lane`)
+      await page
+        .getByTestId('campaign-lanes-active-mode-dismiss')
+        .click()
+      await page
+        .getByTestId('spokesperson-workspace-campaigns-new')
+        .click()
+      await expect(page.getByTestId('campaign-mode-modal')).toBeVisible()
+    }
+    // Close the lingering modal so the rest of the smoke runs clean.
+    await page.keyboard.press('Escape')
+    await page.goto('/')
+  }
+
   // Console / page errors stay clean on the v2 path too.
   const realConsoleErrors = consoleErrors.filter(
     (t) => !IGNORED_CONSOLE_ERRORS.some((rx) => rx.test(t)),

@@ -14,19 +14,19 @@ PR BM `669a584`; PR BN `13bc608`; PR BO `5e7400f`; PR BP
 `18a296b`; PR BQ `74d5dc6`; PR BR `ae7c130`; PR BS `bcbc1d8`; PR BT `065a557`; PR BU
 `1f61fc0`; SESSION 053 real-API PR BU validation `9148cd9`;
 PR CA `8681777`; PR CB `766648c`; PR CC `0b292e0`; PR CD
-`d002b8c`; PR CE `1586400 feat: workspace campaigns tab
-mounts campaign lanes (PR CE)`; SESSION 059 V2 UI manual
-QA in flight on top — SESSION_012–SESSION_059 handoffs
-added).
+`d002b8c`; PR CE `1586400`; SESSION 059 V2 UI manual QA
+`16fa39f docs: post-CE v2 UI manual QA findings (SESSION 059)`;
+PR CF V2 Copy Cleanup + Remove Dev Jargon in flight on top —
+SESSION_012–SESSION_060 handoffs added).
 
 ## Where things stand
 
-- **Branch:** `main` at `1586400` (`feat: workspace
-  campaigns tab mounts campaign lanes (PR CE)`) on
-  `origin/main`. SESSION 059 (V2 UI manual QA) is a
-  docs-only follow-up; no source changes, just findings +
-  next-3-fix punch list captured in
-  `docs/handoffs/SESSION_059_V2_UI_MANUAL_QA.md`.
+- **Branch:** `main` at `16fa39f` (`docs: post-CE v2 UI
+  manual QA findings (SESSION 059)`) on `origin/main`.
+  PR CF patch in flight on top — no new commit / tag yet,
+  both pending explicit user approval. PR CF closes the
+  first of SESSION 059's three demo-readiness blockers
+  (lane copy + dev jargon).
 - **Latest tag:** still **`hackathon-submission-v13`** at `ec446e4`
   (PR AF). PR AG–BI shipped the full voice arc + audit trails
   + UX v2 foundation + SpokespersonStudio + Knowledge +
@@ -42,24 +42,22 @@ added).
   switches modes. **Default load remains v1**; v2 reachable
   via footer toggle or `?ux=v2`.
 - **Backend routes:** **70** application + FastAPI built-ins
-  (PR CE is frontend-only — pure component extraction).
-- **Frontend build:** 465.64 KB initial JS / 127.54 KB gzip +
-  561.97 KB lazy `@runwayml/avatars-react` chunk (+6.19 KB
-  initial / +1.61 KB gzip vs PR CD — `<CampaignLanes>`
-  component + workspace Campaigns tab content + mode modal
-  handoff).
-- **Playwright smoke:** `3 passed (~29.3 s)` against the mock
+  (PR CF is frontend copy polish only).
+- **Frontend build:** 464.80 KB initial JS / 127.38 KB gzip +
+  561.97 KB lazy `@runwayml/avatars-react` chunk (-0.84 KB
+  initial / -0.16 KB gzip vs PR CE — copy is tighter).
+- **Playwright smoke:** `3 passed (~32.2 s)` against the mock
   backend booted via `bash scripts/start-local-mock.sh`.
-  Test 1 (`@ /legacy`, ~27.1 s) — verbatim v1 wizard +
-  saved-campaign gallery walkthrough. Test 2 (`@ /`, ~1.0 s)
-  — Spokesperson Library library-only on `/` + per-tile
-  workspace navigation + workspace **Campaigns tab now
-  mounts `<CampaignLanes>`**: + New Campaign opens the
-  modal in-place (no /legacy hand-off), picking Cinematic
-  Ad mounts the cinematic lane scoped to the active
-  spokesperson, dismiss-mode unmounts the lane and clears
-  localStorage `adspark.activeMode`. Test 3 (top-bar Legacy
-  round-trip, ~600 ms) — / → /legacy → / via top-bar links.
+  Test 1 (`@ /legacy`, ~29.5 s) — verbatim v1 wizard
+  walkthrough. Test 2 (`@ /`, ~1.5 s) — Spokesperson
+  Library + workspace + Campaigns tab + lane mounting
+  flow, **plus a new `FORBIDDEN_JARGON` regex sweep** that
+  walks `/` + the mode modal + each of the three lanes and
+  asserts the rendered body text never contains
+  `scaffold ·`, `preview UX`, `lands next`, `ships in PR`,
+  `classic UX`, `classic gallery`, or `PR Bxx`. Test 3
+  (top-bar Legacy round-trip, ~650 ms) — / → /legacy → /
+  via top-bar links.
 - **Real-mode validation:** PR BU end-to-end validated
   against real Runway on CEO Buzz / Brewster (task
   `b5d331ba-9844-42ab-b857-982920794a9c`, 5 s gen4.5,
@@ -90,7 +88,7 @@ added).
 
 ## What's implemented (full feature stack on `main`)
 
-### UX redesign foundation (PR BD — UX v2 Flag + Shared Helpers · PR BE — SpokespersonStudio Scaffold · PR BF — Knowledge Tab Wiring · PR BG — Appearances Tab Wiring · PR BH — Mode-First Creation Modal · PR BI — Spokesperson Lane Scaffold · PR BK — Cinematic Lane Scaffold · PR BL — Dialogue Lane Scaffold · PR BM — Lane Regression Pass · PR BN — Spokesperson Reels Action Wired · PR BO — Cinematic Voiced Action Wired · PR BP — All Remaining v2 Lane Actions Wired · PR BQ — V2 Lane Inline Brief Editing · PR BR — V2 Appearances Click-Through · PR BS — Click-Through Tab Hints · PR BT — Cinematic Video Async Action Wired · PR BU — Cinematic Video Persistence · PR CA — App Shell + Router + Spokesperson Library Home · PR CB — Library Polish + Create Spokesperson CTA · PR CC — Spokesperson Workspace Shell + Identity Tab · PR CD — Home Library Only · PR CE — Workspace Campaigns Tab Mounts Campaign Lanes)
+### UX redesign foundation (PR BD — UX v2 Flag + Shared Helpers · PR BE — SpokespersonStudio Scaffold · PR BF — Knowledge Tab Wiring · PR BG — Appearances Tab Wiring · PR BH — Mode-First Creation Modal · PR BI — Spokesperson Lane Scaffold · PR BK — Cinematic Lane Scaffold · PR BL — Dialogue Lane Scaffold · PR BM — Lane Regression Pass · PR BN — Spokesperson Reels Action Wired · PR BO — Cinematic Voiced Action Wired · PR BP — All Remaining v2 Lane Actions Wired · PR BQ — V2 Lane Inline Brief Editing · PR BR — V2 Appearances Click-Through · PR BS — Click-Through Tab Hints · PR BT — Cinematic Video Async Action Wired · PR BU — Cinematic Video Persistence · PR CA — App Shell + Router + Spokesperson Library Home · PR CB — Library Polish + Create Spokesperson CTA · PR CC — Spokesperson Workspace Shell + Identity Tab · PR CD — Home Library Only · PR CE — Workspace Campaigns Tab Mounts Campaign Lanes · PR CF — V2 Copy Cleanup + Remove Dev Jargon)
 
 - **UX v2 feature flag** at `frontend/src/uxFlag.js`. Resolves
   precedence URL `?ux=v2|v1` > localStorage `adspark.ux` >
@@ -211,6 +209,30 @@ added).
   `spokesperson-lane-reels-status`,
   `spokesperson-lane-reels-link`. Reels button new attrs:
   `data-source-ready`, `data-busy`.
+- **V2 Copy Cleanup + Remove Dev Jargon** (PR CF) — closes
+  the first of SESSION 059's three demo-readiness blockers.
+  Every user-visible "scaffold · PR BX" pill, "preview UX"
+  pill, "classic UX" / "classic gallery" / "lands next"
+  string in v2 surfaces rewritten in product language.
+  Lane headers now read **Build a spokesperson ad** /
+  **Create a cinematic video** / **Plan a dialogue scene**
+  with task-oriented one-liners. CampaignModeModal title
+  swaps from `New Campaign · preview UX` to `Choose
+  campaign type`; footer copy ("Lane-specific builders
+  ship in PR BJ–BL") replaced with "Your selection is
+  remembered for this spokesperson — the matching builder
+  mounts inside the workspace below." Lane Step-2 hints
+  describe the in-place workflow (e.g. "Click Regenerate
+  Real Cinematic Video below to refresh the silent cut in
+  place") instead of pointing back to /legacy where v2
+  already works. Workspace TabComingSoon teases match the
+  brief's product copy ("Knowledge sources will appear
+  here.", "Conversation history will appear here.",
+  "Generated videos and reels will appear here."). Smoke
+  gains a `FORBIDDEN_JARGON` sweep that walks `/`, the mode
+  modal, and each lane and asserts none of those strings
+  leak into rendered text. Backend untouched. /legacy
+  unchanged. No real Runway calls fired.
 - **Workspace Campaigns Tab Mounts Campaign Lanes** (PR CE)
   — closes the loop the v2 IA reset opened: campaign
   creation now stays inside `/spokespeople/:id`. New

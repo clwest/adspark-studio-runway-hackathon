@@ -122,7 +122,7 @@ export default function DialogueLane({
     : lineCount === 0
     ? 'Plan dialogue lines first.'
     : !stitchAllReady
-    ? `${lines.filter((l) => l.status === 'ok').length}/${lineCount} lines ready — generate the rest in classic UX before stitching.`
+    ? `${lines.filter((l) => l.status === 'ok').length}/${lineCount} lines ready — render the rest in the legacy wizard before stitching.`
     : !onStitchDialogue
     ? 'Wire the v2 onStitchDialogue handler before this button can fire.'
     : ''
@@ -187,19 +187,13 @@ export default function DialogueLane({
         <div className="space-y-0.5">
           <h4 className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
             <span aria-hidden="true">🎭</span>
-            Dialogue Scene lane
-            <span
-              className="text-[10px] rounded-full bg-sky-500/20 text-sky-200 ring-1 ring-sky-400/40 px-2 py-0.5 font-mono"
-              title="Mounted while localStorage.adspark.activeMode === 'dialogue'"
-            >
-              scaffold · PR BL
-            </span>
+            Plan a dialogue scene
           </h4>
           <p className="text-[11px] text-zinc-400 leading-snug max-w-prose">
-            Multi-character stitched skit. Plan Hook / Beat / Closer
-            lines across multiple spokespeople; per-line `avatar_videos`
-            render then ffmpeg-concat into one branded scene. Render
-            handlers ship in a follow-up slice.
+            Build a Hook / Beat / Closer skit across multiple
+            spokespeople. Plan and stitch the scene here; per-line
+            renders run in the legacy wizard until inline rendering
+            lands.
           </p>
         </div>
         {hasSpokesperson && (
@@ -283,9 +277,9 @@ export default function DialogueLane({
                 )}
               </ul>
               <p className="text-[10px] text-zinc-500 leading-snug pt-1">
-                Cast inferred from `dialogue_lines[*]` on the
-                focused campaign. Editing rolls into the lane
-                builder follow-up.
+                Cast is inferred from the dialogue lines saved on
+                this campaign. Editing speakers per line lands in a
+                follow-up slice.
               </p>
             </>
           ) : (
@@ -293,11 +287,12 @@ export default function DialogueLane({
               <p className="text-[11px] text-zinc-400 leading-snug">
                 {hasCampaign
                   ? 'No dialogue lines planned on this campaign yet.'
-                  : 'Cast (multi-character speaker list) ships with the dialogue plan.'}
+                  : 'Pick a campaign to plan its dialogue.'}
               </p>
               <p className="text-[10px] text-zinc-500 leading-snug">
-                Plan a Hook / Beat / Closer in classic UX Dialogue
-                tab; speakers will surface here automatically.
+                Click Plan Dialogue Lines below to seed a Hook / Beat
+                / Closer structure — speakers will surface here
+                automatically once the plan saves.
               </p>
             </>
           )}
@@ -333,7 +328,7 @@ export default function DialogueLane({
               data-busy={planBusy ? 'true' : 'false'}
               title={
                 planCanFire
-                  ? 'POST /api/campaigns/{id}/dialogue/plan — template-driven plan, no Runway credits. Per-line generation happens in classic UX.'
+                  ? 'Seed a 3-line Hook / Beat / Closer plan from the saved campaign brief. No Runway credits. Per-line rendering still happens in the legacy wizard.'
                   : planDisabledReason
               }
               className={
