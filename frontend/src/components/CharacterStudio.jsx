@@ -626,7 +626,7 @@ export default function CharacterStudio({
                 }))
               }
               maxLength={1000}
-              placeholder="A front-facing head-and-shoulders portrait of [subject]. [style]. Centered face, eyes visible, mouth visible, no sunglasses, no props blocking the face. high detail, mascot portrait, avatar-ready."
+              placeholder="A front-facing head-and-shoulders portrait of [subject]. [style]. Centered face with eyes and mouth fully visible, unobstructed view of the face. high detail, mascot portrait, avatar-ready."
               className="w-full rounded-md bg-zinc-950 ring-1 ring-zinc-800 px-2 py-1.5 text-xs leading-relaxed focus:ring-pink-400 outline-none font-mono"
               aria-describedby="portrait-prompt-helper"
             />

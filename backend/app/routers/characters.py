@@ -302,6 +302,16 @@ def post_create_avatar(
                 "POST /api/characters/{id}/generate-portrait."
             ),
         )
+    # PR CR — additional belt-and-braces: an empty / zero-byte portrait
+    # file slipped through `has_portrait()` would lead to an avatar
+    # request with an empty referenceImage. Catch it here.
+    portrait_path = store.portrait_path(character_id)
+    portrait_size = portrait_path.stat().st_size if portrait_path.exists() else 0
+    if portrait_size <= 0:
+        raise HTTPException(
+            status_code=409,
+            detail="portrait cache is empty; regenerate the portrait first.",
+        )
 
     voice_preset = body.voice_preset if body else None
     if voice_preset and voice_preset.lower() not in SUPPORTED_VOICE_PRESETS:
@@ -313,7 +323,16 @@ def post_create_avatar(
             ),
         )
 
-    portrait_path = store.portrait_path(character_id)
+    logger.info(
+        "create-avatar character=%s portrait_bytes=%d portrait_mtime=%s "
+        "voice_preset=%s has_custom_voice=%s",
+        character_id,
+        portrait_size,
+        int(portrait_path.stat().st_mtime),
+        (voice_preset or record.voice_preset or "vincent"),
+        bool(record.custom_voice_id),
+    )
+
     result = studio_create_avatar(
         record,
         portrait_path,
@@ -332,13 +351,27 @@ def post_create_avatar(
             voice_preset=(voice_preset or record.voice_preset).lower(),
             mock_mode=result.mock_mode,
         )
-    else:
-        updated = store.update(
-            character_id,
-            runway_avatar_status="failed",
-            runway_avatar_error=result.error,
-        )
-    return updated or record
+        return updated or record
+
+    # PR CR — persist the failed state so the workspace pill shows
+    # `avatar · failed` next time the record is read, AND raise 502 so
+    # the immediate caller (v2 stepper / workspace button) can surface
+    # the specific error to the operator. The previous code returned
+    # 200 with persisted-failed flags, so the frontend treated avatar
+    # failures as success and silently navigated past them.
+    store.update(
+        character_id,
+        runway_avatar_status="failed",
+        runway_avatar_error=result.error,
+    )
+    logger.warning(
+        "create-avatar failed character=%s err=%s",
+        character_id, result.error,
+    )
+    raise HTTPException(
+        status_code=502,
+        detail=result.error or "avatar processing failed",
+    )
 
 
 # ---- PR AN — Custom voice cloning foundation ----------------------

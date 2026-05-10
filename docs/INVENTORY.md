@@ -1,8 +1,37 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after **PR CP — Restore Delete Spokesperson +
-Endpoint Audit**. New `<DangerZone>` section in the
+context-kit refresh after **PR CR — Portrait Negation Bug +
+Failure-Code Surfacing**. Donny Sparks (an anthropomorphic
+donkey marketing mascot) reproduced
+`INTERNAL.BAD_OUTPUT.CODE01` against the PR CP cont.
+brand-safe tail's negation list ("No horror, no
+distortion, no extra limbs, no melted anatomy, no
+uncanny realism") because diffusion models routinely
+misread inline negations as content directives. The
+new `_BRAND_SAFE_TAIL` is positive-only — "Polished
+commercial illustration with believable character
+anatomy and a clean face" — and Donny renders cleanly
+under it (549 KB PNG, real Runway). Frontend
+`_FINISHERS` matched. The portrait service now also
+surfaces Runway's `failureCode` in raised errors
+(format: `[code=INTERNAL.BAD_OUTPUT.CODE01]`) and
+auto-retries once on `INTERNAL.*` codes OR `timed out`
+after a 2 s backoff (belt-and-braces; the prompt
+rewrite is the real fix). Polling deadline bumped 90 s
+→ 180 s. **Avatar surface** also tightened: the
+`/api/characters/{id}/create-avatar` route now logs
+payload SHAPE (no secrets) at INFO before the POST,
+guards zero-byte portrait files with a 409,
+surfaces Runway's avatar `failureCode` via the same
+`[code=…]` shape, and **raises HTTP 502** on
+`result.status == "failed"` instead of returning 200
+with persisted-failed flags (the previous code path
+let the v2 stepper silently navigate past avatar
+failures). Five-test mock-mode pytest at
+`backend/tests/test_create_avatar_mock.py` pins the
+contract (happy path + 404 / 409 / 400 / 409 zero-byte
+guards). Backend route count still **71**. Earlier: New `<DangerZone>` section in the
 `/spokespeople/:id` Identity tab gives operators a
 discoverable, two-step delete affordance (the legacy
 `<CharacterCard>` footer's tiny 9-px `delete` link was

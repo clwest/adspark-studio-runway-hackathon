@@ -79,16 +79,31 @@ const _TEMPLATES = {
   },
 }
 
+// PR CR — rewrote to drop "no sunglasses, no props blocking the
+// face" negations that diffusion models misread as content
+// directives. Pure positive phrasing renders the same intent: a
+// clean, fully-visible face is implied by "unobstructed view of the
+// face" — the absence of obstructions is the shape we want, but we
+// describe it as a *positive* attribute the model can render.
 const _CONSTRAINTS =
-  'Centered face, eyes visible, mouth visible, no sunglasses, ' +
-  'no props blocking the face'
-// PR CP cont. — brand-safe + anti-uncanny finishers mirror the
-// backend ``_BRAND_SAFE_TAIL`` so the editable textarea opens with
-// the same safety cues the auto-built backend prompt enforces.
+  'Centered face with eyes and mouth fully visible, ' +
+  'unobstructed view of the face'
+// PR CP cont. — brand-safe finishers mirror the backend
+// ``_BRAND_SAFE_TAIL`` so the editable textarea opens with the same
+// language the auto-built backend prompt uses.
+//
+// PR CR — dropped the inline negation list ("no horror, no
+// distortion, no extra limbs, no melted anatomy, no uncanny
+// realism"). Diffusion models often misread negations as
+// instructions to include those concepts, and Donny Sparks
+// reproducibly hit `INTERNAL.BAD_OUTPUT.CODE01` against
+// gen4_image_turbo until the negations were removed. Positive-only
+// phrasing renders the same brand-safe intent without tripping the
+// downstream output check.
 const _FINISHERS =
   'high detail, mascot portrait, avatar-ready, brand-safe ' +
-  'advertising character, no horror, no distortion, no extra ' +
-  'limbs, no melted anatomy, no uncanny realism'
+  'advertising character, polished commercial illustration with ' +
+  'believable anatomy'
 
 /**
  * Build the default Character-Studio portrait prompt. Pure function;
@@ -156,8 +171,15 @@ export function buildCharacterPortraitPrompt({
 /**
  * Helper-text shown above the textarea. Single source of truth so the
  * smoke can match either the docs or the rendered UI.
+ *
+ * PR CR — keep this purely positive. Earlier copy listed
+ * "no sunglasses, no props blocking the face" as guidance, but
+ * recommending negations to operators teaches them to write prompts
+ * that diffusion models misread (Runway gen4_image_turbo rejects
+ * negation-laden prompts as `INTERNAL.BAD_OUTPUT.CODE01`). Describe
+ * the *positive* shape we want instead.
  */
 export const PORTRAIT_PROMPT_HELPER =
   'Best avatar results: centered head-and-shoulders portrait, face ' +
   'visible, eyes visible, mouth visible, clean background, ' +
-  'no sunglasses, no props blocking the face.'
+  'unobstructed view of the face.'

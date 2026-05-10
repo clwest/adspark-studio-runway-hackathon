@@ -50,17 +50,30 @@ _MAX_PORTRAIT_RATIO = "1280:720"  # landscape; predictable face crop on Runway s
 # ---- prompt templates (locked in spike §7) ------------------------
 
 # PR CP cont. — every template now leads with a "polished commercial
-# spokesperson portrait" anchor and ends with shared brand-safe / anti-
-# uncanny constraints. ``{subject}`` lands in the noun position so
-# Runway sees the concrete creature/person before the modifier
-# clauses. The mascot anchor explicitly says "anthropomorphic mascot
-# spokesperson" so animal mascots (Brewster Bolt the raccoon) read as
-# creatures rather than abstract shapes when the seed ``subject`` is
-# light.
+# spokesperson portrait" anchor and ends with shared brand-safe
+# constraints. ``{subject}`` lands in the noun position so Runway
+# sees the concrete creature/person before the modifier clauses.
+# The mascot anchor explicitly says "anthropomorphic mascot
+# spokesperson" so animal mascots (Brewster Bolt the raccoon) read
+# as creatures rather than abstract shapes when the seed ``subject``
+# is light.
+#
+# PR CR — rewrote the brand-safe tail to be **positive-only**.
+# `gen4_image_turbo` consistently rejected outputs (FAILED with
+# `INTERNAL.BAD_OUTPUT.CODE01`) when the previous tail listed
+# negations ("no horror, no distortion, no extra limbs, no melted
+# anatomy, no uncanny realism, no props or sunglasses"). Diffusion
+# models routinely misread inline negations as instructions to
+# include those concepts, then Runway's downstream output check
+# rejects the result. Donny Sparks the donkey mascot reproduced the
+# failure across three attempts under the negation-laden tail and
+# rendered cleanly the moment the negations were dropped. The new
+# tail says what we DO want — believable anatomy, clean face — in
+# positive phrasing that the model can render directly.
 _BRAND_SAFE_TAIL = (
     "Brand-safe advertising character suitable for a marketing "
-    "campaign. No horror, no distortion, no extra limbs, no melted "
-    "anatomy, no uncanny realism. No props or sunglasses."
+    "campaign. Polished commercial illustration with believable "
+    "character anatomy and a clean face."
 )
 
 PORTRAIT_TEMPLATES: dict[str, str] = {
@@ -241,13 +254,27 @@ def _download_image_to_disk(url: str, target: Path, timeout: float = 60.0) -> in
         raise CharacterStudioError(f"download error: {exc!s}"[:300]) from exc
 
 
-def _generate_portrait_real(prompt: str, target: Path, settings: Settings) -> int:
-    body = {
-        "model": _IMAGE_MODEL,
-        "promptText": prompt,
-        "ratio": _MAX_PORTRAIT_RATIO,
-        "referenceImages": [{"uri": _seed_reference_data_uri(), "tag": "seed"}],
-    }
+# Runway failure codes that are flaky on Runway's side rather than
+# caused by our prompt. Donny Sparks (PR CR investigation) hit
+# ``INTERNAL.BAD_OUTPUT.CODE01`` against a perfectly fine
+# anthropomorphic-donkey mascot prompt; Rex Roadside hit the same
+# pattern across PR CI / PR CJ / PR CO. We auto-retry once on these
+# codes before surfacing the failure to the operator. Codes that
+# look like operator-fixable signals (content moderation, prompt
+# rejection) are NOT retried — they need a different prompt.
+_TRANSIENT_FAILURE_CODE_PREFIXES = ("INTERNAL.",)
+
+
+def _portrait_task_attempt(
+    body: dict, settings: Settings, *, deadline_secs: int = 180
+) -> tuple[str, dict]:
+    """Single create-and-poll round-trip against ``/v1/text_to_image``.
+
+    Returns ``(output_url, final_payload)`` on SUCCEEDED. Raises
+    ``CharacterStudioError`` on FAILED / CANCELED / timeout — the
+    raised message preserves the Runway ``failureCode`` so the
+    caller can decide whether to retry or surface to the operator.
+    """
     create_url = f"{settings.runway_api_base}/v1/text_to_image"
     with httpx.Client(timeout=30.0) as client:
         resp = client.post(create_url, headers=_runway_headers(settings), json=body)
@@ -260,8 +287,8 @@ def _generate_portrait_real(prompt: str, target: Path, settings: Settings) -> in
     if not task_id:
         raise CharacterStudioError(f"portrait create missing task id: {created}")
 
-    deadline = time.time() + 90
-    final_payload = None
+    deadline = time.time() + deadline_secs
+    final_payload: Optional[dict] = None
     with httpx.Client(timeout=20.0) as client:
         while time.time() < deadline:
             r = client.get(
@@ -276,7 +303,14 @@ def _generate_portrait_real(prompt: str, target: Path, settings: Settings) -> in
                 break
             if status in {"FAILED", "CANCELED"}:
                 reason = payload.get("failure") or payload.get("error") or status
-                raise CharacterStudioError(f"portrait task {status}: {reason}")
+                code = payload.get("failureCode") or ""
+                # Surface failureCode in the message so logs +
+                # operator UI tell us *why* Runway said no.
+                raise CharacterStudioError(
+                    f"portrait task {status}: {reason}"
+                    + (f" [code={code}]" if code else "")
+                    + f" (task={task_id})"
+                )
             time.sleep(3)
     if not final_payload:
         raise CharacterStudioError(f"portrait task {task_id} timed out")
@@ -289,9 +323,70 @@ def _generate_portrait_real(prompt: str, target: Path, settings: Settings) -> in
                 out_url = v
                 break
     if not out_url:
-        raise CharacterStudioError(f"portrait task {task_id} produced no output url")
+        raise CharacterStudioError(
+            f"portrait task {task_id} produced no output url"
+        )
+    return out_url, final_payload
 
-    return _download_image_to_disk(out_url, target)
+
+def _is_transient_failure(message: str) -> bool:
+    """True when the failure shape matches a known Runway-side flake
+    (vs an operator-fixable rejection like a content-policy block).
+
+    Two retry-worthy patterns:
+
+    1. ``[code=INTERNAL.…]`` — Runway returned FAILED with an
+       internal failure code (BAD_OUTPUT, INTERNAL, etc.). The model
+       died on Runway's side; another spin usually works.
+    2. ``timed out`` — the polling loop expired waiting for a
+       terminal state. PR CR found a Donny Sparks attempt where the
+       task sat past our 180 s deadline before flipping to FAILED
+       with ``failureCode=INTERNAL``. Retrying gives Runway a fresh
+       task slot rather than waiting longer.
+    """
+    if "timed out" in message:
+        return True
+    if "[code=" not in message:
+        return False
+    return any(
+        f"[code={prefix}" in message
+        for prefix in _TRANSIENT_FAILURE_CODE_PREFIXES
+    )
+
+
+def _generate_portrait_real(prompt: str, target: Path, settings: Settings) -> int:
+    body = {
+        "model": _IMAGE_MODEL,
+        "promptText": prompt,
+        "ratio": _MAX_PORTRAIT_RATIO,
+        "referenceImages": [{"uri": _seed_reference_data_uri(), "tag": "seed"}],
+    }
+
+    # PR CR — single retry on transient INTERNAL.* failure codes.
+    # Runway's gen4_image_turbo occasionally returns
+    # ``INTERNAL.BAD_OUTPUT.CODE01`` against perfectly valid prompts;
+    # one retry is the standard mitigation. Non-transient failures
+    # (content policy, schema rejections) are NOT retried — they
+    # need an operator decision, not another credit burn.
+    last_exc: Optional[CharacterStudioError] = None
+    for attempt in (1, 2):
+        try:
+            out_url, _payload = _portrait_task_attempt(body, settings)
+            return _download_image_to_disk(out_url, target)
+        except CharacterStudioError as exc:
+            last_exc = exc
+            msg = str(exc)
+            if attempt == 1 and _is_transient_failure(msg):
+                logger.warning(
+                    "portrait transient-fail attempt=%d msg=%s — retrying once",
+                    attempt, msg,
+                )
+                # tiny backoff before the second shot
+                time.sleep(2)
+                continue
+            raise
+    # Defensive — loop above always returns or raises.
+    raise last_exc or CharacterStudioError("portrait failed (no attempts ran)")
 
 
 def generate_portrait(
@@ -388,6 +483,17 @@ def _create_avatar_real(
         "voice": voice_block,
         "personality": personality or "Reusable AI brand character.",
     }
+    # PR CR — log payload SHAPE (no secrets, no base64). Voice id is a
+    # surrogate identifier, not a secret, but we redact it anyway.
+    logger.info(
+        "avatar create payload name=%r voice.type=%s voice.id_set=%s "
+        "personality_len=%d referenceImage_bytes=%d",
+        name,
+        voice_block.get("type"),
+        bool(voice_block.get("voiceId") or voice_block.get("presetId")),
+        len(body["personality"]),
+        len(portrait_data_uri),
+    )
     url = f"{settings.runway_api_base}/v1/avatars"
     with httpx.Client(timeout=30.0) as client:
         resp = client.post(url, headers=_runway_headers(settings), json=body)
@@ -412,8 +518,20 @@ def _create_avatar_real(
             payload = r.json()
             final_status = (payload.get("status") or "").upper()
     if final_status != "READY":
+        # PR CR — surface Runway's failure detail + failureCode so the
+        # operator-facing error explains *why* (mirrors the portrait
+        # `[code=…]` shape).
+        reason = (
+            payload.get("failure")
+            or payload.get("error")
+            or final_status
+            or "no terminal status"
+        )
+        code = payload.get("failureCode") or ""
         raise CharacterStudioError(
-            f"avatar processing did not reach READY (final: {final_status})"
+            f"avatar processing did not reach READY (final={final_status}): {reason}"
+            + (f" [code={code}]" if code else "")
+            + f" (avatar={avatar_id})"
         )
     return avatar_id, payload.get("processedImageUri") or payload.get("referenceImageUri")
 

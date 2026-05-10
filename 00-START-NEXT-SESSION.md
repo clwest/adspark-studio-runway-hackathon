@@ -1,16 +1,45 @@
 # START NEXT SESSION — AdSpark Studio
 
-**Last touched:** 2026-05-10 (PR CQ — sharpened demo
-seed `subject` strings on Brewster / Clara / Rex / Mina;
-flipped Rex Roadside's template `local_guide` →
-`mascot` to match new anthropomorphic-bison concept;
-new `<details>` portrait-prompt audit surface in the
-Identity tab below the embedded CharacterCard;
-Identity tab restructured into a responsive 2-col grid
-so the embedded CharacterCard caps at 320px wide on
-md+ instead of rendering its `aspect-square w-full`
-portrait at full workspace width; smoke 3/3 passed,
-build 481.30 KB initial / 131.30 KB gzip.
+**Last touched:** 2026-05-10 (PR CR — fixed portrait
+negation bug + surfaced Runway `failureCode`. Donny
+Sparks reproduced `INTERNAL.BAD_OUTPUT.CODE01` against
+the PR CP cont. negation tail ("no horror, no
+distortion, no extra limbs, no melted anatomy, no
+uncanny realism"); diffusion models misread inline
+negations as content directives. Rewrote
+`_BRAND_SAFE_TAIL` + frontend `_FINISHERS` to
+positive-only phrasing. Donny rendered cleanly under
+the new template (549 KB PNG). Single auto-retry on
+`INTERNAL.*` failure codes added as belt-and-braces.
+Also rewrote the v2-stepper's embedded
+`derivePortraitPrompt(form)` (a SECOND copy of the old
+templates — every template ended with "No props or
+sunglasses" which got sent as `prompt_override` and
+short-circuited the backend fix) + the legacy v1
+CharacterStudio placeholder + the
+`PORTRAIT_PROMPT_HELPER` operator-helper text. Donny #2
+rendered cleanly under the unified positive-only path
+(537 KB). Bumped the polling deadline 90 s → 180 s and extended
+the auto-retry to cover `timed out` (Donny #3
+reproduced a 90 s timeout that flipped to FAILED with
+`failureCode=INTERNAL` after our deadline expired;
+the bumped deadline + retry let it render — 600 KB).
+Avatar surface debugged separately: route now logs
+payload SHAPE (no secrets) at INFO before the POST,
+guards zero-byte portrait files with a 409, surfaces
+Runway's avatar `failureCode` in raised errors, and
+**raises 502 on avatar-create failures** instead of
+silently returning 200 with persisted-failed flags
+(the v2 stepper now sees the actual error). Five-test
+mock-mode pytest added at
+`backend/tests/test_create_avatar_mock.py` (pytest
+installed in the backend venv).
+Smoke 3/3, build 481.50 KB initial / 131.39 KB gzip,
+pytest 5/5.
+Earlier: PR CQ — sharpened demo seed `subject` strings
+on Brewster / Clara / Rex / Mina + Rex template flip
++ portrait audit `<details>` + responsive 2-col grid
+`d8dcca5`.
 Earlier: PR CP cont. portrait template hardening
 `58a73f2`; PR AG/AH `6157512`; PR AI
 `108ca3b`; PR AJ `444cb6a`; PR AK `c59251a`; PR AL `8a43af2`;
@@ -37,8 +66,9 @@ Data + Portraits + Stats Accuracy `b0d4bf2`; PR CP
 Restore Delete Spokesperson + Endpoint Audit `82b695f`;
 PR CP cont. portrait template hardening `58a73f2`;
 PR CQ Sharpen Demo Seed Subjects + Tiny Prompt Audit
-in flight on top —
-SESSION_012–SESSION_074 handoffs added).
+`d8dcca5`; PR CR Portrait Negation Bug + Failure-Code
+Surfacing in flight on top —
+SESSION_012–SESSION_075 handoffs added).
 
 ## Where things stand
 
