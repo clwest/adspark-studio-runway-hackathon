@@ -123,7 +123,19 @@ function OverviewChip({ label, status, hint }) {
   )
 }
 
-function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest }) {
+function CampaignCard({
+  c,
+  onUpdated,
+  onDeleted,
+  isNewestSaved,
+  onClearNewest,
+  // PR BR — v2 Appearances click-through target. When the parent
+  // sets openCampaignId === c.id, the card scrolls into view +
+  // flashes a highlight ring for ~2 s; onClearOpen fires when the
+  // animation lands so a future click can re-fire cleanly.
+  isOpenedFromV2 = false,
+  onClearOpen,
+}) {
   const concept = c.selected_concept || {}
   // Preview preference: any finished format → cached → original presigned URL.
   const finishedAnyUrl =
@@ -168,6 +180,27 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
     cardRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // PR BR — v2 Appearances click-through. When the parent flips
+  // `isOpenedFromV2` true (because openCampaignId matches this
+  // card's id), scroll into view + flash a pink highlight ring
+  // for ~2 s, then call onClearOpen so subsequent re-clicks can
+  // re-fire the animation. Independent from voicedHighlight /
+  // newestSaved scroll paths so the v2 jump never confuses
+  // those flows.
+  const [openHighlight, setOpenHighlight] = useState(false)
+  useEffect(() => {
+    if (!isOpenedFromV2) return undefined
+    if (cardRef.current) {
+      cardRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+    setOpenHighlight(true)
+    const t = window.setTimeout(() => {
+      setOpenHighlight(false)
+      onClearOpen?.()
+    }, 2200)
+    return () => window.clearTimeout(t)
+  }, [isOpenedFromV2, onClearOpen])
   const [busyFormat, setBusyFormat] = useState(null) // null | "landscape" | "reels" | "square"
   const [avatarBusy, setAvatarBusy] = useState(false)
   const [hostBusy, setHostBusy] = useState(false)
@@ -3524,12 +3557,17 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
   return (
     <li
       ref={cardRef}
+      data-testid="campaign-card"
+      data-campaign-id={c.id}
+      data-opened-from-v2={openHighlight ? 'true' : 'false'}
       className={`rounded-xl ring-1 p-4 bg-studio-900/60 space-y-3 shadow-panel transition-shadow ${
-        isNewestSaved
+        openHighlight
+          ? 'ring-pink-400/70 shadow-[0_0_0_2px_rgba(244,114,182,0.25),0_0_28px_rgba(244,114,182,0.25)]'
+          : isNewestSaved
           ? 'ring-spark/60 shadow-[0_0_0_2px_rgba(56,189,248,0.15),0_0_24px_rgba(56,189,248,0.18)]'
           : 'ring-zinc-800'
       }`}
-      aria-current={isNewestSaved ? 'true' : undefined}
+      aria-current={isNewestSaved || openHighlight ? 'true' : undefined}
     >
       {/* ---- Card header ------------------------------------------- */}
       <div className="flex items-start justify-between gap-2">
@@ -3767,7 +3805,15 @@ function CampaignCard({ c, onUpdated, onDeleted, isNewestSaved, onClearNewest })
   )
 }
 
-export default function CampaignGallery({ campaigns, onRefresh, newestSavedId, onClearNewest }) {
+export default function CampaignGallery({
+  campaigns,
+  onRefresh,
+  newestSavedId,
+  onClearNewest,
+  // PR BR — v2 Appearances click-through targets.
+  openCampaignId = null,
+  onClearOpen,
+}) {
   const [overrides, setOverrides] = useState({})
   const [deletedIds, setDeletedIds] = useState(new Set())
   const handleUpdated = (updated) => {
@@ -3820,6 +3866,8 @@ export default function CampaignGallery({ campaigns, onRefresh, newestSavedId, o
               onDeleted={handleDeleted}
               isNewestSaved={c.id === newestSavedId}
               onClearNewest={onClearNewest}
+              isOpenedFromV2={Boolean(openCampaignId) && c.id === openCampaignId}
+              onClearOpen={onClearOpen}
             />
           ))}
         </ul>

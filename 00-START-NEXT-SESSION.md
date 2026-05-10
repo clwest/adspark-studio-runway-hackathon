@@ -11,16 +11,16 @@ PR BA `9d0a99d`; PR BB `8702660`; PR BC `9eae15f`; PR BD
 `af48e28`; SESSION REAL-API `4a68278`; PR BH `600eec9`; PR BI
 `42a8054`; PR BJ `c04aced`; PR BK `7185554`; PR BL `8967061`;
 PR BM `669a584`; PR BN `13bc608`; PR BO `5e7400f`; PR BP
-`18a296b feat: wire v2 real runway generation buttons (PR BP)`;
-PR BQ V2 Lane Inline Brief Editing in flight on top —
-SESSION_012–SESSION_048 handoffs added).
+`18a296b`; PR BQ `74d5dc6 feat: v2 lane inline brief editing
+(PR BQ)`; PR BR V2 Appearances Click-Through in flight on top
+— SESSION_012–SESSION_049 handoffs added).
 
 ## Where things stand
 
-- **Branch:** `main` at `18a296b` (`feat: wire v2 real
-  runway generation buttons (PR BP)`) on `origin/main`.
-  PR BQ patch in flight on top — no new commit / tag yet,
-  both pending explicit user approval.
+- **Branch:** `main` at `74d5dc6` (`feat: v2 lane inline
+  brief editing (PR BQ)`) on `origin/main`. PR BR patch
+  in flight on top — no new commit / tag yet, both
+  pending explicit user approval.
 - **Latest tag:** still **`hackathon-submission-v13`** at `ec446e4`
   (PR AF). PR AG–BI shipped the full voice arc + audit trails
   + UX v2 foundation + SpokespersonStudio + Knowledge +
@@ -36,20 +36,20 @@ SESSION_012–SESSION_048 handoffs added).
   switches modes. **Default load remains v1**; v2 reachable
   via footer toggle or `?ux=v2`.
 - **Backend routes:** **69** application + FastAPI built-ins
-  (one justified addition vs PR BP — `POST /api/campaigns/{id}/brief`
-  for the inline brief editor).
-- **Frontend build:** 392.65 KB initial JS / 105.55 KB gzip +
-  561.97 KB lazy `@runwayml/avatars-react` chunk (+2.30 KB
-  initial / +0.88 KB gzip vs PR BP — LaneBriefEditor + the
-  per-lane mounts).
-- **Playwright smoke:** `3 passed (~25.5 s)` against the mock
+  (unchanged from PR BQ; PR BR is frontend-only).
+- **Frontend build:** 394.16 KB initial JS / 105.97 KB gzip +
+  561.97 KB lazy `@runwayml/avatars-react` chunk (+1.51 KB
+  initial / +0.42 KB gzip vs PR BQ — Appearances click-through
+  wiring + scroll/highlight effect + status banner).
+- **Playwright smoke:** `3 passed (~25.3 s)` against the mock
   backend booted via `bash scripts/start-local-mock.sh`. v1
-  test ~22.8 s unchanged. v2 test ~1.3 s now also asserts a
-  per-lane disjunction on the LaneBriefEditor: when a focused
-  campaign exists in the lane, the editor's testids render;
-  when not, the empty-state copy "Create or select a
-  campaign to edit the brief." is asserted. Toggle round-trip
-  ~790 ms unchanged.
+  test ~21.1 s unchanged. v2 test ~2.7 s now exercises the
+  Appearances click-through end-to-end: clicks the enabled
+  "Open in gallery →" button, asserts the
+  `spokesperson-open-status` emerald banner appears, asserts
+  the matching `campaign-card[data-opened-from-v2="true"]`
+  exists in the gallery for the highlight window. Toggle
+  round-trip ~822 ms unchanged.
   ```bash
   bash scripts/start-local-mock.sh
   (cd frontend && npm run test:e2e)
@@ -74,7 +74,7 @@ SESSION_012–SESSION_048 handoffs added).
 
 ## What's implemented (full feature stack on `main`)
 
-### UX redesign foundation (PR BD — UX v2 Flag + Shared Helpers · PR BE — SpokespersonStudio Scaffold · PR BF — Knowledge Tab Wiring · PR BG — Appearances Tab Wiring · PR BH — Mode-First Creation Modal · PR BI — Spokesperson Lane Scaffold · PR BK — Cinematic Lane Scaffold · PR BL — Dialogue Lane Scaffold · PR BM — Lane Regression Pass · PR BN — Spokesperson Reels Action Wired · PR BO — Cinematic Voiced Action Wired · PR BP — All Remaining v2 Lane Actions Wired · PR BQ — V2 Lane Inline Brief Editing)
+### UX redesign foundation (PR BD — UX v2 Flag + Shared Helpers · PR BE — SpokespersonStudio Scaffold · PR BF — Knowledge Tab Wiring · PR BG — Appearances Tab Wiring · PR BH — Mode-First Creation Modal · PR BI — Spokesperson Lane Scaffold · PR BK — Cinematic Lane Scaffold · PR BL — Dialogue Lane Scaffold · PR BM — Lane Regression Pass · PR BN — Spokesperson Reels Action Wired · PR BO — Cinematic Voiced Action Wired · PR BP — All Remaining v2 Lane Actions Wired · PR BQ — V2 Lane Inline Brief Editing · PR BR — V2 Appearances Click-Through)
 
 - **UX v2 feature flag** at `frontend/src/uxFlag.js`. Resolves
   precedence URL `?ux=v2|v1` > localStorage `adspark.ux` >
@@ -195,6 +195,18 @@ SESSION_012–SESSION_048 handoffs added).
   `spokesperson-lane-reels-status`,
   `spokesperson-lane-reels-link`. Reels button new attrs:
   `data-source-ready`, `data-busy`.
+- **V2 Appearances Click-Through** (PR BR) — the "Open in
+  gallery →" affordance on each Appearances row is now wired.
+  Click bubbles `onOpenCampaign(campaignId)` through
+  SpokespersonStudio → App.jsx → CampaignGallery; the matching
+  saved CampaignCard scrolls into view + flashes a pink
+  highlight ring for ~2 s; the studio shows a one-line
+  "Opened campaign in gallery: …" emerald banner that auto-
+  clears after 2.5 s. Backend untouched. data-testid:
+  `spokesperson-open-status`, `campaign-card`,
+  `data-opened-from-v2="true|false"` attribute on the highlighted
+  CampaignCard. v2-only path — v1 default load still uses the
+  PR Y `newestSavedId` pattern unchanged.
 - **V2 Lane Inline Brief Editing** (PR BQ) — operators can
   now edit business / product / audience / tone directly
   inside the v2 lane Step 1. New backend route

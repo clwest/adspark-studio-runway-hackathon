@@ -55,6 +55,11 @@ export default function SpokespersonStudio({
   // state. Tile gets an "active" pill + a "Use as Spokesperson" button.
   activeCharacterId = null,
   onSetActive,
+  // PR BR — v2 Appearances click-through. Parent (App.jsx)
+  // owns the openCampaignId target state; the studio fires this
+  // callback with a campaign id when the operator clicks "Open
+  // in gallery" on an Appearances row.
+  onOpenCampaign,
 }) {
   const [characters, setCharacters] = useState([])
   const [campaigns, setCampaigns] = useState([])
@@ -68,6 +73,29 @@ export default function SpokespersonStudio({
   // placeholder banner explaining lane components ship next.
   const [modeModalOpen, setModeModalOpen] = useState(false)
   const [activeMode, setActiveModeState] = useState(() => getActiveMode())
+
+  // PR BR — Click-through status banner. Set when the operator
+  // clicks an Appearances row's "Open in gallery →"; auto-clears
+  // after 2.5 s so the banner never stays stale.
+  const [openStatus, setOpenStatus] = useState({
+    campaignId: null,
+    label: '',
+  })
+  useEffect(() => {
+    if (!openStatus.campaignId) return undefined
+    const t = setTimeout(
+      () => setOpenStatus({ campaignId: null, label: '' }),
+      2_500,
+    )
+    return () => clearTimeout(t)
+  }, [openStatus.campaignId])
+  const handleOpenCampaign = (campaignId) => {
+    if (!campaignId) return
+    onOpenCampaign?.(campaignId)
+    const match = campaigns.find((x) => x.id === campaignId)
+    const label = match?.business || `campaign ${String(campaignId).slice(0, 6)}`
+    setOpenStatus({ campaignId, label })
+  }
 
   // PR BF — fetch campaigns alongside characters so the Knowledge
   // tab on each SpokespersonCard can render grounding + transcript
@@ -615,6 +643,8 @@ export default function SpokespersonStudio({
               // PR BF — only the campaigns linked to this character
               // via character_id; empty array when nothing matches.
               linkedCampaigns={campaignsByCharacter[c.id] || []}
+              // PR BR — Appearances click-through bubbles up.
+              onOpenCampaign={handleOpenCampaign}
             />
           ))}
         </div>
@@ -623,6 +653,22 @@ export default function SpokespersonStudio({
       {errMsg && (
         <p className="text-[10px] text-rose-300" title={errMsg}>
           {errMsg}
+        </p>
+      )}
+
+      {/* PR BR — Click-through status banner. Renders only after
+          the operator hits "Open in gallery →" on an Appearances
+          row; auto-clears after 2.5 s. Confirms the jump landed
+          on the right campaign. */}
+      {openStatus.campaignId && (
+        <p
+          data-testid="spokesperson-open-status"
+          data-campaign-id={openStatus.campaignId}
+          className="text-[10px] text-emerald-300 font-mono leading-snug"
+          role="status"
+          aria-live="polite"
+        >
+          Opened campaign in gallery: {openStatus.label}.
         </p>
       )}
 

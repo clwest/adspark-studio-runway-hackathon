@@ -1,15 +1,17 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after PR BQ (V2 Lane Inline Brief Editing)
-on top of the PR AG–BP / SESSION 011 anchors. Backend route
-count moves to **69** application routes (one justified
-addition, `POST /api/campaigns/{id}/brief`, for the inline
-brief editor). PR BQ adds the reusable `LaneBriefEditor`
-component mounted in Step 1 of all three v2 lanes —
-operators can now edit `business / product / audience /
-tone` directly inside the lane without round-tripping back
-to the classic UX. The action count from PR BP is unchanged:
+context-kit refresh after PR BR (V2 Appearances Click-Through)
+on top of the PR AG–BQ / SESSION 011 anchors. Backend route
+count remains **69** (no new routes in PR BR). The previously-
+disabled "Open in gallery →" affordance on each Appearances
+row now bubbles up through SpokespersonStudio → App.jsx →
+CampaignGallery: the matching saved CampaignCard scrolls into
+view + flashes a pink highlight ring for ~2 s, and the studio
+renders a one-line "Opened campaign in gallery: …" emerald
+banner that auto-clears after 2.5 s. PR BQ's inline brief
+editor still mounts at lane Step 1; the action count from
+PR BP is unchanged:
 **Spokesperson Lane** Horizontal (real `avatar_videos`, burns
 credits) + Captioned Reels (PR BN); **Cinematic Lane** Voiced
 Cinematic (PR BO) + Storyboard Commercial (`stitchStoryboard`,
@@ -262,6 +264,7 @@ the line's own `avatar_id`).
 | PR BO | Wire V2 Cinematic Lane Voiced Cinematic Action (gated v2 slice tracked in SESSION_046; second wired v2 lane action — `POST /api/campaigns/{id}/commercial-with-voice` — via `api.buildCommercialWithVoice`; CinematicLane gates the button on `cached_video_url` set AND (`host_video_url` + `host_status === "ok"` OR a usable avatar exists), mirrors v1 `commercialBuildable` exactly; busy / error / success states surface inline with fuchsia chrome; download link to cached voiced commercial when `voiced_commercial_url` is set; no Runway calls — ffmpeg-only; Cinematic Video + Storyboard buttons stay disabled placeholders; Spokesperson + Dialogue lanes untouched beyond PR BN) | (post-v13) |
 | PR BP | Wire V2 Real Runway Generation Buttons (gated v2 slice tracked in SESSION_047; wires 5 additional lane actions — Spokesperson Horizontal (real `avatar_videos`, burns credits, rose chrome + warning copy), Cinematic Storyboard Commercial (`stitchStoryboard`, ffmpeg-only, amber chrome), Dialogue Plan / Stitch / Captioned Reels (`planDialogue` + `stitchDialogue` + `buildDialogueSceneReels`, all ffmpeg or template-driven, sky chrome). Cinematic Video stays placeholder. Each new button carries `data-source-ready` + `data-busy` attrs; Horizontal also carries `data-burns-credits="true"`. Real-mode validation: one fresh real `avatar_videos` task `cf7e6067-…` on CEO Buzz / Brewster confirms the Horizontal wiring end-to-end — 1088×704, 18.25 s, 6.3 MB) | (post-v13) |
 | PR BQ | V2 Lane Inline Brief Editing (gated v2 slice tracked in SESSION_048; new `POST /api/campaigns/{id}/brief` route patches `business / product / audience / tone` on the saved Campaign — only justified backend addition, route count 68 → **69**; new reusable `frontend/src/components/lanes/LaneBriefEditor.jsx` renders four editable form fields + Save / Cancel + busy/error/success states; mounted in Step 1 of all three lanes (SpokespersonLane / CinematicLane / DialogueLane); when no focused campaign, lane shows "Create or select a campaign to edit the brief." copy; SpokespersonStudio adds `handleUpdateBrief` that swaps the campaign in the local slice + bubbles `onCharactersChanged`; no Runway calls; no v1 changes; no generated media touched) | (post-v13) |
+| PR BR | V2 Appearances Click-Through to Campaign Gallery (gated v2 slice tracked in SESSION_049; the previously-disabled "Open in gallery →" affordance on each Appearances row now bubbles up `onOpenCampaign(campaignId)` through SpokespersonStudio → App.jsx → CampaignGallery; CampaignCard accepts new `isOpenedFromV2` + `onClearOpen` props that scroll the matching saved card into view + flash a pink highlight ring for ~2 s; SpokespersonStudio renders a "Opened campaign in gallery: {label}" emerald banner that auto-clears after 2.5 s; no backend changes; route count unchanged at 69; pink chrome on the v2 button mirrors the studio's accent vocabulary) | (post-v13) |
 
 ## Known limitations (current main)
 

@@ -1046,12 +1046,28 @@ test('AdSpark Studio UX v2 SpokespersonStudio scaffold', async ({ page }) => {
       ).toContainText(
         /^(Cinematic|Spokesperson Ad|Dialogue Scene|Storyboard|Realtime|Mixed|Draft)$/,
       )
-      // Click-through is intentionally disabled until PR BJ–BL.
-      await expect(
-        appearanceRows
-          .first()
-          .getByTestId('spokesperson-appearance-open'),
-      ).toBeDisabled()
+      // PR BR — Click-through is now wired. Button must be enabled
+      // (App.jsx threads onOpenCampaign through SpokespersonStudio).
+      const openBtn = appearanceRows
+        .first()
+        .getByTestId('spokesperson-appearance-open')
+      await expect(openBtn).toBeEnabled()
+      // Click → status banner appears with the campaign label;
+      // CampaignCard with matching id flips
+      // data-opened-from-v2="true" for ~2 s while the highlight
+      // ring shows.
+      await openBtn.click()
+      const openStatus = page.getByTestId('spokesperson-open-status')
+      await expect(openStatus).toBeVisible()
+      await expect(openStatus).toContainText(/Opened campaign in gallery/i)
+      // The matching CampaignCard should flip its
+      // data-opened-from-v2 attribute. Match by data-campaign-id
+      // attribute since the gallery doesn't expose a single-
+      // campaign testid otherwise.
+      const focusedCard = page.locator(
+        'li[data-testid="campaign-card"][data-opened-from-v2="true"]',
+      )
+      await expect(focusedCard).toHaveCount(1, { timeout: 1_500 })
     } else {
       await expect(appearanceEmpty).toContainText(
         /No appearances yet/i,

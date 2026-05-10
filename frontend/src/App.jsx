@@ -85,6 +85,13 @@ export default function App() {
   // so demos no longer target the wrong card when several saved
   // campaigns share the same business name.
   const [newestSavedId, setNewestSavedId] = useState(null)
+  // PR BR — Click-through target for the v2 SpokespersonCard
+  // Appearances tab. Setting this to a campaign id triggers a
+  // scroll + flash highlight on the matching CampaignCard inside
+  // the saved-gallery surface; the gallery clears it after the
+  // animation lands. Independent of `newestSavedId` so a v2
+  // jump never confuses the just-saved focus state.
+  const [openCampaignId, setOpenCampaignId] = useState(null)
   const [busy, setBusy] = useState({ concepts: false, runway: false, image: false, upload: false })
   const [error, setError] = useState('')
   // PR AC follow-up — when an error appears, scroll its banner into
@@ -467,6 +474,11 @@ export default function App() {
               }}
               activeCharacterId={activeCharacterId}
               onSetActive={setActiveCharacterId}
+              // PR BR — v2 Appearances click-through. Setting
+              // openCampaignId triggers a scroll + flash highlight
+              // on the matching CampaignCard inside the gallery
+              // surface (same `campaigns` data both surfaces share).
+              onOpenCampaign={(id) => setOpenCampaignId(id)}
             />
           ) : (
             <CharacterStudio
@@ -664,6 +676,13 @@ export default function App() {
             onRefresh={refreshCampaigns}
             newestSavedId={newestSavedId}
             onClearNewest={() => setNewestSavedId(null)}
+            // PR BR — v2 click-through receiver. Defaults to
+            // null in v1 paths; the gallery's CampaignCard scrolls
+            // + flashes when its id matches and clears via
+            // onClearOpen so a re-click later re-fires the
+            // animation cleanly.
+            openCampaignId={openCampaignId}
+            onClearOpen={() => setOpenCampaignId(null)}
           />
         </Stage>
 

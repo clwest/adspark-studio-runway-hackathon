@@ -274,6 +274,11 @@ export default function SpokespersonCard({
   // and forwards each card its own slice; empty array when no
   // campaigns currently use this spokesperson.
   linkedCampaigns = [],
+  // PR BR — Appearances click-through. SpokespersonStudio
+  // (parent) bubbles the call up to App.jsx which sets
+  // openCampaignId on the v1 CampaignGallery to scroll +
+  // highlight the matching saved card.
+  onOpenCampaign = null,
 }) {
   const [activeTab, setActiveTab] = useState('identity')
   const c = character
@@ -524,19 +529,29 @@ export default function SpokespersonCard({
                       </p>
                     )}
                     <div className="flex items-center justify-end pt-0.5">
-                      {/* PR BG — click-through is intentionally a
-                          disabled affordance until lane routing
-                          ships in PR BJ–BL. The tooltip explains
-                          where the action will live. Keeping this
-                          visible (rather than hiding it) sets the
-                          expectation that v2 cards can navigate to
-                          the saved card surface in the near future. */}
+                      {/* PR BR — Click-through wired. Calls the
+                          parent's onOpenCampaign(cm.id) which
+                          flows up to App.jsx → CampaignGallery
+                          where the matching CampaignCard scrolls
+                          into view + flashes a pink highlight
+                          ring for ~2 s. Stays disabled (zinc) when
+                          no handler is wired. */}
                       <button
                         type="button"
-                        disabled
+                        onClick={() => onOpenCampaign?.(cm.id)}
+                        disabled={!onOpenCampaign}
                         data-testid="spokesperson-appearance-open"
-                        title="Click-through lands with lane routing in PR BJ–BL."
-                        className="text-[9px] rounded bg-zinc-800/40 text-zinc-500 ring-1 ring-zinc-700 px-1.5 py-0.5 font-mono cursor-not-allowed"
+                        title={
+                          onOpenCampaign
+                            ? 'Scroll to + highlight this campaign in the saved gallery below.'
+                            : 'Click-through handler not wired.'
+                        }
+                        className={
+                          'text-[9px] rounded px-1.5 py-0.5 font-mono transition-colors ' +
+                          (onOpenCampaign
+                            ? 'bg-pink-500/30 hover:bg-pink-500/45 text-pink-100 ring-1 ring-pink-400/40'
+                            : 'bg-zinc-800/40 text-zinc-500 ring-1 ring-zinc-700 cursor-not-allowed')
+                        }
                       >
                         Open in gallery →
                       </button>
