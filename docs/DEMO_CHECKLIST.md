@@ -135,6 +135,51 @@ during the run-up.
 
 ---
 
+## 6. Context-Kit Self-Demo (optional bonus pillar, PR DD)
+
+Lets a spokesperson explain how AdSpark itself was built, grounded
+in the curated context-kit Markdown. Useful for the "what is this
+project" portion of a long-form walkthrough.
+
+Setup once:
+
+- [ ] Open any spokesperson with a ready avatar (Donny is fine) →
+      **Campaigns** tab → `+ New Campaign` → **🎙️ Spokesperson Ad**.
+- [ ] Fill a minimal brief — `Business: AdSpark Studio`,
+      `Product: Persistent AI spokesperson infrastructure`,
+      `Audience: Hackathon judges`,
+      `Tone: Honest, technical, brief`. Save brief.
+- [ ] Note the campaign id from the URL or the campaigns list row.
+      We'll call this campaign **"How Character OS Was Built"**.
+- [ ] In a terminal:
+
+  ```bash
+  python scripts/upload-context-kit-demo-grounding.py \
+      --campaign-id <id> --dry-run     # preview manifest
+  python scripts/upload-context-kit-demo-grounding.py \
+      --campaign-id <id>               # POST
+  ```
+
+  Expected output ends with `runway_document_status: ready` (real
+  mode) or `mock` (mock mode) + a `runway_document_id`.
+
+Run the demo:
+
+- [ ] Stay on the dedicated campaign → **Conversations** tab →
+      **Start Conversation**.
+- [ ] Ask one of:
+      - "How was this project built?"
+      - "What does context-kit do?"
+      - "What changed during the hackathon?"
+- [ ] The avatar should ground answers in the uploaded Markdown
+      (cite filenames like `docs/WHAT_IT_IS.md` or
+      `docs/handoffs/SESSION_086_*.md`).
+
+To refresh after new PRs land, re-run the script — each upload
+replaces the campaign's grounding document.
+
+---
+
 ## Known demo-day risks
 
 - **Real Runway flakes** — `gen4_image` occasionally

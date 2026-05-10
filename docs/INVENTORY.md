@@ -1,7 +1,30 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after **PR DC — Ad Variants**.
+context-kit refresh after **PR DD — Context-Kit Realtime Grounding**.
+PR AI introduced `POST /api/campaigns/{id}/realtime-document` which
+runs the campaign record through `build_campaign_brief_markdown` —
+that shape (Audience / Tone / Selected concept / Commercial script /
+Character / Behaviour) doesn't fit documentation prose. PR DD adds a
+sibling raw route, `POST /api/campaigns/{id}/realtime-document/raw`,
+that accepts `{name, content}` already-composed Markdown and pipes
+straight through the same `runway_create_document` (40k-char trim) +
+`update_realtime_document_fields` path. Reuses the existing
+`Campaign.runway_document_*` fields the broker already reads, so no
+broker / model / storage changes are required. Avatar PATCH from PR AI
+is intentionally NOT applied — context-kit grounding stays per-session
+to avoid leaking project docs across campaigns sharing an avatar. New
+`scripts/upload-context-kit-demo-grounding.py` concatenates curated
+context-kit files (`docs/WHAT_IT_IS.md` full + head sections of
+`00-START-NEXT-SESSION.md` and `docs/INVENTORY.md` + the latest 2
+numbered handoffs by mtime) with `## File: <path>` section headers,
+trims to 40k chars, and POSTs to the raw route via stdlib
+`urllib.request`. `--dry-run` flag prints the manifest + final size +
+500-char preview without firing HTTP. Four new pytests + a new
+"Context-Kit Self-Demo" section in `docs/DEMO_CHECKLIST.md` covering
+the "How was this project built?" demo flow. Backend route count
+**75 → 76**.
+Earlier: PR DC — Ad Variants.
 Pre-PR-DC, `Campaign.commercial_script` was a single mutable
 string — every script edit overwrote it, so multiple takes
 against the same brief required brand-new campaigns. PR DC

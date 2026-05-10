@@ -1,6 +1,65 @@
 # START NEXT SESSION — AdSpark Studio
 
-**Last touched:** 2026-05-10 (PR DC — Ad Variants
+**Last touched:** 2026-05-10 (PR DD — Context-kit
+realtime grounding. New
+`POST /api/campaigns/{id}/realtime-document/raw`
+sibling to PR AI's `/realtime-document` route. The
+structured PR AI route filters the campaign record
+through `build_campaign_brief_markdown` (Audience /
+Tone / Selected concept / Commercial script / Character
+/ Behaviour shape) — that shape doesn't fit
+documentation prose. The new raw route accepts
+already-composed Markdown directly via `{name, content}`
+and pipes through the same `runway_create_document`
+(40k-char trim) + `update_realtime_document_fields`
+path. Body validated with Pydantic `min_length=1` on
+both fields + a whitespace-strip 422 guard in the
+route. The existing broker reads
+`Campaign.runway_document_id` regardless of how it got
+there, so no broker / model / storage changes. The
+avatar PATCH the structured route performs is
+intentionally **not** applied here — context-kit
+grounding is per-session via the broker only;
+PATCH'ing project docs onto a shared avatar would leak
+across campaigns. New
+`scripts/upload-context-kit-demo-grounding.py`
+companion: reads `docs/WHAT_IT_IS.md` (full) +
+`00-START-NEXT-SESSION.md` (head, 6k cap) +
+`docs/INVENTORY.md` (head, 8k cap) + the latest 2
+numbered handoffs by mtime (each 8k cap), concats
+with `## File: <path>` section headers so the avatar
+can cite sources, trims the assembled payload to the
+40k char DOCUMENT_MAX_CHARS, and POSTs to the raw
+route via stdlib `urllib.request`. `--dry-run` prints
+manifest + raw section total + final payload size +
+first 500 chars (no HTTP fired). The naive
+`text.rfind("\n\n")` head-trim shipped at 30 chars
+for START + INVENTORY because both files start with a
+title line then a giant single paragraph; the fixed
+version requires the cut to be at least 50% of the
+cap before accepting it, falling back to single-`\n`
+then hard slice. `docs/DEMO_CHECKLIST.md` got a new
+Section 6 (Context-Kit Self-Demo) covering the
+optional "How was this project built?" walkthrough
+with a dedicated campaign. Four new pytests pin the
+route contract: `test_realtime_document_raw_round_trip`,
+`test_realtime_document_raw_404_when_campaign_missing`,
+`test_realtime_document_raw_validation`,
+`test_realtime_document_raw_truncates_to_40k` (last
+one reproduces the expected `mock_doc_<sha>` id from
+the trimmed content to prove the 40k trim landed
+before the digest). Pytest **28/28** (24 prior + 4
+new PR DD), drift guard OK, hygiene clean. Backend
+route count **75 → 76**. URL note: the original PR DD
+brief named the route `/attach-realtime-document/raw`;
+implemented as `/realtime-document/raw` to match the
+existing PR AI sibling (the brief's path was carried
+over from an earlier memory note that misnamed the
+existing route). No frontend touched. No mock smoke
+run (no UI changes; operator's real-mode backend left
+undisturbed). No real Runway document upload fired
+(awaiting explicit operator approval per project
+rule). Earlier: PR DC — Ad Variants
 separate stable Campaign context from mutable Ad
 scripts. Pre-PR-DC, `Campaign.commercial_script` was
 a single mutable string — every script edit

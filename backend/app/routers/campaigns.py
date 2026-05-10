@@ -2703,6 +2703,103 @@ def post_attach_realtime_document(
     return updated or record
 
 
+# ---- PR DD — raw realtime-document attach ---------------------------
+#
+# Sibling to `/realtime-document` (PR AI). The structured route filters
+# the campaign record through `build_campaign_brief_markdown` so the
+# generated Markdown follows a brief-shape (Audience / Tone / Selected
+# concept / Commercial script / Character / Behaviour).
+#
+# This raw route accepts already-composed Markdown directly. Use case:
+# context-kit demo grounding — feeding `WHAT_IT_IS.md`, the head of
+# `00-START-NEXT-SESSION.md`, `INVENTORY.md`, and the latest handoffs
+# into a dedicated demo campaign so a spokesperson can explain how the
+# project was built. The structured route's brief-shape doesn't fit
+# documentation prose; this one preserves the source files verbatim.
+#
+# Reuses the same Campaign.runway_document_* fields the broker reads,
+# so no broker / models / storage changes are required.
+#
+# Avatar PATCH is intentionally NOT applied here. The structured route
+# PATCHes the resolved avatar with documentIds so direct-against-avatar
+# sessions inherit the brief. For raw documentation grounding, the
+# avatar may be shared across campaigns; PATCHing context-kit onto it
+# would leak project docs into unrelated campaigns. Grounding stays
+# strictly per-session via the realtime broker's documentIds injection.
+
+
+class RawRealtimeDocumentBody(BaseModel):
+    """PR DD — raw `/v1/documents` body. ``content`` is plain-text /
+    Markdown the caller has already composed. Trimmed to the existing
+    40k-char cap by ``runway_create_document`` before the wire."""
+
+    name: str = Field(..., min_length=1, max_length=120)
+    content: str = Field(..., min_length=1)
+
+
+@router.post(
+    "/{campaign_id}/realtime-document/raw", response_model=Campaign
+)
+def post_attach_realtime_document_raw(
+    campaign_id: str,
+    body: RawRealtimeDocumentBody,
+    settings: Settings = Depends(get_settings),
+    store: CampaignStore = Depends(_store),
+) -> Campaign:
+    """PR DD — attach an already-composed Markdown document to the
+    campaign's realtime grounding slot. Returns the updated Campaign
+    with ``runway_document_*`` fields populated.
+
+    Mock mode: deterministic ``mock_doc_<sha>`` id (same path the
+    structured route uses) so smoke + offline demos can flip the
+    grounding badge without burning credits.
+    """
+    record = store.get(campaign_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="campaign not found")
+
+    name = body.name.strip()
+    content = body.content.strip()
+    if not name or not content:
+        # min_length=1 catches truly empty; this catches whitespace-only
+        # which would otherwise reach the document client and surface
+        # as a less helpful 502.
+        raise HTTPException(
+            status_code=422,
+            detail="name and content must be non-empty after stripping",
+        )
+
+    result = runway_create_document(name, content, settings)
+    if result.status == "failed" or not result.document_id:
+        store.update_realtime_document_fields(
+            campaign_id,
+            runway_document_id=None,
+            runway_document_status="failed",
+            runway_document_error=result.error,
+            runway_document_mock_mode=result.mock_mode,
+        )
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                f"document create failed: {result.error or 'unknown error'}"
+            ),
+        )
+
+    updated = store.update_realtime_document_fields(
+        campaign_id,
+        runway_document_id=result.document_id,
+        runway_document_status=result.status,
+        runway_document_error=None,
+        runway_document_mock_mode=result.mock_mode,
+    )
+    logger.info(
+        "campaign %s grounded (raw) with document %s (status=%s mock=%s len=%d)",
+        campaign_id, result.document_id, result.status, result.mock_mode,
+        len(content),
+    )
+    return updated or record
+
+
 # ---- PR I — Realtime Brand Spokesperson session broker -------------
 
 

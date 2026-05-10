@@ -617,3 +617,122 @@ def test_default_path_maps_style_chips(client: TestClient):
     assert "muted palette" not in prompt.lower(), prompt
     # The free-form post-`;` text becomes wardrobe.
     assert "wearing a premium modern hoodie" in prompt.lower(), prompt
+
+
+# ---- PR DD — raw realtime-document attach -----------------------
+
+
+def _create_minimal_campaign(client: TestClient, business: str) -> str:
+    """Tiny CampaignCreate that exercises only the realtime-document
+    field — no character, no avatar, no render path. Cheaper than
+    `_create_campaign_with_avatar` for routes that don't touch
+    ffmpeg / Runway."""
+    resp = client.post("/api/campaigns", json={
+        "business": business,
+        "selected_concept": {"title":"x","hook":"x","visual":"x","caption":"x","cta":"x"},
+        "runway_prompt": "x",
+        "social_post": {"caption":"x","cta":"x","hashtags":[]},
+    })
+    assert resp.status_code == 200, resp.text
+    return resp.json()["id"]
+
+
+def test_realtime_document_raw_round_trip(client: TestClient):
+    """Happy path: POST raw doc → mock-mode persists deterministic
+    `mock_doc_<sha>` id + status `mock` on the campaign record. The
+    raw route is the path the context-kit upload script uses, so a
+    regression here breaks the demo grounding flow."""
+    cid = _create_minimal_campaign(client, business="Raw Doc Test")
+    resp = client.post(
+        f"/api/campaigns/{cid}/realtime-document/raw",
+        json={
+            "name": "context-kit-demo-grounding",
+            "content": "# AdSpark\n\nPersistent AI spokesperson infrastructure.",
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["runway_document_status"] == "mock"
+    assert body["runway_document_id"], "expected a mock_doc_<sha> id"
+    assert body["runway_document_id"].startswith("mock_doc_")
+    assert body["runway_document_mock_mode"] is True
+    assert body["runway_document_error"] is None
+
+    # Re-attach with different content gets a different deterministic id
+    # (digest of name + content).
+    resp2 = client.post(
+        f"/api/campaigns/{cid}/realtime-document/raw",
+        json={
+            "name": "context-kit-demo-grounding",
+            "content": "# AdSpark v2 — edited content",
+        },
+    )
+    assert resp2.status_code == 200
+    assert resp2.json()["runway_document_id"] != body["runway_document_id"]
+
+
+def test_realtime_document_raw_404_when_campaign_missing(client: TestClient):
+    r = client.post(
+        "/api/campaigns/no-such-campaign/realtime-document/raw",
+        json={"name": "x", "content": "y"},
+    )
+    assert r.status_code == 404
+
+
+def test_realtime_document_raw_validation(client: TestClient):
+    """Empty/whitespace name and content both rejected — 422 from
+    Pydantic for length, 422 from the route for whitespace-only."""
+    cid = _create_minimal_campaign(client, business="Raw Doc Validation")
+
+    # Pydantic min_length=1 — empty name
+    r = client.post(
+        f"/api/campaigns/{cid}/realtime-document/raw",
+        json={"name": "", "content": "valid content"},
+    )
+    assert r.status_code == 422
+
+    # Pydantic min_length=1 — empty content
+    r = client.post(
+        f"/api/campaigns/{cid}/realtime-document/raw",
+        json={"name": "valid name", "content": ""},
+    )
+    assert r.status_code == 422
+
+    # Whitespace-only content — passes Pydantic but route catches the strip
+    r = client.post(
+        f"/api/campaigns/{cid}/realtime-document/raw",
+        json={"name": "valid name", "content": "   \n\n\t"},
+    )
+    assert r.status_code == 422
+    assert "non-empty" in r.json()["detail"].lower()
+
+
+def test_realtime_document_raw_truncates_to_40k(client: TestClient):
+    """`runway_create_document` trims to DOCUMENT_MAX_CHARS (40,000)
+    before the wire. The route should accept oversized content
+    without error and the persisted document id should be the digest
+    of the TRIMMED content — proving the trim landed before hashing.
+    """
+    from app.services.documents_client import (
+        DOCUMENT_MAX_CHARS,
+        _mock_document_id,
+    )
+
+    cid = _create_minimal_campaign(client, business="Raw Doc Truncation")
+    # 60k chars — well over the 40k cap.
+    oversized = "A" * 60_000
+    resp = client.post(
+        f"/api/campaigns/{cid}/realtime-document/raw",
+        json={"name": "oversize", "content": oversized},
+    )
+    assert resp.status_code == 200, resp.text
+    persisted_id = resp.json()["runway_document_id"]
+
+    # The mock id is sha256 of (name + "\n" + trimmed_content)[:16].
+    # Reproduce the expected id from the trimmed content; if our
+    # trim path bypassed the client, this assertion would fail.
+    expected_trimmed = oversized.strip()[:DOCUMENT_MAX_CHARS]
+    expected_id = _mock_document_id("oversize", expected_trimmed)
+    assert persisted_id == expected_id, (
+        f"expected trimmed-content id {expected_id}, got {persisted_id}"
+    )
