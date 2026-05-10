@@ -1,7 +1,7 @@
 # AdSpark Studio — Operator Usage Map
 
-**Last updated:** 2026-05-09 (post `hackathon-submission-v13`,
-PR CL Workspace Consumes Start Campaign Hint).
+**Last updated:** 2026-05-10 (post `hackathon-submission-v13`,
+PR CM Library Tile Simplification).
 
 **Read order:** This is the top-to-bottom "how do I actually use
 this thing?" guide. New operators (humans or AI) should read

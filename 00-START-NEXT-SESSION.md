@@ -17,20 +17,17 @@ PR CA `8681777`; PR CB `766648c`; PR CC `0b292e0`; PR CD
 `d002b8c`; PR CE `1586400`; SESSION 059 V2 UI manual QA
 `16fa39f`; PR CF `6ad1bf7`; PR CG `3f2987b`; PR CH `1f3b91a`; PR CI
 `e10ecb5`; PR CJ `8859860`; SESSION 065 `ec70f37`; PR CK
-`6679db9 feat: createspokesperson 4-step flow stepper (PR CK)`;
-PR CL Workspace Consumes Start Campaign Hint in flight on
-top — SESSION_012–SESSION_067 handoffs added).
+`6679db9`; PR CL `c016de7 feat: workspace consumes start
+campaign hint (PR CL)`; PR CM Library Tile Simplification
+in flight on top — SESSION_012–SESSION_068 handoffs added).
 
 ## Where things stand
 
-- **Branch:** `main` at `6679db9` (`feat: createspokesperson
-  4-step flow stepper (PR CK)`) on `origin/main`. PR CL
-  patch in flight on top — closes the loop on PR CK's
-  Step 4 "Start a campaign" checkbox. SpokespersonStudio
-  navigates to `/spokespeople/{id}` after setting the
-  localStorage hint; workspace mount consumes the hint,
-  flips to Campaigns tab + opens mode modal in-place +
-  clears the key.
+- **Branch:** `main` at `c016de7` (`feat: workspace consumes
+  start campaign hint (PR CL)`) on `origin/main`. PR CM
+  patch in flight on top — strips library tiles down to
+  the browse-to-open card surface (closes SESSION 059
+  Fix #2 punch-list item).
 - **Latest tag:** still **`hackathon-submission-v13`** at `ec446e4`
   (PR AF). PR AG–BI shipped the full voice arc + audit trails
   + UX v2 foundation + SpokespersonStudio + Knowledge +
@@ -49,9 +46,11 @@ top — SESSION_012–SESSION_067 handoffs added).
   (PR CK adds `POST /api/characters/{id}/metadata` — a small
   merge route for the `Character.metadata` field; no schema
   change. Route count was 70 from PR BU through PR CJ).
-- **Frontend build:** 480.83 KB initial JS / 131.52 KB gzip +
-  561.97 KB lazy `@runwayml/avatars-react` chunk (+0.36 KB
-  initial / +0.11 KB gzip vs PR CK — tiny wiring slice).
+- **Frontend build:** 470.92 KB initial JS / 129.20 KB gzip +
+  561.97 KB lazy `@runwayml/avatars-react` chunk (-9.91 KB
+  initial / -2.32 KB gzip vs PR CL — the embedded
+  CharacterCard + 3 tab content blocks gone from the
+  library tile).
 - **Demo fixtures (PR CG + PR CH):**
   `scripts/seed-demo-spokespeople.py` upserts the 4 demo
   personas (Brewster Bolt / Clara Vale / Rex Roadside /
@@ -64,15 +63,15 @@ top — SESSION_012–SESSION_067 handoffs added).
   + runway_prompt + commercial_script + social_post all
   populated; outputs blank. Idempotent; re-run-safe;
   existing user records untouched.
-- **Playwright smoke:** `3 passed (~28.4 s)` against the mock
+- **Playwright smoke:** `3 passed (~27.6 s)` against the mock
   backend booted via `bash scripts/start-local-mock.sh`.
-  Test 1 (`@ /legacy`, ~25.5 s) verbatim. Test 2 (`@ /`,
-  ~1.8 s) extends with the **PR CL hint round-trip**: set
-  `adspark.startCampaignHint` to a known character id →
-  goto `/spokespeople/{id}` → assert workspace
-  `data-active-tab="campaigns"` + `campaign-mode-modal`
-  visible + localStorage cleared. Test 3 (top-bar Legacy
-  round-trip, ~590 ms).
+  Test 1 (`@ /legacy`, ~24.6 s) verbatim. Test 2 (`@ /`,
+  ~1.8 s) — tile-iteration block rewritten for the PR CM
+  simplified tile shape (portrait XOR placeholder + name +
+  persona pill + summary chips + Open link), in-tile tab
+  testids all `toHaveCount(0)`; PR CL hint round-trip
+  preserved later in the same test. Test 3 (top-bar
+  Legacy round-trip, ~623 ms).
 - **Real-mode validation:** PR BU end-to-end validated
   against real Runway on CEO Buzz / Brewster (task
   `b5d331ba-9844-42ab-b857-982920794a9c`, 5 s gen4.5,
@@ -103,7 +102,7 @@ top — SESSION_012–SESSION_067 handoffs added).
 
 ## What's implemented (full feature stack on `main`)
 
-### UX redesign foundation (PR BD — UX v2 Flag + Shared Helpers · PR BE — SpokespersonStudio Scaffold · PR BF — Knowledge Tab Wiring · PR BG — Appearances Tab Wiring · PR BH — Mode-First Creation Modal · PR BI — Spokesperson Lane Scaffold · PR BK — Cinematic Lane Scaffold · PR BL — Dialogue Lane Scaffold · PR BM — Lane Regression Pass · PR BN — Spokesperson Reels Action Wired · PR BO — Cinematic Voiced Action Wired · PR BP — All Remaining v2 Lane Actions Wired · PR BQ — V2 Lane Inline Brief Editing · PR BR — V2 Appearances Click-Through · PR BS — Click-Through Tab Hints · PR BT — Cinematic Video Async Action Wired · PR BU — Cinematic Video Persistence · PR CA — App Shell + Router + Spokesperson Library Home · PR CB — Library Polish + Create Spokesperson CTA · PR CC — Spokesperson Workspace Shell + Identity Tab · PR CD — Home Library Only · PR CE — Workspace Campaigns Tab Mounts Campaign Lanes · PR CF — V2 Copy Cleanup + Remove Dev Jargon · PR CG — Demo Spokespeople Fixtures · PR CH — Demo Campaign Fixtures · PR CK — CreateSpokespersonFlow 4-Step Stepper · PR CL — Workspace Start Campaign Hint)
+### UX redesign foundation (PR BD — UX v2 Flag + Shared Helpers · PR BE — SpokespersonStudio Scaffold · PR BF — Knowledge Tab Wiring · PR BG — Appearances Tab Wiring · PR BH — Mode-First Creation Modal · PR BI — Spokesperson Lane Scaffold · PR BK — Cinematic Lane Scaffold · PR BL — Dialogue Lane Scaffold · PR BM — Lane Regression Pass · PR BN — Spokesperson Reels Action Wired · PR BO — Cinematic Voiced Action Wired · PR BP — All Remaining v2 Lane Actions Wired · PR BQ — V2 Lane Inline Brief Editing · PR BR — V2 Appearances Click-Through · PR BS — Click-Through Tab Hints · PR BT — Cinematic Video Async Action Wired · PR BU — Cinematic Video Persistence · PR CA — App Shell + Router + Spokesperson Library Home · PR CB — Library Polish + Create Spokesperson CTA · PR CC — Spokesperson Workspace Shell + Identity Tab · PR CD — Home Library Only · PR CE — Workspace Campaigns Tab Mounts Campaign Lanes · PR CF — V2 Copy Cleanup + Remove Dev Jargon · PR CG — Demo Spokespeople Fixtures · PR CH — Demo Campaign Fixtures · PR CK — CreateSpokespersonFlow 4-Step Stepper · PR CL — Workspace Start Campaign Hint · PR CM — Library Tile Simplification)
 
 - **UX v2 feature flag** at `frontend/src/uxFlag.js`. Resolves
   precedence URL `?ux=v2|v1` > localStorage `adspark.ux` >
@@ -245,6 +244,25 @@ top — SESSION_012–SESSION_067 handoffs added).
   Validated end-to-end via Playwright route-intercept
   tests (no real Runway credit burned for the fix). Backend
   untouched; `/legacy` Create Character flow unchanged.
+- **Library Tile Simplification** (PR CM) — closes the
+  SESSION 059 Fix #2 punch-list item. SpokespersonCard.jsx
+  rewritten 691 → ~220 lines. Library tile is now a single
+  browse-to-open surface: portrait or `Portrait pending`
+  placeholder (with "Open workspace to generate." sub-copy)
+  + name + archetype pill + role one-liner + summary chips
+  (voice / linked / outputs / transcripts; outputs and
+  transcripts only when > 0) + primary `Open Spokesperson →`
+  link. **Removed from the homepage tile**: the in-tile
+  Identity / Knowledge / Appearances tab strip, the embedded
+  `<CharacterCard>`, every voice / portrait / avatar
+  control, the per-row "Open in gallery →" affordance, and
+  the "Use as Spokesperson" toggle. All those affordances
+  still live inside the workspace at `/spokespeople/:id`
+  (Identity tab unchanged). SpokespersonStudio's
+  `<SpokespersonCard>` mount drops 9 callback props; only
+  `character` + `linkedCampaigns` + `isActive` remain. No
+  backend changes; route count still 71. /legacy
+  unchanged.
 - **Workspace Consumes Start Campaign Hint** (PR CL) —
   closes the loop on PR CK's Step 4 "Start a campaign"
   checkbox. SpokespersonStudio gains `useNavigate` + when

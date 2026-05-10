@@ -918,32 +918,11 @@ export default function SpokespersonStudio({
             <SpokespersonCard
               key={c.id}
               character={c}
-              busyAction={busyByChar[c.id] || null}
               isActive={c.id === activeCharacterId}
-              onSetActive={
-                onSetActive
-                  ? (next) => onSetActive(next ? c.id : null)
-                  : undefined
-              }
-              onGeneratePortrait={handleGeneratePortrait}
-              onCreateAvatar={handleCreateAvatar}
-              onDelete={handleDelete}
-              onCloneVoice={handleCloneVoice}
-              onApplyVoiceToAvatar={handleApplyVoiceToAvatar}
-              onRefreshAvatarVoice={handleRefreshAvatarVoice}
-              onRefreshVoicePreview={handleRefreshVoicePreview}
               // PR BF — only the campaigns linked to this character
-              // via character_id; empty array when nothing matches.
+              // via character_id; drives the campaign / output /
+              // transcript count chips on the simplified PR CM tile.
               linkedCampaigns={campaignsByCharacter[c.id] || []}
-              // PR BR — Appearances click-through bubbles up.
-              // PR CA — only thread the wrapped handler when
-              // the parent (App / Library) actually provides
-              // onOpenCampaign. On the `/` Library route the
-              // gallery isn't mounted (PR CB lands the
-              // workspace Campaigns tab), so the affordance
-              // reads its disabled placeholder state instead
-              // of dispatching nowhere.
-              onOpenCampaign={onOpenCampaign ? handleOpenCampaign : null}
             />
           ))}
         </div>

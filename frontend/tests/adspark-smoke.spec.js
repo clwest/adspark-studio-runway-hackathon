@@ -1103,116 +1103,67 @@ test('AdSpark Studio Spokesperson Library @ /', async ({ page }) => {
   expect(cardCount + emptyCount).toBeGreaterThan(0)
 
   if (cardCount > 0) {
-    // First card defaults to the Identity tab; Knowledge +
-    // Appearances tabs are present but render placeholder copy
-    // until PR BF / PR BG land.
+    // PR CM — Library tile is now a simple browse → identify →
+    // open card. The previous in-tile Identity / Knowledge /
+    // Appearances tab strip + embedded <CharacterCard> are
+    // gone; those affordances live inside the workspace at
+    // /spokespeople/:id (which the tile's primary
+    // `Open Spokesperson →` link routes to). Smoke asserts:
+    // - simple shape: portrait OR placeholder + name +
+    //   persona pill
+    // - summary chips still render (voice / linked / outputs
+    //   / transcripts)
+    // - the Open Spokesperson link is the primary action
+    // - the old in-tile tab testids are absent
     const firstCard = cards.first()
-    await expect(
-      firstCard.getByTestId('spokesperson-tab-identity'),
-    ).toHaveAttribute('data-active', 'true')
-    await expect(
-      firstCard.getByTestId('spokesperson-tab-knowledge'),
-    ).toBeVisible()
-    await expect(
-      firstCard.getByTestId('spokesperson-tab-appearances'),
-    ).toBeVisible()
-    await expect(
-      firstCard.getByTestId('spokesperson-identity-tab'),
-    ).toBeVisible()
-
-    // PR BF — Knowledge tab now wires real campaign data. Each
-    // card shows either a summary line + per-campaign rows (when at
-    // least one campaign links via character_id) OR the empty
-    // state copy. The disjunction stays resilient across fixture
-    // variations: the smoke campaign created in the v1 test never
-    // attaches a character, so most spokespeople here will land in
-    // the empty-state branch unless the operator pre-linked
-    // characters.
-    await firstCard.getByTestId('spokesperson-tab-knowledge').click()
-    const knowledgeTab = firstCard.getByTestId(
-      'spokesperson-knowledge-tab',
+    // Tile shape — exactly one of portrait or placeholder,
+    // never neither.
+    const portraitImg = firstCard.getByTestId(
+      'spokesperson-tile-portrait',
     )
-    await expect(knowledgeTab).toBeVisible()
-    // Identity content unmounts when Knowledge is active.
+    const portraitPlaceholder = firstCard.getByTestId(
+      'spokesperson-tile-portrait-placeholder',
+    )
+    const portraitImgCount = await portraitImg.count()
+    const placeholderCount = await portraitPlaceholder.count()
+    expect(portraitImgCount + placeholderCount).toBe(1)
+    await expect(
+      firstCard.getByTestId('spokesperson-tile-name'),
+    ).toBeVisible()
+    await expect(
+      firstCard.getByTestId('spokesperson-tile-persona'),
+    ).toBeVisible()
+    // PR CB summary chip strip lives unchanged (voice + linked
+    // count always; outputs + transcripts only when > 0).
+    await expect(
+      firstCard.getByTestId('spokesperson-card-summary'),
+    ).toBeVisible()
+    await expect(
+      firstCard.getByTestId('spokesperson-summary-voice'),
+    ).toBeVisible()
+    await expect(
+      firstCard.getByTestId('spokesperson-summary-linked'),
+    ).toBeVisible()
+    // Primary action.
+    const openLink = firstCard.getByTestId('spokesperson-summary-open')
+    await expect(openLink).toBeVisible()
+    await expect(openLink).toHaveText(/Open Spokesperson/i)
+    // PR CM removals: the in-tile tab strip is gone.
+    for (const tab of ['identity', 'knowledge', 'appearances']) {
+      await expect(
+        firstCard.getByTestId(`spokesperson-tab-${tab}`),
+      ).toHaveCount(0)
+    }
+    // Per-tab content also removed.
     await expect(
       firstCard.getByTestId('spokesperson-identity-tab'),
     ).toHaveCount(0)
-    const summaryCount = await firstCard
-      .getByTestId('spokesperson-knowledge-summary')
-      .count()
-    const emptyCount = await firstCard
-      .getByTestId('spokesperson-knowledge-empty')
-      .count()
-    // Exactly one of the two branches must render.
-    expect(summaryCount + emptyCount).toBe(1)
-    if (summaryCount > 0) {
-      // Summary line carries `N campaigns · M grounded · K transcripts`;
-      // we don't pin numbers (resilient to fixture state) but the
-      // literal "campaigns" + "grounded" + "transcripts" must all
-      // appear.
-      await expect(
-        firstCard.getByTestId('spokesperson-knowledge-summary'),
-      ).toContainText(
-        /campaigns? · \d+ grounded · \d+ transcripts?/i,
-      )
-      // At least one per-campaign row must render alongside the
-      // summary so the operator can drill in.
-      const rowCount = await firstCard
-        .getByTestId('spokesperson-knowledge-row')
-        .count()
-      expect(rowCount).toBeGreaterThan(0)
-    } else {
-      // Empty state: friendly copy + a setup hint, no error.
-      await expect(
-        firstCard.getByTestId('spokesperson-knowledge-empty'),
-      ).toContainText(/No linked campaigns yet/i)
-    }
-
-    // PR BG — Appearances tab now wires real campaign data. Same
-    // disjunction shape as Knowledge: exactly one of an
-    // `spokesperson-appearance-row` list OR the
-    // `spokesperson-appearance-empty` state must render. Resilient
-    // to fixture state — first spokesperson may or may not have
-    // linked campaigns depending on what's in characters.json.
-    await firstCard.getByTestId('spokesperson-tab-appearances').click()
-    const appearancesTab = firstCard.getByTestId(
-      'spokesperson-appearances-tab',
-    )
-    await expect(appearancesTab).toBeVisible()
-    const appearanceRows = firstCard.getByTestId(
-      'spokesperson-appearance-row',
-    )
-    const appearanceEmpty = firstCard.getByTestId(
-      'spokesperson-appearance-empty',
-    )
-    const appearanceRowCount = await appearanceRows.count()
-    const appearanceEmptyCount = await appearanceEmpty.count()
-    // Exactly one branch must render.
-    expect(appearanceRowCount + appearanceEmptyCount).toBeGreaterThan(0)
-    if (appearanceRowCount > 0) {
-      // Row carries a mode badge whose text matches one of the
-      // seven literal mode strings.
-      await expect(
-        appearanceRows.first().getByTestId('spokesperson-appearance-mode'),
-      ).toContainText(
-        /^(Cinematic|Spokesperson Ad|Dialogue Scene|Storyboard|Realtime|Mixed|Draft)$/,
-      )
-      // PR CA — on `/`, the Library route deliberately does
-      // not wire `onOpenCampaign` (no gallery on this route;
-      // PR CB lands the workspace Campaigns tab). The
-      // Appearances row's "Open in gallery →" affordance
-      // therefore shows its disabled placeholder state. The
-      // PR BR/BS click-through is preserved for /legacy via
-      // direct gallery-card interactions; it lands again in
-      // PR CB on `/`.
-      const firstRow = appearanceRows.first()
-      const openBtn = firstRow.getByTestId('spokesperson-appearance-open')
-      await expect(openBtn).toBeDisabled()
-    } else {
-      await expect(appearanceEmpty).toContainText(
-        /No appearances yet/i,
-      )
-    }
+    await expect(
+      firstCard.getByTestId('spokesperson-knowledge-tab'),
+    ).toHaveCount(0)
+    await expect(
+      firstCard.getByTestId('spokesperson-appearances-tab'),
+    ).toHaveCount(0)
   }
 
   // PR CD — Home Library Only. Campaign-creation surfaces
