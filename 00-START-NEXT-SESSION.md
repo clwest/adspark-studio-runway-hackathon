@@ -1,6 +1,41 @@
 # START NEXT SESSION — AdSpark Studio
 
-**Last touched:** 2026-05-10 (PR DA Demo Pillars —
+**Last touched:** 2026-05-10 (PR DB — demo
+stabilization. Submission-video recording is the next
+thing to happen; PR DB adds three operator-facing
+guard rails. (1) New
+`<ConversationPreCallChecklist>` collapsible `<details>`
+above `<RealtimeSpokesperson>` in the Conversations
+tab — headphones, mic permission, wait-for-avatar
+finish, end-and-retry recovery path. Mic feedback was
+making the avatar pause mid-reply in manual testing;
+operator-side guidance is the cleanest lever since the
+SDK doesn't expose a mute toggle. (2) New
+`<DialogueDemoPreset>` button in `DialogueLane.jsx`
+above `<DialogueLinesEditor>` — one-click loads the
+three submission-video lines (Donny / Riggs / Miles
+hackathon office-montage copy) + auto-assigns
+speakers via first-name match against
+`availableCharacters` filtered to ready-avatar
+characters. Idempotent (`Reload hackathon demo lines`
+when already loaded; skips no-op rows so `ok` status
+doesn't reset to `idle`). Disabled-reason names
+missing speakers when ineligible. Operator still
+clicks `Generate line` per row to burn credits.
+(3) New `<DemoReadinessPanel>` `<details>` above the
+tab content in the workspace — auto-derives the six
+per-spokesperson checklist items (portrait / avatar /
+knowledge / campaign / script / rendered ad) from the
+loaded slice; summary reads
+`✅ 6/6` or `🟡 4/6 for <name>`. New
+`docs/DEMO_CHECKLIST.md` (~5 KB) is the authoritative
+pre-record checklist covering all three pillars +
+submission-video recording pass + known demo-day
+risks. Pytest 20/20, smoke 3/3, build 521.13 KB
+initial / 140.84 KB gzip (+7.12 KB / +2.20 KB). No
+real Runway calls fired this slice. Backend route
+count still **74**.
+Earlier: PR DA Demo Pillars —
 final-day demo prep wired the v2 Conversations tab and
 finished the Dialogue Scene flow without leaving v2.
 **Conversation**: new `<ConversationsTab>` mounts the
@@ -306,8 +341,9 @@ Dead-End `ea4ba88`; PR CV Runway API Contract Audit
 `80e32ca`; PR CY Append-Only Output History
 `2630532`; PR DA Multi-Ad / Reviewable Spokesperson
 Campaigns `2510562`; PR DA Demo Pillars (Conversation +
-Dialogue Scene readiness) in flight on top —
-SESSION_012–SESSION_084 handoffs added).
+Dialogue Scene readiness) `168094a`; PR DB Demo
+Stabilization in flight on top —
+SESSION_012–SESSION_085 handoffs added).
 
 ## Where things stand
 

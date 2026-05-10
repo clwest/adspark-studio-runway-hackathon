@@ -1,8 +1,36 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after **PR DA Demo Pillars — Conversation
-+ Dialogue Scene readiness**. Final-day demo prep wired three
+context-kit refresh after **PR DB — Demo Stabilization**.
+Submission-video recording is the next thing; PR DB adds three
+operator-facing guard rails on top of the PR DA Demo Pillars
+wiring. New `<ConversationPreCallChecklist>` (testid
+`spokesperson-workspace-conversations-precall`) mounts a
+collapsible `<details>` block above `<RealtimeSpokesperson>`
+with headphones / noise / wait-for-avatar / end-and-retry
+guidance — mic feedback was making the avatar pause mid-reply
+in manual testing and the `@runwayml/avatars-react` SDK doesn't
+expose a mute toggle, so operator-side guidance is the
+cleanest lever. New `<DialogueDemoPreset>` (testid
+`dialogue-lane-demo-preset`) above `<DialogueLinesEditor>` in
+the Dialogue Scene lane — one-click loads the three
+submission-video lines (Donny / Riggs / Miles hackathon
+office-montage copy) + auto-assigns speakers via first-name
+match against ready-avatar characters. Idempotent (`Reload`
+when already loaded, skips no-op rows so `ok` status doesn't
+reset). Disabled-reason names missing speakers when
+ineligible. Operator still clicks Generate line per row to
+burn `avatar_videos` credits. New `<DemoReadinessPanel>`
+(testid `spokesperson-workspace-demo-readiness`) above the
+workspace tab content — auto-derives six per-spokesperson
+checklist items (portrait / avatar / knowledge / campaign /
+script / rendered ad) from the loaded slice; summary reads
+`✅ 6/6` or `🟡 4/6 for <name>`. Authoritative pre-record
+checklist lives in `docs/DEMO_CHECKLIST.md` (~5 KB) covering
+all three pillars + submission-video recording pass + known
+demo-day risks. Backend route count still **74**.
+Earlier: PR DA Demo Pillars — Conversation + Dialogue Scene
+readiness. Final-day demo prep wired three
 demo-critical surfaces in the v2 spokesperson workspace:
 **Pillar 1 (Spokesperson Ad)** already worked post the
 multi-ad PR DA — verified end-to-end. **Pillar 2 (Conversation)**

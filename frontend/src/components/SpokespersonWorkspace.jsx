@@ -509,6 +509,17 @@ export default function SpokespersonWorkspace() {
         })}
       </nav>
 
+      {/* PR DB — live demo readiness panel. Always visible above
+          the tab content so the operator can glance at it while
+          prepping the submission video. Auto-derives from the
+          loaded character + linkedCampaigns slices. */}
+      {character && (
+        <DemoReadinessPanel
+          character={character}
+          linkedCampaigns={linkedCampaigns}
+        />
+      )}
+
       {activeTab === 'identity' && (
         <section
           data-testid="spokesperson-workspace-identity"
@@ -933,9 +944,9 @@ function ConversationsTab({
       {focused && (
         <div
           data-testid="spokesperson-workspace-conversations-live"
-          className="rounded-2xl ring-1 ring-zinc-800 bg-zinc-950/40 p-3"
+          className="rounded-2xl ring-1 ring-zinc-800 bg-zinc-950/40 p-3 space-y-2"
         >
-          <p className="text-[10px] text-zinc-500 leading-snug pb-2">
+          <p className="text-[10px] text-zinc-500 leading-snug">
             Active campaign:{' '}
             <span className="text-zinc-300 font-medium">
               {focused.business || 'untitled'}
@@ -947,6 +958,13 @@ function ConversationsTab({
               {String(focused.id).slice(0, 8)}
             </span>
           </p>
+          {/* PR DB — pre-call checklist. Collapsible (default
+              open the first time the operator lands on the tab,
+              closed after they click Start). Mics in untreated
+              rooms picked up enough background noise during
+              demo testing that the avatar paused mid-reply;
+              these tips cut that down to a manageable level. */}
+          <ConversationPreCallChecklist />
           <RealtimeSpokesperson
             campaign={focused}
             gateReason={gateReason || null}
@@ -963,6 +981,140 @@ function ConversationsTab({
         </div>
       )}
     </section>
+  )
+}
+
+
+/**
+ * PR DB — Live demo readiness panel. Auto-derives the
+ * submission-day checklist from the loaded character +
+ * linked-campaigns slice so the operator gets a live view of
+ * "is this spokesperson ready for the demo". No backend
+ * calls; reads state we already have.
+ *
+ * The full operator checklist lives in `docs/DEMO_CHECKLIST.md`;
+ * this UI surface is the live version of the per-spokesperson
+ * portion (items 1–4 of the checklist for this character).
+ *
+ * Collapsed by default — opens with one click. testids let the
+ * smoke / manual QA confirm the right items light up.
+ */
+function DemoReadinessPanel({ character, linkedCampaigns }) {
+  const hasPortrait = Boolean(character?.portrait_url)
+  const avatarReady =
+    Boolean(character?.runway_avatar_id) &&
+    ['ready', 'mock'].includes(character?.runway_avatar_status || '')
+  const hasKnowledge =
+    Array.isArray(character?.knowledge_sources) &&
+    character.knowledge_sources.length > 0
+  const campaignsArr = Array.isArray(linkedCampaigns) ? linkedCampaigns : []
+  const hasCampaign = campaignsArr.length > 0
+  const hasScript = campaignsArr.some(
+    (c) => String(c?.commercial_script || '').trim().length > 0,
+  )
+  const adOutputCount = campaignsArr.reduce((acc, c) => {
+    const outs = Array.isArray(c?.outputs) ? c.outputs : []
+    return acc + outs.filter((o) => o.kind === 'spokesperson_ad').length
+  }, 0)
+  const hasRenderedAd =
+    adOutputCount > 0 ||
+    campaignsArr.some(
+      (c) => c?.host_video_url && c?.host_status === 'ok',
+    )
+
+  const items = [
+    { key: 'portrait', label: 'Portrait generated', ok: hasPortrait },
+    { key: 'avatar', label: 'Runway avatar ready', ok: avatarReady },
+    { key: 'knowledge', label: 'At least one knowledge source', ok: hasKnowledge },
+    { key: 'campaign', label: 'At least one linked campaign', ok: hasCampaign },
+    { key: 'script', label: 'A campaign has a saved script', ok: hasScript },
+    { key: 'rendered-ad', label: 'At least one rendered Spokesperson Ad', ok: hasRenderedAd },
+  ]
+  const okCount = items.filter((i) => i.ok).length
+  const total = items.length
+  const allGreen = okCount === total
+
+  return (
+    <details
+      data-testid="spokesperson-workspace-demo-readiness"
+      data-ok-count={okCount}
+      data-total={total}
+      data-all-green={allGreen ? 'true' : 'false'}
+      className={
+        'rounded-2xl px-3 py-1.5 ring-1 ' +
+        (allGreen
+          ? 'ring-emerald-400/40 bg-emerald-500/[0.06]'
+          : 'ring-amber-400/30 bg-amber-500/[0.04]')
+      }
+    >
+      <summary
+        className={
+          'text-[11px] cursor-pointer select-none font-semibold leading-snug ' +
+          (allGreen ? 'text-emerald-100' : 'text-amber-100')
+        }
+      >
+        {allGreen ? '✅' : '🟡'} Demo readiness · {okCount}/{total} for{' '}
+        {character?.name || 'this spokesperson'}
+      </summary>
+      <ul className="text-[10px] leading-snug pt-1.5 space-y-0.5">
+        {items.map((item) => (
+          <li
+            key={item.key}
+            data-testid="spokesperson-workspace-demo-readiness-item"
+            data-key={item.key}
+            data-ok={item.ok ? 'true' : 'false'}
+            className={item.ok ? 'text-emerald-200' : 'text-zinc-400'}
+          >
+            <span className="font-mono">
+              [{item.ok ? '✓' : ' '}]
+            </span>{' '}
+            {item.label}
+          </li>
+        ))}
+      </ul>
+      <p className="text-[9px] text-zinc-500 leading-snug pt-1.5">
+        Full submission-day checklist lives in{' '}
+        <span className="font-mono text-zinc-400">docs/DEMO_CHECKLIST.md</span>.
+        This panel covers items 1–4 for this spokesperson.
+      </p>
+    </details>
+  )
+}
+
+
+/**
+ * PR DB — Pre-call checklist for the Conversations tab. Live
+ * realtime sessions with the avatar pick up background noise
+ * sensitively; the SDK doesn't expose a mute toggle, so the
+ * cleanest demo-reliability lever is operator guidance up
+ * front. Collapsible <details> so repeat sessions don't get
+ * blocked by a wall of copy.
+ */
+function ConversationPreCallChecklist() {
+  return (
+    <details
+      data-testid="spokesperson-workspace-conversations-precall"
+      className="rounded-lg ring-1 ring-zinc-800 bg-zinc-950/60 px-3 py-1.5"
+      open
+    >
+      <summary className="text-[11px] text-zinc-300 cursor-pointer select-none hover:text-zinc-100 font-semibold">
+        Before you click Start Conversation
+      </summary>
+      <ul className="text-[11px] text-zinc-400 leading-snug pt-1.5 space-y-1 list-disc list-inside">
+        <li>Use headphones if you can — open speakers let the avatar's voice loop into your mic.</li>
+        <li>Reduce background noise (close noisy tabs, mute Slack, kill the fan).</li>
+        <li>Click <span className="text-zinc-200 font-medium">Allow</span> when the browser asks for mic permission.</li>
+        <li>Wait for the avatar to finish speaking before you reply — overlapping audio is what makes it pause.</li>
+        <li>If the avatar stalls or repeats, click <span className="text-zinc-200 font-medium">End Conversation</span>, then <span className="text-zinc-200 font-medium">Retry Conversation</span>. The 5-minute Runway session restarts fresh.</li>
+        <li>Sessions auto-end at the countdown timer (Runway's hard 5-min cap).</li>
+      </ul>
+      <p className="text-[10px] text-zinc-500 leading-snug pt-1.5">
+        Webcam is off by default. The avatar reads your selected
+        campaign's brief + saved script as context — pick a
+        different campaign in the Campaigns tab to change the
+        conversation focus.
+      </p>
+    </details>
   )
 }
 

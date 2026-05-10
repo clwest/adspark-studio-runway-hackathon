@@ -368,13 +368,28 @@ export default function DialogueLane({
                 rendered via the existing /dialogue/generate-line
                 route. Backend supports it; UI was the gap. */}
             {lineCount > 0 && (
-              <DialogueLinesEditor
-                campaignId={focused?.id}
-                lines={lines}
-                availableCharacters={availableCharacters}
-                onSaveDialogueLine={onSaveDialogueLine}
-                onGenerateDialogueLine={onGenerateDialogueLine}
-              />
+              <>
+                {/* PR DB — hackathon demo preset. One-click loader
+                    that populates the three planned lines with the
+                    submission-video copy + auto-assigns
+                    Donny / Riggs / Miles when those characters
+                    have ready avatars. Idempotent: safe to click
+                    again if the operator edited a line and wants
+                    to reset. */}
+                <DialogueDemoPreset
+                  campaignId={focused?.id}
+                  lines={lines}
+                  availableCharacters={availableCharacters}
+                  onSaveDialogueLine={onSaveDialogueLine}
+                />
+                <DialogueLinesEditor
+                  campaignId={focused?.id}
+                  lines={lines}
+                  availableCharacters={availableCharacters}
+                  onSaveDialogueLine={onSaveDialogueLine}
+                  onGenerateDialogueLine={onGenerateDialogueLine}
+                />
+              </>
             )}
 
             {/* PR BP — Stitch Dialogue Scene (ffmpeg only) */}
@@ -567,6 +582,199 @@ export default function DialogueLane({
 function formatTouchedOrDash(iso) {
   if (!iso) return '—'
   return formatHistoryTimestamp(iso) || '—'
+}
+
+/**
+ * PR DB — Hackathon demo preset. Surfaces the submission-video
+ * copy for the "office montage" dialogue scene and auto-assigns
+ * the three speakers when those characters exist in the library
+ * with ready Runway avatars.
+ *
+ * Render is gated: needs at least 3 ready avatars in the
+ * library AND at least 3 planned dialogue lines. Operator still
+ * has to click Generate per line to burn credits — the preset
+ * just removes the typing.
+ */
+const HACKATHON_DEMO_LINES = [
+  {
+    slot: 0,
+    speaker: 'Donny',
+    text:
+      'We were supposed to make one ad. Then Chris gave us a workspace, ' +
+      'campaigns, memory, and a deadline.',
+  },
+  {
+    slot: 1,
+    speaker: 'Riggs',
+    text:
+      'Context-kit kept the AI builders from wandering into the woods. Mostly.',
+  },
+  {
+    slot: 2,
+    speaker: 'Miles',
+    text:
+      'The result is a persistent AI spokesperson system: characters that ' +
+      'learn the brand, create campaigns, and show up again.',
+  },
+]
+
+function findCharByName(chars, name) {
+  const target = String(name || '').trim().toLowerCase()
+  return (
+    (chars || []).find((c) => {
+      const cn = String(c?.name || '').trim().toLowerCase()
+      // Match exact OR first-name to tolerate "Donny Sparks" → "Donny".
+      return (
+        cn === target ||
+        cn.split(/\s+/)[0] === target ||
+        cn.startsWith(`${target} `)
+      )
+    }) || null
+  )
+}
+
+function DialogueDemoPreset({
+  campaignId,
+  lines,
+  availableCharacters,
+  onSaveDialogueLine,
+}) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [status, setStatus] = useState('')
+
+  // Resolve each demo speaker against the library — only show
+  // the preset when all three are present with ready avatars.
+  const speakerMatches = HACKATHON_DEMO_LINES.map((entry) => {
+    const match = findCharByName(availableCharacters, entry.speaker)
+    const ready =
+      match &&
+      match.runway_avatar_id &&
+      ['ready', 'mock'].includes(match.runway_avatar_status || '')
+    return { entry, match, ready }
+  })
+  const allReady = speakerMatches.every((s) => s.ready)
+  const planHasEnoughLines = (lines?.length || 0) >= HACKATHON_DEMO_LINES.length
+
+  // Track if the loaded copy is already in the planned lines so
+  // we can flip the label to "Reload" + colour-state to "loaded".
+  const alreadyLoaded = HACKATHON_DEMO_LINES.every((entry, idx) => {
+    const line = lines?.[idx]
+    if (!line) return false
+    return (
+      String(line.text || '').trim() === entry.text &&
+      Boolean(line.character_id) &&
+      line.character_id === speakerMatches[idx].match?.id
+    )
+  })
+
+  const canFire = Boolean(
+    onSaveDialogueLine && campaignId && allReady && planHasEnoughLines && !busy,
+  )
+  const label = busy
+    ? 'Loading demo lines…'
+    : alreadyLoaded
+    ? 'Reload hackathon demo lines'
+    : 'Load hackathon demo lines'
+  const disabledReason = !planHasEnoughLines
+    ? 'Plan dialogue lines first.'
+    : !allReady
+    ? `Demo preset needs Donny / Riggs / Miles with ready avatars. Missing: ${speakerMatches
+        .filter((s) => !s.ready)
+        .map((s) => s.entry.speaker)
+        .join(', ')}.`
+    : !onSaveDialogueLine
+    ? 'Wire onSaveDialogueLine before this can fire.'
+    : ''
+
+  const handleLoad = async () => {
+    if (!canFire) return
+    setError('')
+    setStatus('')
+    setBusy(true)
+    try {
+      // Save lines sequentially so the campaigns slice ends up
+      // matching the final write order (and so the lane re-renders
+      // each row's textarea + dropdown via the useEffect sync in
+      // DialogueLineRow without race conditions).
+      for (let i = 0; i < HACKATHON_DEMO_LINES.length; i += 1) {
+        const entry = HACKATHON_DEMO_LINES[i]
+        const targetLine = lines[i]
+        if (!targetLine) continue
+        const speakerId = speakerMatches[i].match?.id
+        // Skip if this exact slot is already loaded — avoids
+        // resetting status from ok back to idle on a no-op
+        // Reload click.
+        if (
+          alreadyLoaded &&
+          String(targetLine.text || '').trim() === entry.text &&
+          targetLine.character_id === speakerId
+        ) {
+          continue
+        }
+        await onSaveDialogueLine(campaignId, targetLine.id, {
+          text: entry.text,
+          character_id: speakerId,
+        })
+      }
+      setStatus('Loaded. Now click Generate line on each row.')
+    } catch (e) {
+      setError(`${e?.message || e}`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div
+      data-testid="dialogue-lane-demo-preset"
+      data-can-fire={canFire ? 'true' : 'false'}
+      data-already-loaded={alreadyLoaded ? 'true' : 'false'}
+      className="rounded ring-1 ring-amber-400/30 bg-amber-500/[0.05] px-2 py-1.5 space-y-1"
+    >
+      <p className="text-[10px] text-amber-200 leading-snug">
+        <span className="font-semibold">Hackathon demo preset</span>{' '}
+        — populates the three planned lines with the submission-
+        video copy and auto-assigns Donny / Riggs / Miles. You
+        still click Generate per line to render.
+      </p>
+      <div className="flex items-center gap-2 flex-wrap">
+        <button
+          type="button"
+          onClick={handleLoad}
+          disabled={!canFire}
+          data-testid="dialogue-lane-demo-preset-load"
+          title={canFire ? 'Load the demo lines + auto-assign speakers. No Runway credits.' : disabledReason}
+          className={
+            'text-[10px] rounded px-2 py-1 font-mono transition-colors ' +
+            (canFire
+              ? 'bg-amber-500/30 hover:bg-amber-500/45 text-amber-100 ring-1 ring-amber-400/40'
+              : 'bg-zinc-800/40 text-zinc-400 ring-1 ring-zinc-700 cursor-not-allowed disabled:opacity-80')
+          }
+        >
+          {label}
+        </button>
+        {!canFire && disabledReason && (
+          <span className="text-[9px] text-amber-300/80 leading-snug">
+            {disabledReason}
+          </span>
+        )}
+        {status && (
+          <span className="text-[9px] text-emerald-300 leading-snug">
+            {status}
+          </span>
+        )}
+        {error && (
+          <span
+            className="text-[9px] text-rose-300 leading-snug"
+            title={error}
+          >
+            {error}
+          </span>
+        )}
+      </div>
+    </div>
+  )
 }
 
 /**
