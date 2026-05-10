@@ -15,20 +15,19 @@ PR BM `669a584`; PR BN `13bc608`; PR BO `5e7400f`; PR BP
 `1f61fc0`; SESSION 053 real-API PR BU validation `9148cd9`;
 PR CA `8681777`; PR CB `766648c`; PR CC `0b292e0`; PR CD
 `d002b8c`; PR CE `1586400`; SESSION 059 V2 UI manual QA
-`16fa39f`; PR CF `6ad1bf7`; PR CG `3f2987b`; PR CH `1f3b91a chore:
-demo campaign fixtures for new spokespeople (PR CH)`; PR CI
-Demo Spokesperson Portrait Generation Pass in flight on
-top — SESSION_012–SESSION_063 handoffs added).
+`16fa39f`; PR CF `6ad1bf7`; PR CG `3f2987b`; PR CH `1f3b91a`; PR CI
+`e10ecb5 docs: PR CI demo spokesperson portraits — real
+Runway gen log`; PR CJ Fix Create Spokesperson Portrait
+Generation in flight on top — SESSION_012–SESSION_064
+handoffs added).
 
 ## Where things stand
 
-- **Branch:** `main` at `1f3b91a` (`chore: demo campaign
-  fixtures for new spokespeople (PR CH)`) on `origin/main`.
-  PR CI is a docs-only follow-up — fired 8 controlled real
-  Runway image-gen calls, persisted 3 portraits to disk
-  (gitignored), no source changes. Findings captured in
-  `docs/handoffs/SESSION_063_DEMO_PORTRAITS.md` +
-  appended to `SESSION_REAL_API_CREDIT_BURN.md`.
+- **Branch:** `main` at `e10ecb5` (`docs: PR CI demo
+  spokesperson portraits — real Runway gen log`) on
+  `origin/main`. PR CJ patch in flight on top — frontend-
+  only bugfix to `<CreateSpokespersonModal>` so portrait
+  failures stop being silently swallowed.
 - **Latest tag:** still **`hackathon-submission-v13`** at `ec446e4`
   (PR AF). PR AG–BI shipped the full voice arc + audit trails
   + UX v2 foundation + SpokespersonStudio + Knowledge +
@@ -217,6 +216,27 @@ top — SESSION_012–SESSION_063 handoffs added).
   `spokesperson-lane-reels-status`,
   `spokesperson-lane-reels-link`. Reels button new attrs:
   `data-source-ready`, `data-busy`.
+- **Fix Create Spokesperson Portrait Generation** (PR CJ) —
+  bugfix from SESSION_064 QA. The Create Spokesperson modal
+  was silently swallowing Runway portrait-generation
+  failures: a `502 portrait task FAILED` from Runway would
+  catch in the modal, set an error string, then the success
+  path fell through and the parent's `onCreated` callback
+  closed the modal — throwing away the error. Operator saw
+  "tile appeared without portrait, no idea what happened."
+  Fix: when `api.generateCharacterPortrait` throws, the
+  modal flips to a new `portrait-failed` phase that **stays
+  open** with the error message + a `Retry portrait`
+  button (re-fires the same character id, no recreate) +
+  a `Save without portrait` button (closes via
+  `onCreated`, tile mounts with blank portrait). The
+  backdrop click in this phase calls `Save without
+  portrait` instead of plain `onClose` so the orphan-
+  character path is impossible. The original Cancel +
+  Submit footer hides; only the failure footer shows.
+  Validated end-to-end via Playwright route-intercept
+  tests (no real Runway credit burned for the fix). Backend
+  untouched; `/legacy` Create Character flow unchanged.
 - **Demo Campaign Fixtures for New Spokespeople** (PR CH) —
   companion to PR CG: idempotent
   `scripts/seed-demo-campaigns.py` upserts four canonical

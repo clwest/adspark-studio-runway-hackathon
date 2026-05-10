@@ -1,9 +1,15 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after **PR CI — Demo Spokesperson Portrait
-Generation Pass** (real Runway image gen) on top of
-PR AG–CH / SESSION 011 anchors. Three of the four PR CG demo
+context-kit refresh after **PR CJ — Fix Create Spokesperson
+Portrait Generation** (frontend bugfix) on top of PR AG–CI
+/ SESSION 011 anchors. PR CJ stops the Create Spokesperson
+modal from silently swallowing Runway portrait failures —
+when generation fails, the modal now stays open in a
+`portrait-failed` phase with a clear error message + Retry
+portrait + Save without portrait buttons. Backend untouched;
+verified end-to-end via Playwright route-intercept tests
+(no real Runway credit consumed for the fix). Three of the four PR CG demo
 spokespeople now have real Runway portraits persisted on
 disk: Brewster Bolt (481 KB), Clara Vale (650 KB), Mina
 Spark (711 KB). Rex Roadside's portrait failed Runway
