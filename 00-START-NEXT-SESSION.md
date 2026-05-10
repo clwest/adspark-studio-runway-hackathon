@@ -15,18 +15,16 @@ PR BM `669a584`; PR BN `13bc608`; PR BO `5e7400f`; PR BP
 `1f61fc0`; SESSION 053 real-API PR BU validation `9148cd9`;
 PR CA `8681777`; PR CB `766648c`; PR CC `0b292e0`; PR CD
 `d002b8c`; PR CE `1586400`; SESSION 059 V2 UI manual QA
-`16fa39f docs: post-CE v2 UI manual QA findings (SESSION 059)`;
-PR CF V2 Copy Cleanup + Remove Dev Jargon in flight on top —
-SESSION_012–SESSION_060 handoffs added).
+`16fa39f`; PR CF `6ad1bf7 feat: v2 copy cleanup — remove
+dev jargon (PR CF)`; PR CG Demo Spokespeople Fixtures in
+flight on top — SESSION_012–SESSION_061 handoffs added).
 
 ## Where things stand
 
-- **Branch:** `main` at `16fa39f` (`docs: post-CE v2 UI
-  manual QA findings (SESSION 059)`) on `origin/main`.
-  PR CF patch in flight on top — no new commit / tag yet,
-  both pending explicit user approval. PR CF closes the
-  first of SESSION 059's three demo-readiness blockers
-  (lane copy + dev jargon).
+- **Branch:** `main` at `6ad1bf7` (`feat: v2 copy cleanup
+  — remove dev jargon (PR CF)`) on `origin/main`. PR CG
+  patch in flight on top — no new commit / tag yet, both
+  pending explicit user approval.
 - **Latest tag:** still **`hackathon-submission-v13`** at `ec446e4`
   (PR AF). PR AG–BI shipped the full voice arc + audit trails
   + UX v2 foundation + SpokespersonStudio + Knowledge +
@@ -42,22 +40,25 @@ SESSION_012–SESSION_060 handoffs added).
   switches modes. **Default load remains v1**; v2 reachable
   via footer toggle or `?ux=v2`.
 - **Backend routes:** **70** application + FastAPI built-ins
-  (PR CF is frontend copy polish only).
+  (PR CG is fixture-only — no source changes).
 - **Frontend build:** 464.80 KB initial JS / 127.38 KB gzip +
-  561.97 KB lazy `@runwayml/avatars-react` chunk (-0.84 KB
-  initial / -0.16 KB gzip vs PR CE — copy is tighter).
-- **Playwright smoke:** `3 passed (~32.2 s)` against the mock
-  backend booted via `bash scripts/start-local-mock.sh`.
-  Test 1 (`@ /legacy`, ~29.5 s) — verbatim v1 wizard
-  walkthrough. Test 2 (`@ /`, ~1.5 s) — Spokesperson
-  Library + workspace + Campaigns tab + lane mounting
-  flow, **plus a new `FORBIDDEN_JARGON` regex sweep** that
-  walks `/` + the mode modal + each of the three lanes and
-  asserts the rendered body text never contains
-  `scaffold ·`, `preview UX`, `lands next`, `ships in PR`,
-  `classic UX`, `classic gallery`, or `PR Bxx`. Test 3
-  (top-bar Legacy round-trip, ~650 ms) — / → /legacy → /
-  via top-bar links.
+  561.97 KB lazy `@runwayml/avatars-react` chunk (unchanged
+  from PR CF — no frontend code changes).
+- **Demo fixtures:** `scripts/seed-demo-spokespeople.py`
+  upserts four canonical personas (Brewster Bolt · mascot ·
+  drew, Clara Vale · founder · clara, Rex Roadside ·
+  local_guide · marcus, Mina Spark · coach · ruby), each
+  tagged `metadata.demo=true`. Run from repo root; safe to
+  re-run. Existing operator characters (Brewster the
+  Raccoon, Piper Voltage, Sir Landsloplot) untouched. No
+  Runway calls fire; portraits stay blank for in-app
+  Generate Portrait clicks.
+- **Playwright smoke:** `3 passed (~43.6 s)` against the mock
+  backend booted via `bash scripts/start-local-mock.sh`
+  with the seeded library (7 tiles). Test 1 (`@ /legacy`,
+  ~41.1 s — slower because the legacy gallery now serves 7
+  cards). Test 2 (`@ /`, ~1.4 s) + Test 3 (top-bar
+  round-trip, ~565 ms) unchanged behaviour.
 - **Real-mode validation:** PR BU end-to-end validated
   against real Runway on CEO Buzz / Brewster (task
   `b5d331ba-9844-42ab-b857-982920794a9c`, 5 s gen4.5,
@@ -88,7 +89,7 @@ SESSION_012–SESSION_060 handoffs added).
 
 ## What's implemented (full feature stack on `main`)
 
-### UX redesign foundation (PR BD — UX v2 Flag + Shared Helpers · PR BE — SpokespersonStudio Scaffold · PR BF — Knowledge Tab Wiring · PR BG — Appearances Tab Wiring · PR BH — Mode-First Creation Modal · PR BI — Spokesperson Lane Scaffold · PR BK — Cinematic Lane Scaffold · PR BL — Dialogue Lane Scaffold · PR BM — Lane Regression Pass · PR BN — Spokesperson Reels Action Wired · PR BO — Cinematic Voiced Action Wired · PR BP — All Remaining v2 Lane Actions Wired · PR BQ — V2 Lane Inline Brief Editing · PR BR — V2 Appearances Click-Through · PR BS — Click-Through Tab Hints · PR BT — Cinematic Video Async Action Wired · PR BU — Cinematic Video Persistence · PR CA — App Shell + Router + Spokesperson Library Home · PR CB — Library Polish + Create Spokesperson CTA · PR CC — Spokesperson Workspace Shell + Identity Tab · PR CD — Home Library Only · PR CE — Workspace Campaigns Tab Mounts Campaign Lanes · PR CF — V2 Copy Cleanup + Remove Dev Jargon)
+### UX redesign foundation (PR BD — UX v2 Flag + Shared Helpers · PR BE — SpokespersonStudio Scaffold · PR BF — Knowledge Tab Wiring · PR BG — Appearances Tab Wiring · PR BH — Mode-First Creation Modal · PR BI — Spokesperson Lane Scaffold · PR BK — Cinematic Lane Scaffold · PR BL — Dialogue Lane Scaffold · PR BM — Lane Regression Pass · PR BN — Spokesperson Reels Action Wired · PR BO — Cinematic Voiced Action Wired · PR BP — All Remaining v2 Lane Actions Wired · PR BQ — V2 Lane Inline Brief Editing · PR BR — V2 Appearances Click-Through · PR BS — Click-Through Tab Hints · PR BT — Cinematic Video Async Action Wired · PR BU — Cinematic Video Persistence · PR CA — App Shell + Router + Spokesperson Library Home · PR CB — Library Polish + Create Spokesperson CTA · PR CC — Spokesperson Workspace Shell + Identity Tab · PR CD — Home Library Only · PR CE — Workspace Campaigns Tab Mounts Campaign Lanes · PR CF — V2 Copy Cleanup + Remove Dev Jargon · PR CG — Demo Spokespeople Fixtures)
 
 - **UX v2 feature flag** at `frontend/src/uxFlag.js`. Resolves
   precedence URL `?ux=v2|v1` > localStorage `adspark.ux` >
@@ -209,6 +210,20 @@ SESSION_012–SESSION_060 handoffs added).
   `spokesperson-lane-reels-status`,
   `spokesperson-lane-reels-link`. Reels button new attrs:
   `data-source-ready`, `data-busy`.
+- **Demo Spokespeople Fixtures** (PR CG) — pause-the-CF-track
+  fixture slice: idempotent `scripts/seed-demo-spokespeople.py`
+  upserts four canonical demo personas (Brewster Bolt /
+  Clara Vale / Rex Roadside / Mina Spark) covering the new
+  product narrative (mascot · founder · local_guide ·
+  coach), each tagged `metadata.demo=true` so future
+  tooling can detect them without name matching. Library
+  now seats 7 tiles (4 demo + 3 existing operator
+  characters). Existing characters NOT touched. No Runway
+  calls fire; portraits stay blank for in-app generation.
+  Naming note: the user briefed this slice as "PR CF —
+  Create Real Demo Spokespeople Fixtures" alongside the
+  already-shipped PR CF copy cleanup (commit `6ad1bf7`); to
+  keep git history clean it ships as PR CG.
 - **V2 Copy Cleanup + Remove Dev Jargon** (PR CF) — closes
   the first of SESSION 059's three demo-readiness blockers.
   Every user-visible "scaffold · PR BX" pill, "preview UX"
