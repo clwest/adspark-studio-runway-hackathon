@@ -1,6 +1,96 @@
 # START NEXT SESSION — AdSpark Studio
 
-**Last touched:** 2026-05-10 (PR DF — Tighten
+**Last touched:** 2026-05-10 (PR DG — Separate
+context-kit from Character OS runtime/product copy.
+Full repo audit + classification of every
+context-kit-shaped mention across backend, frontend,
+scripts, and docs. 89 files surfaced; 80+ are
+handoffs/anchors/build-tooling and preserved verbatim
+as historical record. Three customer-facing surfaces
+were carrying conflation in product/UI copy and got
+rewritten: (1) `frontend/src/components/lanes/DialogueLane.jsx`
+Riggs hackathon dialogue preset line previously read
+*"Context-kit kept the AI builders from wandering
+into the woods. Mostly."* — that line would have
+been spoken by the Riggs avatar in a Character OS
+demo video, putting context-kit as a character in the
+product output. Rewritten to *"Many AI coding
+sessions, one coherent build. Mostly. The dev tooling
+kept us aligned across PRs."* — preserves the build
+narrative without namedropping context-kit as part of
+the product reel. (2) `docs/DEMO_CHECKLIST.md` §1
+suggested Riggs get a knowledge source titled
+"Context-kit discipline" describing runtime-anchors
+rules — rewrote to "Build-process notes" with explicit
+warning that Knowledge tab is Character OS *product*
+memory and context-kit doesn't belong in product copy.
+(3) `docs/DEMO_CHECKLIST.md` §6 default campaign brief
+template had `Product: Context-kit demo grounding for
+the realtime spokesperson` — rewrote to `Business:
+Character OS` + `Product: AI spokesperson platform
+built for the Runway hackathon` with a "why these
+exact fields" callout explaining the broker injects
+business + product verbatim into the spokesperson's
+system prompt and opening line (file:line citations).
+Live data fix on campaign `d00dc42fe5cb` (the running
+self-demo): POST `/api/campaigns/{id}/brief` updated
+business "How Character OS Was Built" → "Character
+OS" and product "Context-kit demo grounding for the
+realtime spokesperson" → "AI spokesperson platform
+built for the Runway hackathon"; POST `/script` set a
+clean opening commercial_script *"Hi, I'm Donny
+Sparks. Ask me about Character OS — the AI spokesperson
+platform — or how it got built."* Zero Runway calls
+fired for either backend POST. PR DF realtime document
+(id `47de9efd-...`) still attached and active; broker
+gate verified. Broker code change in
+`backend/app/services/realtime_avatar_client.py:160-204`
+softened `_grounded_personality`'s hardcoded
+"An attached campaign brief document carries the
+product / audience / hook / caption / CTA / saved
+commercial script" framing — PR AI structured-route
+docs are brand briefs, PR DD raw-route docs are not.
+New neutral copy: *"An attached document carries the
+facts you should ground every answer in. Defer to its
+contents and cite section names when helpful."* Works
+for both shapes without lying to the model.
+`scripts/upload-context-kit-demo-grounding.py`
+preamble got a new "Framing for this document
+specifically" paragraph that explicitly positions the
+doc as **build story / development process** not
+runtime product memory; Section 3 lead added the two
+verbatim approved phrasings ("context-kit coordinated
+AI coding sessions during development" + "context-kit
+helped the builders avoid drift across PRs and
+handoffs") as a single-sentence opener. Two new
+pytests: `test_grounding_document_blocks_pr_dg_forbidden_phrasings`
+asserts the brief's five forbidden phrasings are
+absent verbatim; `test_grounding_document_carries_pr_dg_approved_phrasings`
+asserts at least 2 of the 4 approved phrasings land
+(whitespace-normalized substring check). Cross-repo
+grep after fixes: **zero hits** for any of the five
+forbidden phrasings across non-handoff customer-facing
+files (.py / .jsx / .md). Document grew 11,260 →
+**11,469 chars**, still well under cap. Pytest
+**36/36** (32 prior + 4 PR DG additions over PR DF's
+2). Frontend build clean (527.44 KB / 142.06 KB gzip,
++0.02 KB vs PR DC baseline due to dialogue text
+change). Drift guard OK. Hygiene clean. Backend route
+count still **76**. No real Runway calls fired.
+**Realtime prompt stack after PR DG fixes** — for
+campaign `d00dc42fe5cb`, next session create body:
+`avatar.avatarId` = Donny's real avatar; `personality`
+= grounded version (`You are Donny Sparks, the brand
+mascot for Character OS. Tone: Honest, technical,
+brief. Speak in your felix voice. Personality cue:
+[Donny's character.personality, clean]. An attached
+document carries the facts you should ground every
+answer in...`); `startScript` = first sentence of
+commercial_script = `"Hi, I'm Donny Sparks."`;
+`documentIds` = `[47de9efd-c0b1-4405-a6bb-df72ee0bf257]`
+(PR DF curated doc with PR DG framing addition).
+**Zero context-kit conflation in the runtime prompt
+stack.** Earlier: PR DF — Tighten
 context-kit grounding language so the realtime
 spokesperson can no longer drift into describing
 context-kit as the avatar's memory layer. PR DE's

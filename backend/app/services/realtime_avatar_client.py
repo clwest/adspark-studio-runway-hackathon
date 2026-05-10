@@ -161,9 +161,20 @@ def _grounded_personality(
     campaign: Campaign, settings: Settings,
 ) -> str:
     """PR AI — slim personality string used when an attached
-    ``documentIds`` carries the bulk of the brand brief. Keeps just
+    ``documentIds`` carries the substantive content. Keeps just
     enough identity + tone so the avatar still opens with the right
     voice; the document grounds factual answers.
+
+    PR DG — framing softened to be neutral about the document's
+    shape. The original copy described the document as "a campaign
+    brief carrying product / audience / hook / caption / CTA /
+    saved commercial script" — that's the PR AI structured-route
+    shape. The PR DD raw-route accepts any Markdown (including the
+    Character OS self-demo build-story doc), so lying to the model
+    about what's in the attachment makes it reconcile the mismatch
+    by injecting priors. The neutral framing tells the model
+    "defer to the attached document" without prescribing what's in
+    it.
     """
     business = _trim(campaign.business)
     tone = _trim(campaign.tone)
@@ -195,11 +206,11 @@ def _grounded_personality(
         parts.append(f"Personality cue: {char_personality}")
 
     parts.append(
-        "An attached campaign brief document carries the product, "
-        "audience, hook, caption, CTA, and saved commercial script. "
-        "Ground every answer in that document. Stay concise, warm, "
-        "and brand-honest. Redirect politely if asked something the "
-        "document does not cover."
+        "An attached document carries the facts you should ground "
+        "every answer in. Defer to its contents and cite section "
+        "names when helpful. Stay concise, warm, and honest. "
+        "Redirect politely if asked something the document does not "
+        "cover."
     )
     return _truncate_at_sentence(" ".join(parts).strip(), _PERSONALITY_MAX)
 

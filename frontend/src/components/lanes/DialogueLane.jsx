@@ -607,7 +607,7 @@ const HACKATHON_DEMO_LINES = [
     slot: 1,
     speaker: 'Riggs',
     text:
-      'Context-kit kept the AI builders from wandering into the woods. Mostly.',
+      'Many AI coding sessions, one coherent build. Mostly. The dev tooling kept us aligned across PRs.',
   },
   {
     slot: 2,

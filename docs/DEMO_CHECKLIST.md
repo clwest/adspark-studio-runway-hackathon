@@ -31,8 +31,12 @@ Open each demo spokesperson → **Knowledge** tab.
 
 - [ ] Donny has at least one saved knowledge source (e.g. "AdSpark
       brand voice notes" — punchy, fast-talking, hype copy).
-- [ ] Riggs has at least one source (e.g. "Context-kit discipline"
-      describing the runtime-anchors rules).
+- [ ] Riggs has at least one source (e.g. "Build-process notes" —
+      a Character OS knowledge source describing how the team
+      shipped features across many AI coding sessions. **Do not
+      paste context-kit specifics in here** — knowledge sources are
+      Character OS *product* memory; context-kit is a separate
+      dev-time tool that does not belong in product copy).
 - [ ] Miles has at least one source (e.g. "Persistent-spokesperson
       product narrative" — characters that learn the brand).
 
@@ -151,10 +155,20 @@ Setup once:
 - [ ] Open any spokesperson with a ready avatar (Donny Sparks is the
       canonical choice) → **Campaigns** tab → `+ New Campaign` →
       **🎙️ Spokesperson Ad**.
-- [ ] Fill a minimal brief — `Business: How Character OS Was Built`,
-      `Product: Context-kit demo grounding for the realtime spokesperson`,
+- [ ] Fill a minimal brief — `Business: Character OS`,
+      `Product: AI spokesperson platform built for the Runway hackathon`,
       `Audience: Hackathon judges + future maintainers`,
       `Tone: Honest, technical, brief`. Save brief.
+
+  **Why these exact fields:** the realtime broker injects
+  `business` + `product` verbatim into the spokesperson's
+  system prompt (`backend/app/services/realtime_avatar_client.py:253`)
+  and into the opening line fallback (`:295`). Putting context-kit
+  in `product` would prime the avatar to self-describe as a
+  context-kit tool — exactly the conflation the grounding doc
+  works to prevent. Keep these brief fields about **Character OS
+  the product**; let the grounding document carry the build-story
+  context.
 - [ ] Note the campaign id from the URL or the campaigns list row.
 - [ ] In a terminal:
 

@@ -69,8 +69,17 @@ PREAMBLE = """\
 # Character OS — Self-Demo Grounding Document
 
 You are a spokesperson for **Character OS**. Use the facts below to
-answer questions about what Character OS is, what it does, and how it
-was built. Cite section names when helpful.
+answer questions about what Character OS is, what it does, and how
+it was built. Cite section names when helpful.
+
+**Framing for this document specifically:** this is the **build
+story / development process** for Character OS, not Character OS's
+runtime memory. The document was uploaded as a one-off campaign
+grounding so you can answer "how was this project built?" questions
+on demand. When discussing the build, treat the contents below as
+factual background. When discussing how Character OS *works* today
+for end users, lean on the product features named in Section 4 —
+not on the build tooling described in Sections 2 and 3.
 
 ## How To Answer Questions Using This Document
 
@@ -176,6 +185,12 @@ and never see it.""",
     (
         "3. How context-kit Helped Build Character OS",
         """\
+One-line summary: **context-kit coordinated AI coding sessions
+during development.** It is the build tool. It is not part of the
+product.
+
+context-kit helped the builders avoid drift across PRs and handoffs.
+
 The Character OS hackathon ran across many AI-assisted coding
 sessions. Without context-kit, each new session would have re-read
 the codebase from scratch, re-derived the design, and frequently

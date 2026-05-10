@@ -913,3 +913,59 @@ def test_grounding_document_carries_pr_df_distinctions():
         assert phrase in flat, (
             f"required PR DF distinction missing: {phrase!r}"
         )
+
+
+# ---- PR DG — full brief-aligned forbidden/approved phrasings ----
+#
+# The PR DG brief enumerated an exact forbidden + approved phrasing
+# list. These tests pin that list directly against the curated
+# narrative so a future prose edit can't slip the wrong language back
+# in. Belt-and-braces over the PR DF tests; the two lists overlap but
+# each PR DG entry is sourced from the brief verbatim.
+
+
+def test_grounding_document_blocks_pr_dg_forbidden_phrasings():
+    """Five phrasings the PR DG brief explicitly forbids. Each one
+    would imply context-kit is a runtime feature of Character OS."""
+    mod = _load_uploader_module()
+    _, content = mod.build_payload()
+    lower = content.lower()
+
+    forbidden_pr_dg = [
+        "context-kit powers the spokespeople",
+        "context-kit helps avatars maintain context",
+        "context-kit is character os memory",
+        "context-kit filters the spokesperson",
+        "context-kit is the runtime brain",
+    ]
+    for phrase in forbidden_pr_dg:
+        assert phrase not in lower, (
+            f"PR DG forbidden phrase landed in document: {phrase!r}"
+        )
+
+
+def test_grounding_document_carries_pr_dg_approved_phrasings():
+    """At least one of the PR DG approved phrasings must appear so
+    the spokesperson has the canonical phrasings to fall back to.
+    Whitespace-normalized substring check so Markdown wrap doesn't
+    break the assertion.
+    """
+    import re
+    mod = _load_uploader_module()
+    _, content = mod.build_payload()
+    flat = re.sub(r"\s+", " ", content.lower())
+
+    # Each entry is from the brief's "Approved phrasing" list.
+    approved_pr_dg = [
+        "context-kit coordinated ai coding sessions during development",
+        "context-kit helped the builders",
+        "character os has its own",
+        "how the project was built, not what the product is",
+    ]
+    # At least 2 of the 4 must land — gives prose room to evolve
+    # without requiring every approved line verbatim.
+    landed = [p for p in approved_pr_dg if p in flat]
+    assert len(landed) >= 2, (
+        f"PR DG approved phrasings under-represented in document. "
+        f"Landed: {landed}. Required at least 2 of {approved_pr_dg}."
+    )

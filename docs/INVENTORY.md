@@ -1,7 +1,52 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after **PR DF — Tighten Grounding Language**.
+context-kit refresh after **PR DG — Separate context-kit From
+Character OS Runtime/Product Copy**. Full repo audit + classification
+of every context-kit mention across backend, frontend, scripts, and
+docs (89 files surfaced; 80+ preserved as build-tooling /
+historical-record). Three customer-facing surfaces were rewritten:
+(1) the Riggs hackathon dialogue preset line in
+`frontend/src/components/lanes/DialogueLane.jsx` — was *"Context-kit
+kept the AI builders from wandering into the woods. Mostly."* and
+would have been spoken by the Riggs avatar in a Character OS demo
+video, putting context-kit in product output; rewritten to *"Many AI
+coding sessions, one coherent build. Mostly. The dev tooling kept us
+aligned across PRs."* (2) `docs/DEMO_CHECKLIST.md` §1 suggested
+knowledge source for Riggs called "Context-kit discipline" — rewrote
+to "Build-process notes" with explicit warning that Knowledge tab is
+Character OS *product* memory and context-kit does not belong in
+product copy. (3) `docs/DEMO_CHECKLIST.md` §6 default campaign brief
+template had `Product: Context-kit demo grounding for the realtime
+spokesperson` — rewrote to `Business: Character OS` + `Product: AI
+spokesperson platform built for the Runway hackathon` with a "why
+these exact fields" callout explaining the broker injects business +
+product verbatim into the system prompt and opening line. Live
+campaign data fix on `d00dc42fe5cb` via `POST
+/api/campaigns/{id}/brief` and `POST /api/campaigns/{id}/script` to
+match the corrected demo checklist values (zero Runway calls).
+Broker `_grounded_personality()` softened: the original hardcoded
+"An attached campaign brief document carries the product / audience
+/ hook / caption / CTA / saved commercial script" was true for PR AI
+structured-route docs and false for PR DD raw-route docs (Character
+OS self-demo build-story document); rewrote to a neutral *"An
+attached document carries the facts you should ground every answer
+in. Defer to its contents and cite section names when helpful."*
+that works for both upload shapes without misframing.
+`scripts/upload-context-kit-demo-grounding.py` preamble got a new
+"Framing for this document specifically" paragraph that explicitly
+positions the doc as **build story / development process** rather
+than runtime product memory; Section 3 lead now opens with the two
+verbatim approved phrasings ("context-kit coordinated AI coding
+sessions during development" + "context-kit helped the builders
+avoid drift across PRs and handoffs"). Two new pytests pin the PR
+DG forbidden + approved phrasing lists from the brief. Cross-repo
+grep after fixes: **zero hits** for any of the five forbidden
+phrasings across non-handoff customer-facing files. Document grew
+11,260 → **11,469 chars**. Pytest **36/36**. Frontend build clean
+(527.44 KB / 142.06 KB gzip). Backend route count still **76**. No
+Runway calls fired.
+Earlier: PR DF — Tighten Grounding Language.
 PR DE landed a structurally clean curated narrative, but a real demo
 of the grounded avatar on Donny's `d00dc42fe5cb` campaign surfaced a
 softer conflation: the spokesperson described context-kit as if it
