@@ -1239,11 +1239,13 @@ test('AdSpark Studio Spokesperson Library @ /', async ({ page }) => {
       page.getByTestId('spokesperson-workspace-identity'),
     ).toBeVisible()
 
-    // PR CC — Knowledge / Conversations / Outputs render
-    // <TabComingSoon> placeholders. Campaigns moved to its
-    // own block below since PR CE replaced the placeholder
-    // with the real CampaignLanes mount.
-    for (const placeholder of ['knowledge', 'conversations', 'outputs']) {
+    // PR CC — Knowledge / Conversations render <TabComingSoon>
+    // placeholders. Campaigns moved to its own block below
+    // since PR CE replaced the placeholder with the real
+    // CampaignLanes mount. PR CN replaces the Outputs
+    // placeholder with the real <OutputsGallery>; asserted
+    // separately below.
+    for (const placeholder of ['knowledge', 'conversations']) {
       await page
         .getByTestId(`spokesperson-workspace-tab-${placeholder}`)
         .click()
@@ -1253,6 +1255,37 @@ test('AdSpark Studio Spokesperson Library @ /', async ({ page }) => {
       )
       await expect(
         page.getByTestId(`spokesperson-workspace-${placeholder}`),
+      ).toBeVisible()
+    }
+
+    // PR CN — Outputs tab now mounts <OutputsGallery>. Click
+    // through, assert the gallery section + either the empty
+    // state or at least one output card. Smoke runs in mock
+    // mode where seeded fixtures may or may not have cached
+    // URLs, so accept either branch. Each rendered card has
+    // a `<video>` preview + open/download link with the
+    // documented testids.
+    await page.getByTestId('spokesperson-workspace-tab-outputs').click()
+    await expect(workspace).toHaveAttribute('data-active-tab', 'outputs')
+    await expect(
+      page.getByTestId('spokesperson-workspace-outputs'),
+    ).toBeVisible()
+    const outputsGallery = page.getByTestId('outputs-gallery')
+    await expect(outputsGallery).toBeVisible()
+    const outputCount = await page
+      .getByTestId('output-card')
+      .count()
+    if (outputCount === 0) {
+      await expect(page.getByTestId('outputs-empty')).toBeVisible()
+    } else {
+      await expect(
+        page.getByTestId('output-card').first(),
+      ).toBeVisible()
+      await expect(
+        page.getByTestId('output-card-video').first(),
+      ).toBeVisible()
+      await expect(
+        page.getByTestId('output-card-link').first(),
       ).toBeVisible()
     }
 

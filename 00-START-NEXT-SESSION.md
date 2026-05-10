@@ -19,15 +19,19 @@ PR CA `8681777`; PR CB `766648c`; PR CC `0b292e0`; PR CD
 `e10ecb5`; PR CJ `8859860`; SESSION 065 `ec70f37`; PR CK
 `6679db9`; PR CL `c016de7 feat: workspace consumes start
 campaign hint (PR CL)`; PR CM Library Tile Simplification
-in flight on top — SESSION_012–SESSION_068 handoffs added).
+`18dbda0`; PR CN Workspace Outputs Gallery in flight on top
+— SESSION_012–SESSION_069 handoffs added).
 
 ## Where things stand
 
-- **Branch:** `main` at `c016de7` (`feat: workspace consumes
-  start campaign hint (PR CL)`) on `origin/main`. PR CM
-  patch in flight on top — strips library tiles down to
-  the browse-to-open card surface (closes SESSION 059
-  Fix #2 punch-list item).
+- **Branch:** `main` at `18dbda0` (`feat: library tile
+  simplification (PR CM)`) on `origin/main`. PR CN patch
+  in flight on top — replaces the `/spokespeople/:id`
+  Outputs tab `<TabComingSoon>` with a real
+  `<OutputsGallery>` that surfaces every cached output URL
+  across linked campaigns (closes SESSION 059 Fix #3
+  punch-list item — the last remaining demo-readiness
+  blocker).
 - **Latest tag:** still **`hackathon-submission-v13`** at `ec446e4`
   (PR AF). PR AG–BI shipped the full voice arc + audit trails
   + UX v2 foundation + SpokespersonStudio + Knowledge +
@@ -46,11 +50,11 @@ in flight on top — SESSION_012–SESSION_068 handoffs added).
   (PR CK adds `POST /api/characters/{id}/metadata` — a small
   merge route for the `Character.metadata` field; no schema
   change. Route count was 70 from PR BU through PR CJ).
-- **Frontend build:** 470.92 KB initial JS / 129.20 KB gzip +
-  561.97 KB lazy `@runwayml/avatars-react` chunk (-9.91 KB
-  initial / -2.32 KB gzip vs PR CL — the embedded
-  CharacterCard + 3 tab content blocks gone from the
-  library tile).
+- **Frontend build:** 476.43 KB initial JS / 130.27 KB gzip +
+  561.97 KB lazy `@runwayml/avatars-react` chunk (+5.51 KB
+  initial / +1.07 KB gzip vs PR CM — the new
+  `<OutputsGallery>` component plus the workspace
+  Outputs-tab swap).
 - **Demo fixtures (PR CG + PR CH):**
   `scripts/seed-demo-spokespeople.py` upserts the 4 demo
   personas (Brewster Bolt / Clara Vale / Rex Roadside /
@@ -63,15 +67,19 @@ in flight on top — SESSION_012–SESSION_068 handoffs added).
   + runway_prompt + commercial_script + social_post all
   populated; outputs blank. Idempotent; re-run-safe;
   existing user records untouched.
-- **Playwright smoke:** `3 passed (~27.6 s)` against the mock
+- **Playwright smoke:** `3 passed (~28.1 s)` against the mock
   backend booted via `bash scripts/start-local-mock.sh`.
-  Test 1 (`@ /legacy`, ~24.6 s) verbatim. Test 2 (`@ /`,
-  ~1.8 s) — tile-iteration block rewritten for the PR CM
-  simplified tile shape (portrait XOR placeholder + name +
-  persona pill + summary chips + Open link), in-tile tab
-  testids all `toHaveCount(0)`; PR CL hint round-trip
-  preserved later in the same test. Test 3 (top-bar
-  Legacy round-trip, ~623 ms).
+  Test 1 (`@ /legacy`, ~25.1 s) verbatim. Test 2 (`@ /`,
+  ~1.7 s) — PR CN extends the `/spokespeople/:id`
+  workspace walk: clicks the Outputs tab, asserts the new
+  `outputs-gallery` mounts, then branches on card count —
+  `outputs-empty` when zero, otherwise asserts the first
+  `output-card` + `output-card-video` + `output-card-link`
+  are visible. The PR CC placeholder loop now only iterates
+  `knowledge` + `conversations` (Outputs is no longer a
+  `<TabComingSoon>`). PR CM tile-iteration block + PR CL
+  hint round-trip preserved later in the same test.
+  Test 3 (top-bar Legacy round-trip, ~589 ms).
 - **Real-mode validation:** PR BU end-to-end validated
   against real Runway on CEO Buzz / Brewster (task
   `b5d331ba-9844-42ab-b857-982920794a9c`, 5 s gen4.5,
@@ -102,7 +110,7 @@ in flight on top — SESSION_012–SESSION_068 handoffs added).
 
 ## What's implemented (full feature stack on `main`)
 
-### UX redesign foundation (PR BD — UX v2 Flag + Shared Helpers · PR BE — SpokespersonStudio Scaffold · PR BF — Knowledge Tab Wiring · PR BG — Appearances Tab Wiring · PR BH — Mode-First Creation Modal · PR BI — Spokesperson Lane Scaffold · PR BK — Cinematic Lane Scaffold · PR BL — Dialogue Lane Scaffold · PR BM — Lane Regression Pass · PR BN — Spokesperson Reels Action Wired · PR BO — Cinematic Voiced Action Wired · PR BP — All Remaining v2 Lane Actions Wired · PR BQ — V2 Lane Inline Brief Editing · PR BR — V2 Appearances Click-Through · PR BS — Click-Through Tab Hints · PR BT — Cinematic Video Async Action Wired · PR BU — Cinematic Video Persistence · PR CA — App Shell + Router + Spokesperson Library Home · PR CB — Library Polish + Create Spokesperson CTA · PR CC — Spokesperson Workspace Shell + Identity Tab · PR CD — Home Library Only · PR CE — Workspace Campaigns Tab Mounts Campaign Lanes · PR CF — V2 Copy Cleanup + Remove Dev Jargon · PR CG — Demo Spokespeople Fixtures · PR CH — Demo Campaign Fixtures · PR CK — CreateSpokespersonFlow 4-Step Stepper · PR CL — Workspace Start Campaign Hint · PR CM — Library Tile Simplification)
+### UX redesign foundation (PR BD — UX v2 Flag + Shared Helpers · PR BE — SpokespersonStudio Scaffold · PR BF — Knowledge Tab Wiring · PR BG — Appearances Tab Wiring · PR BH — Mode-First Creation Modal · PR BI — Spokesperson Lane Scaffold · PR BK — Cinematic Lane Scaffold · PR BL — Dialogue Lane Scaffold · PR BM — Lane Regression Pass · PR BN — Spokesperson Reels Action Wired · PR BO — Cinematic Voiced Action Wired · PR BP — All Remaining v2 Lane Actions Wired · PR BQ — V2 Lane Inline Brief Editing · PR BR — V2 Appearances Click-Through · PR BS — Click-Through Tab Hints · PR BT — Cinematic Video Async Action Wired · PR BU — Cinematic Video Persistence · PR CA — App Shell + Router + Spokesperson Library Home · PR CB — Library Polish + Create Spokesperson CTA · PR CC — Spokesperson Workspace Shell + Identity Tab · PR CD — Home Library Only · PR CE — Workspace Campaigns Tab Mounts Campaign Lanes · PR CF — V2 Copy Cleanup + Remove Dev Jargon · PR CG — Demo Spokespeople Fixtures · PR CH — Demo Campaign Fixtures · PR CK — CreateSpokespersonFlow 4-Step Stepper · PR CL — Workspace Start Campaign Hint · PR CM — Library Tile Simplification · PR CN — Workspace Outputs Gallery)
 
 - **UX v2 feature flag** at `frontend/src/uxFlag.js`. Resolves
   precedence URL `?ux=v2|v1` > localStorage `adspark.ux` >
@@ -244,6 +252,42 @@ in flight on top — SESSION_012–SESSION_068 handoffs added).
   Validated end-to-end via Playwright route-intercept
   tests (no real Runway credit burned for the fix). Backend
   untouched; `/legacy` Create Character flow unchanged.
+- **Workspace Outputs Gallery** (PR CN) — closes the
+  SESSION 059 Fix #3 punch-list item, and with it the
+  third and final demo-readiness blocker. The
+  `/spokespeople/:id` Outputs tab no longer ships a
+  `<TabComingSoon>` placeholder. New
+  `frontend/src/components/OutputsGallery.jsx` (~280 lines)
+  walks each linked campaign and emits one card per
+  populated output URL across 8 fields: `host_video_url`
+  (Spokesperson Ad), `cached_video_url` (Cinematic Video),
+  `voiced_commercial_url` (Voiced Cinematic),
+  `storyboard_video_url` (Storyboard),
+  `storyboard_voiced_url` (Voiced Storyboard),
+  `dialogue_scene_video_url` (Dialogue Scene),
+  `spokesperson_reels_url` (Captioned Reels 720×1280,
+  vertical), `dialogue_scene_reels_url` (Captioned
+  Dialogue Reels 720×1280, vertical). Each card embeds an
+  inline `<video controls muted playsInline
+  preload="metadata">` first-frame preview that **never
+  autoplays** (no automatic credit burn), labelled type
+  + description, campaign id-prefix · business · product,
+  status chip (ok/failed/unavailable/pending/mock —
+  emerald/rose/amber/zinc tones), orientation pill
+  (`Horizontal` vs `Vertical · Reels`; `aspect-video` vs
+  `aspect-[9/16]` framing), and an `open / download ↗`
+  link. Cards sort newest-first by parent
+  `campaign.created_at`. Empty state when the spokesperson
+  has no linked campaigns or those campaigns have no
+  cached outputs yet (copy: "No outputs yet. Create a
+  campaign or generate from the Campaigns tab."). The
+  workspace Outputs tab swaps the `<TabComingSoon>` for
+  `<section data-testid="spokesperson-workspace-outputs">
+  <OutputsGallery linkedCampaigns={linkedCampaigns} />
+  </section>`. **No new backend routes** — pure frontend
+  read of campaign rows the workspace already fetches.
+  Route count remains **71**. /legacy unchanged. No real
+  Runway calls fired.
 - **Library Tile Simplification** (PR CM) — closes the
   SESSION 059 Fix #2 punch-list item. SpokespersonCard.jsx
   rewritten 691 → ~220 lines. Library tile is now a single

@@ -9,6 +9,7 @@ import {
 } from '../settings'
 import CampaignLanes from './CampaignLanes.jsx'
 import CharacterCard from './CharacterCard.jsx'
+import OutputsGallery from './OutputsGallery.jsx'
 
 const TABS = [
   { id: 'identity', label: 'Identity' },
@@ -583,12 +584,12 @@ export default function SpokespersonWorkspace() {
       )}
 
       {activeTab === 'outputs' && (
-        <TabComingSoon
-          testid="spokesperson-workspace-outputs"
-          title="Outputs"
-          summary="Cinematic visuals, spokesperson ads, dialogue scenes, reels, and voice clips across every linked campaign — one playable gallery."
-          tease="Generated videos and reels will appear here."
-        />
+        <section
+          data-testid="spokesperson-workspace-outputs"
+          className="space-y-3"
+        >
+          <OutputsGallery linkedCampaigns={linkedCampaigns} />
+        </section>
       )}
 
       {errMsg && (

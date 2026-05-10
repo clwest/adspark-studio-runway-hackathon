@@ -1,7 +1,8 @@
 # AdSpark Studio — Operator Usage Map
 
 **Last updated:** 2026-05-10 (post `hackathon-submission-v13`,
-PR CM Library Tile Simplification).
+PR CN Workspace Outputs Gallery — closes the third and
+final SESSION 059 demo-readiness blocker).
 
 **Read order:** This is the top-to-bottom "how do I actually use
 this thing?" guide. New operators (humans or AI) should read
@@ -31,9 +32,12 @@ The frontend now has two top-level routes:
   pills, primary `+ New Campaign` CTA. 5-tab nav: **Identity**
   (default, fully implemented — embeds the legacy
   CharacterCard with every voice + portrait + avatar handler
-  wired), **Knowledge** / **Campaigns** / **Conversations** /
-  **Outputs** (placeholder tabs, "lands next"). Unknown id →
-  friendly not-found state with a Back to Library CTA.
+  wired), **Campaigns** (real lane mounts via PR CE), **Outputs**
+  (PR CN — real `<OutputsGallery>` mount surfacing every
+  cached output URL across linked campaigns), **Knowledge** /
+  **Conversations** (the two remaining `<TabComingSoon>`
+  placeholder tabs). Unknown id → friendly not-found state
+  with a Back to Library CTA.
   PR CE: the Campaigns tab now mounts the Spokesperson /
   Cinematic / Dialogue lanes directly via the new
   `<CampaignLanes>` component. `+ New Campaign` flips the
