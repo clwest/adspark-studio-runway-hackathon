@@ -1,10 +1,12 @@
 # AdSpark Studio — Operator Usage Map
 
 **Last updated:** 2026-05-10 (post `hackathon-submission-v13`,
-PR CO Repair Demo Data + Portraits + Stats Accuracy —
-closes the SESSION 070 V2-QA punch-list; live data is
-restored to 4 demo spokespeople with 5 linked campaigns
-including Brewster Bolt's CEO Buzz with 4 cached outputs).
+PR CP Restore Delete Spokesperson + Endpoint Audit —
+adds a discoverable Delete affordance to the workspace
+Identity tab, rewrites the caption to disambiguate
+"Portrait image" from "Runway avatar", and ships an
+audit confirming both endpoints fire the right Runway
+primitives).
 
 **Read order:** This is the top-to-bottom "how do I actually use
 this thing?" guide. New operators (humans or AI) should read

@@ -21,20 +21,28 @@ PR CA `8681777`; PR CB `766648c`; PR CC `0b292e0`; PR CD
 campaign hint (PR CL)`; PR CM Library Tile Simplification
 `18dbda0`; PR CN Workspace Outputs Gallery `89bfd47`;
 SESSION 070 V2 Full UI QA `45bce42`; PR CO Repair Demo
-Data + Portraits + Stats Accuracy in flight on top —
-SESSION_012–SESSION_071 handoffs added).
+Data + Portraits + Stats Accuracy `b0d4bf2`; PR CP
+Restore Delete Spokesperson + Endpoint Audit in flight
+on top — SESSION_012–SESSION_072 handoffs added).
 
 ## Where things stand
 
-- **Branch:** `main` at `45bce42` (`docs: v2 full manual
-  UI QA + demo readiness review (SESSION 070)`) on
-  `origin/main`. PR CO patch in flight on top — closes
-  every SESSION 070 V2-QA punch-list item: re-seeds the 4
-  demo spokespeople, relinks 5 orphaned demo campaigns by
-  business name, fires real portraits for 3/4 (Rex
-  Roadside again FAILED upstream; record kept), and
-  scopes the library stats row to live-linked
-  campaigns only. Backend untouched.
+- **Branch:** `main` at `b0d4bf2` (`feat: repair demo
+  data + portraits + stats accuracy (PR CO)`) on
+  `origin/main`. PR CP patch in flight on top —
+  restores a discoverable Delete Spokesperson
+  affordance in the workspace Identity tab via a new
+  rose-themed `<DangerZone>` two-step confirmation
+  (the legacy `delete` link in CharacterCard's footer
+  was effectively invisible at 9-pixel zinc-on-black).
+  Plus a written audit of `generate-portrait` vs
+  `create-avatar` Runway endpoints — verdict: both
+  endpoints are correct (`gen4_image_turbo` via
+  `/v1/text_to_image` for stills, `/v1/avatars` for
+  talking-head identities). The rough PR CO portrait
+  observation is a prompt-content issue (seed
+  `subject` strings are ad copy not visual subjects),
+  recommendation deferred to PR CQ.
 - **Latest tag:** still **`hackathon-submission-v13`** at `ec446e4`
   (PR AF). PR AG–BI shipped the full voice arc + audit trails
   + UX v2 foundation + SpokespersonStudio + Knowledge +
@@ -53,10 +61,10 @@ SESSION_012–SESSION_071 handoffs added).
   (PR CK adds `POST /api/characters/{id}/metadata` — a small
   merge route for the `Character.metadata` field; no schema
   change. Route count was 70 from PR BU through PR CJ).
-- **Frontend build:** 476.47 KB initial JS / 130.28 KB gzip +
-  561.97 KB lazy `@runwayml/avatars-react` chunk (+0.04 KB
-  initial / +0.01 KB gzip vs PR CN — pure filter on the
-  library stats reducer; no new components).
+- **Frontend build:** 479.72 KB initial JS / 130.93 KB gzip +
+  561.97 KB lazy `@runwayml/avatars-react` chunk (+3.25 KB
+  initial / +0.65 KB gzip vs PR CO — the new `<DangerZone>`
+  component plus the Identity tab clarity caption rewrite).
 - **Demo fixtures (PR CG + PR CH + PR CO):**
   `scripts/seed-demo-spokespeople.py` upserts the 4 demo
   personas (Brewster Bolt / Clara Vale / Rex Roadside /
@@ -119,7 +127,7 @@ SESSION_012–SESSION_071 handoffs added).
 
 ## What's implemented (full feature stack on `main`)
 
-### UX redesign foundation (PR BD — UX v2 Flag + Shared Helpers · PR BE — SpokespersonStudio Scaffold · PR BF — Knowledge Tab Wiring · PR BG — Appearances Tab Wiring · PR BH — Mode-First Creation Modal · PR BI — Spokesperson Lane Scaffold · PR BK — Cinematic Lane Scaffold · PR BL — Dialogue Lane Scaffold · PR BM — Lane Regression Pass · PR BN — Spokesperson Reels Action Wired · PR BO — Cinematic Voiced Action Wired · PR BP — All Remaining v2 Lane Actions Wired · PR BQ — V2 Lane Inline Brief Editing · PR BR — V2 Appearances Click-Through · PR BS — Click-Through Tab Hints · PR BT — Cinematic Video Async Action Wired · PR BU — Cinematic Video Persistence · PR CA — App Shell + Router + Spokesperson Library Home · PR CB — Library Polish + Create Spokesperson CTA · PR CC — Spokesperson Workspace Shell + Identity Tab · PR CD — Home Library Only · PR CE — Workspace Campaigns Tab Mounts Campaign Lanes · PR CF — V2 Copy Cleanup + Remove Dev Jargon · PR CG — Demo Spokespeople Fixtures · PR CH — Demo Campaign Fixtures · PR CK — CreateSpokespersonFlow 4-Step Stepper · PR CL — Workspace Start Campaign Hint · PR CM — Library Tile Simplification · PR CN — Workspace Outputs Gallery · PR CO — Repair Demo Data + Portraits + Stats Accuracy)
+### UX redesign foundation (PR BD — UX v2 Flag + Shared Helpers · PR BE — SpokespersonStudio Scaffold · PR BF — Knowledge Tab Wiring · PR BG — Appearances Tab Wiring · PR BH — Mode-First Creation Modal · PR BI — Spokesperson Lane Scaffold · PR BK — Cinematic Lane Scaffold · PR BL — Dialogue Lane Scaffold · PR BM — Lane Regression Pass · PR BN — Spokesperson Reels Action Wired · PR BO — Cinematic Voiced Action Wired · PR BP — All Remaining v2 Lane Actions Wired · PR BQ — V2 Lane Inline Brief Editing · PR BR — V2 Appearances Click-Through · PR BS — Click-Through Tab Hints · PR BT — Cinematic Video Async Action Wired · PR BU — Cinematic Video Persistence · PR CA — App Shell + Router + Spokesperson Library Home · PR CB — Library Polish + Create Spokesperson CTA · PR CC — Spokesperson Workspace Shell + Identity Tab · PR CD — Home Library Only · PR CE — Workspace Campaigns Tab Mounts Campaign Lanes · PR CF — V2 Copy Cleanup + Remove Dev Jargon · PR CG — Demo Spokespeople Fixtures · PR CH — Demo Campaign Fixtures · PR CK — CreateSpokespersonFlow 4-Step Stepper · PR CL — Workspace Start Campaign Hint · PR CM — Library Tile Simplification · PR CN — Workspace Outputs Gallery · PR CO — Repair Demo Data + Portraits + Stats Accuracy · PR CP — Restore Delete Spokesperson + Endpoint Audit)
 
 - **UX v2 feature flag** at `frontend/src/uxFlag.js`. Resolves
   precedence URL `?ux=v2|v1` > localStorage `adspark.ux` >
@@ -261,6 +269,48 @@ SESSION_012–SESSION_071 handoffs added).
   Validated end-to-end via Playwright route-intercept
   tests (no real Runway credit burned for the fix). Backend
   untouched; `/legacy` Create Character flow unchanged.
+- **Restore Delete Spokesperson + Endpoint Audit** (PR CP)
+  — closes the SESSION 070 P1 polish that flagged
+  workspace delete as un-discoverable. New
+  `<DangerZone>` mounts in the Identity tab below the
+  embedded `<CharacterCard>`. Rose-themed two-step UX:
+  click `Delete spokesperson` → typed-name confirmation
+  input + armed `Delete` button + Cancel. The Delete
+  button stays disabled (`data-armed="false"`) until the
+  typed text matches the spokesperson name exactly. On
+  confirm, fires the existing `handleDelete` plumbing
+  (PR CC) → `DELETE /api/characters/{id}` → navigate
+  back to `/`. Linked-campaign count is surfaced in the
+  prompt copy ("N linked campaigns will be unlinked")
+  with explicit explanation that the local delete does
+  NOT remove Runway avatars / voice clones — clean those
+  up via Runway dashboard. The legacy `<CharacterCard>`
+  footer's tiny 9-px `delete` link is preserved
+  untouched for /legacy parity. Identity tab caption
+  rewritten to disambiguate **Portrait image** (still
+  face, drives tile + avatar `referenceImage`) from
+  **Runway avatar** (talking/lip-sync identity that
+  drives Spokesperson Ads + realtime). **Endpoint
+  audit:** SESSION_072 documents the full payload chain
+  for both `generate-portrait` (calls Runway
+  `gen4_image_turbo` via `POST /v1/text_to_image` with
+  charcoal seed reference + the resolved
+  PORTRAIT_TEMPLATES prompt or `prompt_override`) and
+  `create-avatar` (calls `POST /v1/avatars` with the
+  cached portrait inlined as `referenceImage` data URI +
+  voice binding). Verdict: both endpoints are correct.
+  The PR CO rough-portrait observation is a
+  prompt-content issue, not an endpoint issue — seed
+  `subject` strings read like ad copy ("high-energy
+  brand mascot — kinetic, animated, playful shape with
+  bold accent colours") instead of visual subjects ("an
+  anthropomorphic raccoon mascot, mid-stride, confident
+  grin"). Recommended PR CQ to sharpen seed fixtures +
+  tighten PORTRAIT_TEMPLATES. Smoke 3 passed (28.6 s);
+  build 479.72 KB / 130.93 KB gzip (+3.25 KB / +0.65 KB
+  vs PR CO). Backend untouched (route count still 71).
+  /legacy unchanged. No real Runway calls fired this
+  slice.
 - **Repair Demo Data + Portraits + Stats Accuracy** (PR CO)
   — closes every SESSION 070 V2-QA punch-list item.
   SESSION 070's manual walk found the v2 interaction

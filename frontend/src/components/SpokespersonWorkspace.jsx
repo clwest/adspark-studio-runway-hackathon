@@ -463,25 +463,47 @@ export default function SpokespersonWorkspace() {
       {activeTab === 'identity' && (
         <section
           data-testid="spokesperson-workspace-identity"
-          className="rounded-2xl ring-1 ring-zinc-800 bg-zinc-950/40 p-3"
+          className="space-y-3"
         >
-          <p className="text-[10px] text-zinc-500 leading-snug px-1 pb-2">
-            Identity — portrait + voice clone + Runway avatar binding.
-            PR CC embeds the existing card-level affordances; PR CD
-            splits this into a dedicated IdentityPanel + VoicePanel.
-          </p>
-          <CharacterCard
+          <div className="rounded-2xl ring-1 ring-zinc-800 bg-zinc-950/40 p-3">
+            {/* PR CP — clarify the two distinct identity concepts so
+                operators don't confuse "portrait" (still image,
+                gen4_image_turbo, drives the tile face + the avatar's
+                referenceImage) with "Runway avatar" (talking-head
+                identity created via /v1/avatars, drives lip-sync ads
+                + realtime conversations). */}
+            <p className="text-[10px] text-zinc-500 leading-snug px-1 pb-2">
+              <span className="text-zinc-300 font-semibold">Identity.</span>{' '}
+              <span className="text-zinc-300 font-medium">Portrait image</span>{' '}
+              = the still face used everywhere (tile + avatar reference).{' '}
+              <span className="text-zinc-300 font-medium">Runway avatar</span>{' '}
+              = the talking/lip-sync identity that drives Spokesperson Ads
+              and realtime conversations.
+            </p>
+            <CharacterCard
+              character={character}
+              busyAction={busyAction}
+              isActive={true}
+              onSetActive={null}
+              onGeneratePortrait={handleGeneratePortrait}
+              onCreateAvatar={handleCreateAvatar}
+              onDelete={handleDelete}
+              onCloneVoice={handleCloneVoice}
+              onApplyVoiceToAvatar={handleApplyVoiceToAvatar}
+              onRefreshAvatarVoice={handleRefreshAvatarVoice}
+              onRefreshVoicePreview={handleRefreshVoicePreview}
+            />
+          </div>
+
+          {/* PR CP — Danger zone. Explicit visible delete affordance
+              the workspace lacked before. The legacy CharacterCard
+              footer still carries a tiny `delete` link for /legacy
+              parity; this section is the discoverable v2 path. */}
+          <DangerZone
             character={character}
-            busyAction={busyAction}
-            isActive={true}
-            onSetActive={null}
-            onGeneratePortrait={handleGeneratePortrait}
-            onCreateAvatar={handleCreateAvatar}
+            busy={busyAction === 'delete'}
             onDelete={handleDelete}
-            onCloneVoice={handleCloneVoice}
-            onApplyVoiceToAvatar={handleApplyVoiceToAvatar}
-            onRefreshAvatarVoice={handleRefreshAvatarVoice}
-            onRefreshVoicePreview={handleRefreshVoicePreview}
+            linkedCampaignCount={linkedCampaigns.length}
           />
         </section>
       )}
@@ -602,6 +624,137 @@ export default function SpokespersonWorkspace() {
         </p>
       )}
     </main>
+  )
+}
+
+/**
+ * PR CP — Danger zone. Explicit, discoverable delete affordance
+ * the workspace lacked before (the legacy CharacterCard footer
+ * carries a tiny 9px `delete` link that QA called out as
+ * un-discoverable in SESSION 070).
+ *
+ * The two-step UX:
+ *   - first click reveals the typed-name confirmation field +
+ *     the destructive button
+ *   - operator must type the spokesperson's name exactly, then
+ *     press Delete — guards against accidental clicks
+ *   - Cancel collapses the zone back
+ *
+ * Behaviour:
+ *   - Delegates the actual API call to `onDelete(character)`
+ *     (`SpokespersonWorkspace.handleDelete`) — same plumbing the
+ *     legacy footer already uses, so the navigation + error
+ *     surfaces stay identical.
+ *   - The window.confirm() prompt inside `handleDelete` is kept
+ *     as a final no-net safety check; this UI is the discoverable
+ *     guard.
+ */
+function DangerZone({ character, busy, onDelete, linkedCampaignCount }) {
+  const [armed, setArmed] = useState(false)
+  const [typed, setTyped] = useState('')
+  const expected = (character?.name || '').trim()
+  const matchOk = typed.trim() === expected && expected.length > 0
+
+  const handleArm = () => {
+    setArmed(true)
+    setTyped('')
+  }
+
+  const handleCancel = () => {
+    setArmed(false)
+    setTyped('')
+  }
+
+  const handleConfirm = () => {
+    if (!matchOk || busy) return
+    onDelete?.(character)
+  }
+
+  return (
+    <section
+      data-testid="spokesperson-workspace-danger-zone"
+      className="rounded-2xl ring-1 ring-rose-900/60 bg-rose-950/20 p-3 space-y-2"
+    >
+      <header className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="space-y-0.5">
+          <h2 className="text-xs font-semibold text-rose-200">
+            Danger zone
+          </h2>
+          <p className="text-[10px] text-rose-300/70 leading-snug">
+            Delete this spokesperson record. Linked campaigns
+            stay in place but become unlinked (orphaned) — you
+            can re-link them via a fresh spokesperson with the
+            same name. Generated portraits / avatars / voice
+            clones on Runway are{' '}
+            <span className="font-semibold text-rose-200">not</span>{' '}
+            removed by this action — clean those up via the
+            Runway dashboard if needed.
+          </p>
+        </div>
+        {!armed && (
+          <button
+            type="button"
+            data-testid="spokesperson-workspace-delete"
+            onClick={handleArm}
+            disabled={busy}
+            className="text-[11px] font-mono rounded-md ring-1 ring-rose-400/40 bg-rose-500/15 hover:bg-rose-500/30 text-rose-100 px-3 py-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Delete this spokesperson"
+          >
+            Delete spokesperson
+          </button>
+        )}
+      </header>
+      {armed && (
+        <div
+          data-testid="spokesperson-workspace-delete-confirm"
+          className="space-y-2 pt-1"
+        >
+          <p className="text-[10px] text-rose-200 leading-snug">
+            Type{' '}
+            <span className="font-mono font-semibold">{expected}</span>{' '}
+            to confirm.{' '}
+            {linkedCampaignCount > 0 && (
+              <span className="text-rose-300">
+                ({linkedCampaignCount} linked campaign
+                {linkedCampaignCount === 1 ? '' : 's'} will be
+                unlinked.)
+              </span>
+            )}
+          </p>
+          <input
+            type="text"
+            data-testid="spokesperson-workspace-delete-name-input"
+            value={typed}
+            onChange={(e) => setTyped(e.target.value)}
+            placeholder={expected}
+            autoFocus
+            disabled={busy}
+            className="w-full rounded-md ring-1 ring-rose-700 bg-zinc-900 text-rose-100 text-xs px-2 py-1.5 font-mono placeholder:text-rose-300/40 focus:outline-none focus:ring-rose-400 disabled:opacity-60"
+          />
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              data-testid="spokesperson-workspace-delete-confirm-button"
+              onClick={handleConfirm}
+              disabled={!matchOk || busy}
+              data-armed={matchOk ? 'true' : 'false'}
+              className="text-[11px] font-mono rounded-md ring-1 ring-rose-400/60 bg-rose-500/30 hover:bg-rose-500/55 text-rose-50 px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {busy ? 'Deleting…' : 'Delete'}
+            </button>
+            <button
+              type="button"
+              data-testid="spokesperson-workspace-delete-cancel"
+              onClick={handleCancel}
+              disabled={busy}
+              className="text-[11px] rounded-md ring-1 ring-zinc-700 bg-zinc-800/60 hover:bg-zinc-700 text-zinc-300 px-3 py-1.5 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </section>
   )
 }
 

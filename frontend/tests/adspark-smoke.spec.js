@@ -1239,6 +1239,44 @@ test('AdSpark Studio Spokesperson Library @ /', async ({ page }) => {
       page.getByTestId('spokesperson-workspace-identity'),
     ).toBeVisible()
 
+    // PR CP — Danger zone exists in the Identity tab with a
+    // discoverable Delete button. Two-step confirmation: click
+    // armed-state Delete → typed-name input + confirm button
+    // appears; confirm starts disabled until the typed name
+    // matches; cancel collapses the zone. We never actually
+    // delete the canonical Brewster Bolt fixture — the smoke
+    // walks the UI states only.
+    const dangerZone = page.getByTestId(
+      'spokesperson-workspace-danger-zone',
+    )
+    await expect(dangerZone).toBeVisible()
+    const deleteBtn = page.getByTestId('spokesperson-workspace-delete')
+    await expect(deleteBtn).toBeVisible()
+    await deleteBtn.click()
+    await expect(
+      page.getByTestId('spokesperson-workspace-delete-confirm'),
+    ).toBeVisible()
+    const confirmBtn = page.getByTestId(
+      'spokesperson-workspace-delete-confirm-button',
+    )
+    await expect(confirmBtn).toBeVisible()
+    await expect(confirmBtn).toHaveAttribute('data-armed', 'false')
+    await expect(confirmBtn).toBeDisabled()
+    await page
+      .getByTestId('spokesperson-workspace-delete-name-input')
+      .fill('something else entirely')
+    await expect(confirmBtn).toHaveAttribute('data-armed', 'false')
+    // Cancel collapses without deleting.
+    await page
+      .getByTestId('spokesperson-workspace-delete-cancel')
+      .click()
+    await expect(
+      page.getByTestId('spokesperson-workspace-delete-confirm'),
+    ).toHaveCount(0)
+    await expect(
+      page.getByTestId('spokesperson-workspace-delete'),
+    ).toBeVisible()
+
     // PR CC — Knowledge / Conversations render <TabComingSoon>
     // placeholders. Campaigns moved to its own block below
     // since PR CE replaced the placeholder with the real
