@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 
 import AppShell from './components/AppShell.jsx'
+import SpokespersonWorkspace from './components/SpokespersonWorkspace.jsx'
 import LegacyApp from './LegacyApp.jsx'
 import Library from './Library.jsx'
 
@@ -37,6 +38,11 @@ export default function App() {
       <Routes>
         <Route path="/" element={<AppShell />}>
           <Route index element={<Library />} />
+          {/* PR CC — dedicated workspace per spokesperson. */}
+          <Route
+            path="spokespeople/:id"
+            element={<SpokespersonWorkspace />}
+          />
           <Route path="legacy" element={<LegacyApp />} />
           <Route path="legacy/*" element={<LegacyApp />} />
           <Route path="*" element={<Navigate to="/" replace />} />

@@ -1442,6 +1442,92 @@ test('AdSpark Studio Spokesperson Library @ /', async ({ page }) => {
   )
   expect(cleared).toBeNull()
 
+  // PR CC — Library tile primary action ("Open Spokesperson →")
+  // navigates to the dedicated /spokespeople/:id workspace.
+  // Resilient to fixture state: if the library is empty
+  // (no characters in characters.json) the test skips this
+  // section. Otherwise the first tile's open link is exercised.
+  const allCards = page.getByTestId('spokesperson-card')
+  const cardTotal = await allCards.count()
+  if (cardTotal > 0) {
+    const firstCard = allCards.first()
+    const cardId = await firstCard.getAttribute('data-spokesperson-id')
+    expect(cardId).toBeTruthy()
+    const openLink = firstCard.getByTestId('spokesperson-summary-open')
+    await expect(openLink).toBeVisible()
+    await openLink.click()
+    await expect(page).toHaveURL(
+      new RegExp(`/spokespeople/${cardId}$`),
+    )
+
+    // Workspace shell mounts: header + 5-tab nav.
+    const workspace = page.getByTestId('spokesperson-workspace')
+    await expect(workspace).toBeVisible()
+    await expect(workspace).toHaveAttribute('data-spokesperson-id', cardId)
+    await expect(workspace).toHaveAttribute('data-active-tab', 'identity')
+    await expect(
+      page.getByTestId('spokesperson-workspace-header'),
+    ).toBeVisible()
+    await expect(
+      page.getByTestId('spokesperson-workspace-name'),
+    ).toBeVisible()
+    await expect(
+      page.getByTestId('spokesperson-workspace-back-link'),
+    ).toBeVisible()
+    await expect(
+      page.getByTestId('spokesperson-workspace-new-campaign'),
+    ).toBeVisible()
+    await expect(
+      page.getByTestId('spokesperson-workspace-tabs'),
+    ).toBeVisible()
+    await expect(
+      page.getByTestId('spokesperson-workspace-avatar-pill'),
+    ).toBeVisible()
+    await expect(
+      page.getByTestId('spokesperson-workspace-voice-pill'),
+    ).toBeVisible()
+
+    // Identity tab is the default + fully implemented (embeds
+    // CharacterCard).
+    await expect(
+      page.getByTestId('spokesperson-workspace-tab-identity'),
+    ).toHaveAttribute('data-active', 'true')
+    await expect(
+      page.getByTestId('spokesperson-workspace-identity'),
+    ).toBeVisible()
+
+    // Each placeholder tab mounts its own coming-soon panel
+    // when clicked. Round-trip through all four.
+    for (const placeholder of [
+      'knowledge',
+      'campaigns',
+      'conversations',
+      'outputs',
+    ]) {
+      await page
+        .getByTestId(`spokesperson-workspace-tab-${placeholder}`)
+        .click()
+      await expect(workspace).toHaveAttribute(
+        'data-active-tab',
+        placeholder,
+      )
+      await expect(
+        page.getByTestId(`spokesperson-workspace-${placeholder}`),
+      ).toBeVisible()
+    }
+
+    // PR CC — unknown id falls back to the not-found state with
+    // a "Back to Library" CTA.
+    await page.goto('/spokespeople/this-id-does-not-exist')
+    await expect(
+      page.getByTestId('spokesperson-workspace-not-found'),
+    ).toBeVisible()
+    await expect(
+      page.getByTestId('spokesperson-workspace-back-cta'),
+    ).toBeVisible()
+    await page.goto('/')
+  }
+
   // Console / page errors stay clean on the v2 path too.
   const realConsoleErrors = consoleErrors.filter(
     (t) => !IGNORED_CONSOLE_ERRORS.some((rx) => rx.test(t)),

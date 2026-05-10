@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 
 import CharacterCard from './CharacterCard.jsx'
 import { formatHistoryTimestamp } from '../uiHelpers.js'
@@ -377,6 +378,19 @@ export default function SpokespersonCard({
             {knowledge.outputCount} outputs
           </span>
         )}
+        {/* PR CC — primary tile action: open the dedicated
+            workspace at /spokespeople/:id. The in-tile tab strip
+            below stays available for quick portrait / voice
+            edits without leaving the library; the workspace is
+            for focused identity / knowledge / campaigns work. */}
+        <Link
+          to={`/spokespeople/${encodeURIComponent(c.id)}`}
+          data-testid="spokesperson-summary-open"
+          title="Open this spokesperson’s dedicated workspace."
+          className="ml-auto text-[9px] rounded-full bg-pink-500/20 hover:bg-pink-500/35 text-pink-200 ring-1 ring-pink-400/40 px-2 py-0.5 font-mono transition-colors"
+        >
+          Open Spokesperson →
+        </Link>
       </div>
 
       {/* Tab strip — three lanes, Identity is selected by default. */}
