@@ -1,8 +1,34 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after **PR DG — Separate context-kit From
-Character OS Runtime/Product Copy**. Full repo audit + classification
+context-kit refresh after **PR DH — Direct-a-Scene Dialogue Lane**.
+UX-only slice on `frontend/src/components/lanes/DialogueLane.jsx`.
+The lane mental model went from "fill a form, click procedural
+buttons" to "pick cast → write scene → render each actor → stitch
+the final scene". New `<CastPicker>` (interactive 8-card grid for
+Step 2) replaces the read-only inferred-cast list; new
+`<ScriptPreview>` (screenplay-style ordered preview) lands in Step 3
+above the lines editor so the operator can read the scene before
+burning a Runway credit per Render Line click. Procedural labels
+renamed throughout — "Plan Dialogue Lines" → "Create Scene Lines",
+"Stitch Dialogue Scene" → "Stitch Final Scene", "Build Captioned
+Reels" → "Export Captioned Reel", "Generate line" → "Render Line".
+Inline ⚠ 1 credit chip next to each Render Line button (was only in
+hover tooltip). Hackathon demo preset renamed to "Hackathon Office
+Scene" with refreshed copy; Miles line aligned to the PR DH spec
+("The result is Character OS: persistent AI spokespeople..."). Lane
+header subtitle rewrote to lead with "Pick a cast, write the
+scene..." Backend untouched — `dialogue_service._DEFAULT_LINE_COUNT`
+stays 3 (Hook/Beat/Closer); the PR DH brief's optional 4th Donny
+closer line preserved as an inline file comment for a future
+follow-up. Vite build 531.51 KB initial / 143.30 KB gzip (+4.07 KB /
++1.24 KB from the two new components). Mock smoke **3/3 passed**.
+Backend pytest 36/36. Backend route count still **76**. Zero Runway
+calls fired. Donny's `d00dc42fe5cb` self-demo campaign state (PR DG
+brief + commercial_script + PR DF doc id `47de9efd-...`) preserved
+through the mock-smoke cycle.
+Earlier: PR DG — Separate context-kit From Character OS
+Runtime/Product Copy. Full repo audit + classification
 of every context-kit mention across backend, frontend, scripts, and
 docs (89 files surfaced; 80+ preserved as build-tooling /
 historical-record). Three customer-facing surfaces were rewritten:

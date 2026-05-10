@@ -1,6 +1,68 @@
 # START NEXT SESSION — AdSpark Studio
 
-**Last touched:** 2026-05-10 (PR DG — Separate
+**Last touched:** 2026-05-10 (PR DH — Make Dialogue
+Scene lane feel like directing a scene. UX-focused
+slice; zero backend changes; only
+`frontend/src/components/lanes/DialogueLane.jsx`
+modified. Lane mental model rewired from "fill a form,
+click procedural buttons" to "pick cast → write scene
+→ render each actor → stitch". Step 2 (CAST) was a
+read-only list inferred from saved lines — replaced
+with new `<CastPicker>` component showing up to 8
+spokesperson cards (thumbnail + name + role + status
+pill) selectable with a pink ring, disabled with a
+plain-English reason when the character has no ready
+avatar. Local React state seeds from inferredCastIds
+(characters already in saved lines) so existing
+scenes "just work" without re-picking. Selection
+toggles via card click; resets on focused-campaign
+change via useEffect. New `<ScriptPreview>` component
+renders saved lines as a screenplay-style ordered
+script (SPEAKER · "line text" · ✓ rendered when
+complete) above the lines editor in Step 3, so the
+operator can read the scene before clicking Render
+Line. Procedural labels renamed throughout: "Plan
+Dialogue Lines" → **Create Scene Lines**, "Re-plan"
+→ **Reset scene lines**, "Stitch Dialogue Scene" →
+**Stitch Final Scene**, "Build Captioned Reels" →
+**Export Captioned Reel**, "Generate line" → **Render
+Line** / **Re-render Line**, "download dialogue scene"
+→ **download final scene**, "download captioned
+reels" → **download captioned reel**. Disabled-reason
+copy rewritten in the brief's voice: stitch shows
+*"Render each line first, then stitch the final scene
+locally with ffmpeg (N/3 rendered)"*; reels shows
+*"Stitch the final scene first."* Per-line render
+button gained an inline ⚠ 1 credit chip next to it
+(was only in hover tooltip) so the credit cost is
+visible without hovering. Hackathon demo preset
+renamed to **Hackathon Office Scene** with refreshed
+banner copy explaining the 3-line constraint
+explicitly. Miles line updated to PR DH spec: "The
+result is Character OS: persistent AI spokespeople
+that learn the brand, create campaigns, and show up
+again." Lane header subtitle rewrote from
+"Build a Hook / Beat / Closer skit..." to *"Pick a
+cast, write the scene as a Hook → Beat → Closer skit,
+render each actor's line, then stitch the final
+scene. Each rendered line burns one Runway credit;
+stitching and captioned reels are local ffmpeg
+only."* Backend constraint not changed: still 3 lines
+per scene (`dialogue_service._DEFAULT_LINE_COUNT=3`,
+Hook/Beat/Closer); brief's 4th Donny closer line
+("So yes, we are the demo. And apparently also the
+dev team.") preserved as an inline comment in the
+file for a future 4-slot follow-up — would require
+backend change so out of scope today. Vite build
+clean (531.51 KB initial / 143.30 KB gzip, +4.07 KB /
++1.24 KB vs PR DG baseline from the two new
+components). Pytest 36/36 (unchanged — frontend-only
+PR). Mock smoke **3/3**. Drift OK, hygiene clean.
+Backend route count still **76**. No real Runway
+calls fired. Donny's `d00dc42fe5cb` self-demo
+campaign state (PR DG brief + script + PR DF doc
+`47de9efd-...`) preserved through mock-smoke cycle.
+Earlier: PR DG — Separate
 context-kit from Character OS runtime/product copy.
 Full repo audit + classification of every
 context-kit-shaped mention across backend, frontend,

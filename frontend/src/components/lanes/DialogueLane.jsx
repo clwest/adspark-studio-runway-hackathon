@@ -60,18 +60,36 @@ export default function DialogueLane({
     ? focused.dialogue_lines
     : []
   const lineCount = lines.length
-  // Cast = unique character_id / character_name pairs across
-  // dialogue lines. Falls back to the line's avatar_id when no
-  // character_id is set.
-  const castMap = new Map()
-  for (const ln of lines) {
-    const key =
-      ln.character_id || ln.avatar_id || `line-${ln.id || lines.indexOf(ln)}`
-    if (!castMap.has(key)) {
-      castMap.set(key, ln.character_name || 'Unnamed cast member')
-    }
+
+  // PR DH — inferred cast = character_ids already used by saved
+  // lines. Used to (a) auto-seed the cast picker so existing scenes
+  // show their speakers as already selected, and (b) badge cards as
+  // "in scene" even when the operator hasn't manually picked them.
+  const inferredCastIds = Array.from(
+    new Set(
+      lines
+        .map((ln) => ln.character_id)
+        .filter((id) => id),
+    ),
+  )
+
+  // Selected cast — local UI state. Initial value seeds from
+  // inferredCastIds so existing scenes "just work" without forcing a
+  // re-pick. Operator can toggle cards to add/remove. State resets
+  // when the focused campaign changes (different scene = different
+  // cast).
+  const [selectedCastIds, setSelectedCastIds] = useState(inferredCastIds)
+  useEffect(() => {
+    setSelectedCastIds(inferredCastIds)
+    // Intentionally tied to the focused campaign id so the picker
+    // re-syncs to the new scene's inferred cast on campaign switch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focused?.id])
+  const toggleCast = (cid) => {
+    setSelectedCastIds((cur) =>
+      cur.includes(cid) ? cur.filter((x) => x !== cid) : [...cur, cid],
+    )
   }
-  const castMembers = Array.from(castMap.values())
 
   // PR BP — three-button gating + state.
   //
@@ -85,14 +103,14 @@ export default function DialogueLane({
     onPlanDialogue && hasCampaign && !planBusy,
   )
   const planLabel = planBusy
-    ? 'Planning Dialogue Lines…'
+    ? 'Creating scene lines…'
     : planAlready
-    ? 'Re-plan Dialogue Lines'
-    : 'Plan Dialogue Lines'
+    ? 'Reset scene lines'
+    : 'Create Scene Lines'
   const planDisabledReason = !hasCampaign
     ? 'Pick a linked campaign first.'
     : !onPlanDialogue
-    ? 'Wire the v2 onPlanDialogue handler before this button can fire.'
+    ? 'Wire the v2 onPlanDialogue handler before this can fire.'
     : ''
   const handlePlanLines = async () => {
     if (!planCanFire) return
@@ -123,18 +141,18 @@ export default function DialogueLane({
     onStitchDialogue && hasCampaign && stitchAllReady && !stitchBusy,
   )
   const stitchLabel = stitchBusy
-    ? 'Stitching Dialogue Scene…'
+    ? 'Stitching final scene…'
     : stitchCached
-    ? 'Restitch Dialogue Scene'
-    : 'Stitch Dialogue Scene'
+    ? 'Re-stitch Final Scene'
+    : 'Stitch Final Scene'
   const stitchDisabledReason = !hasCampaign
     ? 'Pick a linked campaign first.'
     : lineCount === 0
-    ? 'Plan dialogue lines first.'
+    ? 'Create scene lines first.'
     : !stitchAllReady
-    ? `${lines.filter((l) => l.status === 'ok').length}/${lineCount} lines ready — click Generate per line below to render the rest before stitching.`
+    ? `Render each line first, then stitch the final scene locally with ffmpeg (${lines.filter((l) => l.status === 'ok').length}/${lineCount} lines rendered).`
     : !onStitchDialogue
-    ? 'Wire the v2 onStitchDialogue handler before this button can fire.'
+    ? 'Wire the v2 onStitchDialogue handler before this can fire.'
     : ''
   const handleStitchScene = async () => {
     if (!stitchCanFire) return
@@ -163,16 +181,16 @@ export default function DialogueLane({
     onBuildDialogueReels && hasCampaign && stitchCached && !reelsBusy,
   )
   const reelsLabel = reelsBusy
-    ? 'Building Captioned Reels…'
+    ? 'Exporting captioned reel…'
     : reelsCached
-    ? 'Rebuild Captioned Reels'
-    : 'Build Captioned Reels'
+    ? 'Re-export Captioned Reel'
+    : 'Export Captioned Reel'
   const reelsDisabledReason = !hasCampaign
     ? 'Pick a linked campaign first.'
     : !stitchCached
-    ? 'Stitch the dialogue scene first.'
+    ? 'Stitch the final scene first.'
     : !onBuildDialogueReels
-    ? 'Wire the v2 onBuildDialogueReels handler before this button can fire.'
+    ? 'Wire the v2 onBuildDialogueReels handler before this can fire.'
     : ''
   const handleBuildReels = async () => {
     if (!reelsCanFire) return
@@ -197,13 +215,13 @@ export default function DialogueLane({
         <div className="space-y-0.5">
           <h4 className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
             <span aria-hidden="true">🎭</span>
-            Plan a dialogue scene
+            Direct a dialogue scene
           </h4>
           <p className="text-[11px] text-zinc-400 leading-snug max-w-prose">
-            Build a Hook / Beat / Closer skit across multiple
-            spokespeople. Plan, edit lines, render each line, and
-            stitch the scene — all inline. Real Runway credits per
-            line; ffmpeg-only stitch + reels.
+            Pick a cast, write the scene as a Hook → Beat → Closer
+            skit, render each actor's line, then stitch the final
+            scene. Each rendered line burns one Runway credit;
+            stitching and captioned reels are local ffmpeg only.
           </p>
         </div>
         {hasSpokesperson && (
@@ -256,72 +274,42 @@ export default function DialogueLane({
           )}
         </div>
 
-        {/* Step 2 — Cast */}
+        {/* Step 2 — Cast (PR DH: interactive picker) */}
         <div
           data-testid="dialogue-lane-step-cast"
-          className="rounded-lg ring-1 ring-zinc-800 bg-zinc-950/50 p-2.5 space-y-1"
+          className="rounded-lg ring-1 ring-zinc-800 bg-zinc-950/50 p-2.5 space-y-1.5"
         >
           <span className="text-[10px] uppercase tracking-wide text-zinc-500 font-mono">
             Step 2 · Cast
           </span>
-          {castMembers.length > 0 ? (
-            <>
-              <div className="text-[11px] text-zinc-300 leading-snug">
-                {castMembers.length}{' '}
-                {castMembers.length === 1 ? 'speaker' : 'speakers'}
-              </div>
-              <ul
-                className="space-y-0.5 max-h-[5rem] overflow-y-auto pr-1"
-                data-testid="dialogue-lane-cast-list"
-              >
-                {castMembers.slice(0, 6).map((name, idx) => (
-                  <li
-                    key={`${name}-${idx}`}
-                    className="text-[10px] text-zinc-400 font-mono truncate"
-                    title={name}
-                  >
-                    {name}
-                  </li>
-                ))}
-                {castMembers.length > 6 && (
-                  <li className="text-[10px] text-zinc-600 font-mono">
-                    +{castMembers.length - 6} more
-                  </li>
-                )}
-              </ul>
-              <p className="text-[10px] text-zinc-500 leading-snug pt-1">
-                Cast is inferred from the saved dialogue lines.
-                Edit each line's speaker + text in Step 3 below.
-              </p>
-            </>
+          {hasCampaign ? (
+            <CastPicker
+              availableCharacters={availableCharacters}
+              selectedCastIds={selectedCastIds}
+              onToggleCast={toggleCast}
+              inferredCastIds={inferredCastIds}
+            />
           ) : (
-            <>
-              <p className="text-[11px] text-zinc-400 leading-snug">
-                {hasCampaign
-                  ? 'No dialogue lines planned on this campaign yet.'
-                  : 'Pick a campaign to plan its dialogue.'}
-              </p>
-              <p className="text-[10px] text-zinc-500 leading-snug">
-                Click Plan Dialogue Lines below to seed a Hook / Beat
-                / Closer structure — speakers will surface here
-                automatically once the plan saves.
-              </p>
-            </>
+            <p className="text-[11px] text-zinc-400 leading-snug">
+              Pick or create a campaign in Step 1 — then cast 2-3
+              spokespeople for the scene.
+            </p>
           )}
         </div>
 
-        {/* Step 3 — Lines & Stitch */}
+        {/* Step 3 — Scene Lines (PR DH rename: was "Lines & Stitch") */}
         <div
           data-testid="dialogue-lane-step-lines"
           className="rounded-lg ring-1 ring-zinc-800 bg-zinc-950/50 p-2.5 space-y-1.5"
         >
           <div className="flex items-center justify-between gap-1">
             <span className="text-[10px] uppercase tracking-wide text-zinc-500 font-mono">
-              Step 3 · Lines & Stitch
+              Step 3 · Scene Lines & Render
             </span>
             {lineCount > 0 && (
               <span className="text-[9px] text-zinc-600 font-mono">
-                {lineCount} {lineCount === 1 ? 'line' : 'lines'}
+                {lineCount} {lineCount === 1 ? 'line' : 'lines'} ·{' '}
+                {lines.filter((l) => l.status === 'ok').length} rendered
               </span>
             )}
           </div>
@@ -381,6 +369,14 @@ export default function DialogueLane({
                   lines={lines}
                   availableCharacters={availableCharacters}
                   onSaveDialogueLine={onSaveDialogueLine}
+                />
+                {/* PR DH — script preview lets the operator read the
+                    full ordered scene before clicking Render Line.
+                    Shows speaker + text + rendered checkmark per
+                    line. No state of its own; reads from props. */}
+                <ScriptPreview
+                  lines={lines}
+                  availableCharacters={availableCharacters}
                 />
                 <DialogueLinesEditor
                   campaignId={focused?.id}
@@ -458,7 +454,7 @@ export default function DialogueLane({
               </span>
               <span className="text-[9px] text-zinc-200/70">
                 {reelsBusy
-                  ? 'building…'
+                  ? 'exporting…'
                   : reelsCached
                   ? 'cached'
                   : stitchCached
@@ -502,9 +498,9 @@ export default function DialogueLane({
               data-testid="dialogue-lane-status"
               className="text-[10px] text-zinc-500 leading-snug"
             >
-              {planBusy && 'posting to /dialogue/plan…'}
-              {stitchBusy && 'posting to /dialogue/stitch…'}
-              {reelsBusy && 'posting to /dialogue-scene/reels…'}
+              {planBusy && 'creating scene lines…'}
+              {stitchBusy && 'stitching final scene…'}
+              {reelsBusy && 'exporting captioned reel…'}
             </p>
           )}
           {!planBusy && !stitchBusy && !reelsBusy && stitchFailed && (
@@ -534,7 +530,7 @@ export default function DialogueLane({
               data-testid="dialogue-lane-stitch-link"
               className="text-[10px] text-spark hover:underline font-mono"
             >
-              download dialogue scene ↗
+              download final scene ↗
             </a>
           )}
           {reelsCached && !reelsBusy && (
@@ -546,7 +542,7 @@ export default function DialogueLane({
               data-testid="dialogue-lane-reels-link"
               className="text-[10px] text-spark hover:underline font-mono"
             >
-              download captioned reels ↗
+              download captioned reel ↗
             </a>
           )}
           {focused?.realtime_transcript_fetched_at && (
@@ -584,6 +580,242 @@ function formatTouchedOrDash(iso) {
   return formatHistoryTimestamp(iso) || '—'
 }
 
+
+/**
+ * PR DH — Interactive cast picker for Step 2.
+ *
+ * Replaces the PR BL read-only "cast inferred from saved lines"
+ * display with selectable character cards. Operator picks 2-3
+ * spokespeople for the scene before authoring lines.
+ *
+ * Scope: visual + intent-capture only. Selection is local UI state;
+ * it does not gate the speaker dropdowns in the lines editor (that
+ * stays open to any ready character so already-saved scenes don't
+ * break). The picker pre-selects characters who already appear in
+ * saved lines so the existing-scene case "just works".
+ *
+ * Each card shows thumbnail / name / role/template / avatar status.
+ * Cards for characters without a ready avatar are disabled with an
+ * inline reason — they cannot be cast in a real-mode dialogue scene
+ * because `/dialogue/generate-line` 409s without a ready avatar.
+ */
+function CastPicker({
+  availableCharacters = [],
+  selectedCastIds = [],
+  onToggleCast,
+  inferredCastIds = [],
+}) {
+  const chars = Array.isArray(availableCharacters) ? availableCharacters : []
+  // Show up to 8 characters, ready-first. A scene needs >= 2 speakers
+  // to feel like a scene; the brief says 2-3 is the sweet spot.
+  const sorted = [...chars].sort((a, b) => {
+    const ar =
+      a.runway_avatar_id && ['ready', 'mock'].includes(a.runway_avatar_status || '')
+        ? 0
+        : 1
+    const br =
+      b.runway_avatar_id && ['ready', 'mock'].includes(b.runway_avatar_status || '')
+        ? 0
+        : 1
+    if (ar !== br) return ar - br
+    return String(a.name || '').localeCompare(String(b.name || ''))
+  })
+  const visible = sorted.slice(0, 8)
+  const hiddenCount = Math.max(0, sorted.length - visible.length)
+
+  if (visible.length === 0) {
+    return (
+      <p className="text-[11px] text-zinc-500 leading-snug">
+        No spokespeople in the library yet. Create one from the
+        homepage and click <span className="font-mono">Create
+        Avatar</span> before casting a scene.
+      </p>
+    )
+  }
+
+  return (
+    <div className="space-y-1.5" data-testid="dialogue-lane-cast-picker">
+      <p className="text-[11px] text-zinc-300 leading-snug">
+        Choose the spokespeople who appear in this scene.
+      </p>
+      <ul
+        className="grid grid-cols-2 gap-1.5"
+        data-testid="dialogue-lane-cast-grid"
+      >
+        {visible.map((c) => {
+          const ready =
+            c.runway_avatar_id &&
+            ['ready', 'mock'].includes(c.runway_avatar_status || '')
+          const picked = selectedCastIds.includes(c.id)
+          const inferred = inferredCastIds.includes(c.id)
+          const role = String(c.template || '').replace(/_/g, ' ') || 'character'
+          const disabledReason = !ready
+            ? c.runway_avatar_status === 'processing'
+              ? 'Avatar processing — wait for it to flip to ready.'
+              : c.runway_avatar_status === 'failed'
+              ? 'Avatar create failed — retry from the workspace.'
+              : 'No Runway avatar yet — open the spokesperson and click Create Avatar.'
+            : ''
+          const cardCls = picked
+            ? 'ring-2 ring-pink-400 bg-pink-500/10'
+            : ready
+            ? 'ring-1 ring-zinc-700 bg-zinc-900/60 hover:ring-zinc-500'
+            : 'ring-1 ring-zinc-800 bg-zinc-950/50 opacity-60'
+          return (
+            <li
+              key={c.id}
+              data-testid="dialogue-lane-cast-card"
+              data-character-id={c.id}
+              data-picked={picked ? 'true' : 'false'}
+              data-ready={ready ? 'true' : 'false'}
+            >
+              <button
+                type="button"
+                onClick={() => ready && onToggleCast?.(c.id)}
+                disabled={!ready}
+                title={ready ? (picked ? 'Click to remove from scene cast' : 'Click to add to scene cast') : disabledReason}
+                className={`w-full text-left rounded p-1.5 transition-all flex items-center gap-1.5 ${cardCls} ${
+                  ready ? 'cursor-pointer' : 'cursor-not-allowed'
+                }`}
+              >
+                {c.portrait_url ? (
+                  <img
+                    src={c.portrait_url}
+                    alt=""
+                    className="h-8 w-8 rounded-full object-cover shrink-0"
+                  />
+                ) : (
+                  <span
+                    className="h-8 w-8 rounded-full bg-zinc-800 text-zinc-500 text-[10px] flex items-center justify-center shrink-0"
+                    aria-hidden="true"
+                  >
+                    {String(c.name || '?').slice(0, 1).toUpperCase()}
+                  </span>
+                )}
+                <span className="flex-1 min-w-0">
+                  <span className="block text-[11px] text-zinc-100 font-medium truncate">
+                    {c.name || 'Unnamed'}
+                  </span>
+                  <span className="block text-[9px] text-zinc-400 font-mono truncate">
+                    {role} · {c.runway_avatar_status || 'no avatar'}
+                  </span>
+                </span>
+                {picked && (
+                  <span
+                    aria-hidden="true"
+                    className="text-pink-300 text-xs shrink-0"
+                    title="Picked"
+                  >
+                    ✓
+                  </span>
+                )}
+                {!picked && inferred && ready && (
+                  <span
+                    aria-hidden="true"
+                    className="text-amber-400 text-[9px] font-mono shrink-0"
+                    title="Already appears in a saved line"
+                  >
+                    in scene
+                  </span>
+                )}
+              </button>
+              {!ready && (
+                <p className="text-[9px] text-amber-300/80 leading-snug pt-0.5 pl-1">
+                  {disabledReason}
+                </p>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+      {hiddenCount > 0 && (
+        <p className="text-[9px] text-zinc-600 font-mono">
+          +{hiddenCount} more in library (not shown — pick from the
+          first 8 above)
+        </p>
+      )}
+      <p className="text-[10px] text-zinc-500 leading-snug">
+        Picked: {selectedCastIds.length}.{' '}
+        {selectedCastIds.length < 2
+          ? 'A scene needs at least 2 speakers.'
+          : selectedCastIds.length > 3
+          ? 'A 3-speaker scene fits the office-style format best.'
+          : 'Open Step 3 to author lines for these speakers.'}
+      </p>
+    </div>
+  )
+}
+
+
+/**
+ * PR DH — Script preview block.
+ *
+ * Renders the saved dialogue lines as a screenplay-style script so
+ * the operator can read the scene before clicking Render Line. Each
+ * row shows SPEAKER (uppercased) + the line text in quotes. Empty
+ * rows render with a muted placeholder so the structure stays
+ * visible even before the demo preset has loaded.
+ */
+function ScriptPreview({ lines, availableCharacters }) {
+  if (!Array.isArray(lines) || lines.length === 0) return null
+  const charsById = new Map()
+  for (const c of availableCharacters || []) {
+    if (c?.id) charsById.set(c.id, c)
+  }
+  return (
+    <div
+      data-testid="dialogue-lane-script-preview"
+      className="rounded ring-1 ring-zinc-800 bg-zinc-950/40 px-2 py-1.5 space-y-1"
+    >
+      <span className="text-[9px] uppercase tracking-wide text-zinc-500 font-mono">
+        Script preview
+      </span>
+      <ol className="space-y-1">
+        {lines.map((ln, idx) => {
+          const speaker =
+            ln.character_name ||
+            charsById.get(ln.character_id)?.name ||
+            null
+          const speakerLabel = speaker
+            ? speaker.toUpperCase()
+            : `LINE ${idx + 1}`
+          const text = String(ln.text || '').trim()
+          const rendered = ln.status === 'ok'
+          return (
+            <li key={ln.id || idx} className="text-[10px] leading-snug">
+              <div className="flex items-baseline gap-2">
+                <span
+                  className={`font-mono font-semibold shrink-0 ${
+                    speaker ? 'text-pink-300' : 'text-zinc-600'
+                  }`}
+                  style={{ minWidth: '4.5rem' }}
+                >
+                  {speakerLabel}
+                </span>
+                <span
+                  className={`flex-1 italic ${
+                    text ? 'text-zinc-200' : 'text-zinc-600'
+                  }`}
+                >
+                  {text ? `"${text}"` : '(no line text yet)'}
+                </span>
+                {rendered && (
+                  <span
+                    className="text-emerald-400 text-[9px] font-mono shrink-0"
+                    title="Line rendered"
+                  >
+                    ✓ rendered
+                  </span>
+                )}
+              </div>
+            </li>
+          )
+        })}
+      </ol>
+    </div>
+  )
+}
+
 /**
  * PR DB — Hackathon demo preset. Surfaces the submission-video
  * copy for the "office montage" dialogue scene and auto-assigns
@@ -613,10 +845,17 @@ const HACKATHON_DEMO_LINES = [
     slot: 2,
     speaker: 'Miles',
     text:
-      'The result is a persistent AI spokesperson system: characters that ' +
-      'learn the brand, create campaigns, and show up again.',
+      'The result is Character OS: persistent AI spokespeople that learn ' +
+      'the brand, create campaigns, and show up again.',
   },
 ]
+
+// Backend constraint: dialogue_service._DEFAULT_LINE_COUNT = 3 with
+// labels Hook/Beat/Closer. The PR DH brief listed a fourth Donny
+// closer ("So yes, we are the demo. And apparently also the dev
+// team."); that line is unused at the UI layer until a follow-up PR
+// bumps the backend line count. Kept here as a reference comment so
+// the demo copy isn't lost.
 
 function findCharByName(chars, name) {
   const target = String(name || '').trim().toLowerCase()
@@ -672,14 +911,14 @@ function DialogueDemoPreset({
     onSaveDialogueLine && campaignId && allReady && planHasEnoughLines && !busy,
   )
   const label = busy
-    ? 'Loading demo lines…'
+    ? 'Loading Hackathon Office Scene…'
     : alreadyLoaded
-    ? 'Reload hackathon demo lines'
-    : 'Load hackathon demo lines'
+    ? 'Reload Hackathon Office Scene'
+    : 'Load Hackathon Office Scene'
   const disabledReason = !planHasEnoughLines
-    ? 'Plan dialogue lines first.'
+    ? 'Create scene lines first.'
     : !allReady
-    ? `Demo preset needs Donny / Riggs / Miles with ready avatars. Missing: ${speakerMatches
+    ? `Office Scene needs Donny / Riggs / Miles with ready avatars. Missing: ${speakerMatches
         .filter((s) => !s.ready)
         .map((s) => s.entry.speaker)
         .join(', ')}.`
@@ -733,10 +972,10 @@ function DialogueDemoPreset({
       className="rounded ring-1 ring-amber-400/30 bg-amber-500/[0.05] px-2 py-1.5 space-y-1"
     >
       <p className="text-[10px] text-amber-200 leading-snug">
-        <span className="font-semibold">Hackathon demo preset</span>{' '}
-        — populates the three planned lines with the submission-
-        video copy and auto-assigns Donny / Riggs / Miles. You
-        still click Generate per line to render.
+        <span className="font-semibold">Hackathon Office Scene</span>{' '}
+        — drops in the three-line office-style skit (Donny → Riggs →
+        Miles) and auto-assigns speakers. Backend caps a scene at 3
+        lines; rendering each line still burns one Runway credit.
       </p>
       <div className="flex items-center gap-2 flex-wrap">
         <button
@@ -1009,22 +1248,28 @@ function DialogueLineRow({
             !onGenerate
               ? 'Wire onGenerateDialogueLine before this can fire.'
               : dirty
-              ? 'Save edits before generating.'
+              ? 'Save edits before rendering.'
               : !line.character_id
               ? 'Pick + save a speaker first.'
               : !line.text
               ? 'Save a line of text first.'
               : generating
-              ? 'Generating…'
-              : '⚠️ POST /dialogue/generate-line — burns Runway credits per click (one avatar_videos task).'
+              ? 'Rendering…'
+              : '⚠️ POST /dialogue/generate-line — burns one Runway credit (one avatar_videos task).'
           }
         >
           {generating
-            ? 'Generating…'
+            ? 'Rendering…'
             : line.status === 'ok'
-            ? 'Re-render line'
-            : 'Generate line'}
+            ? 'Re-render Line'
+            : 'Render Line'}
         </button>
+        <span
+          className="text-[9px] text-rose-300/70 font-mono shrink-0"
+          title="One Runway avatar_videos task per click. ffmpeg stitch + captioned reel are free local ops."
+        >
+          ⚠ 1 credit
+        </span>
         {line.video_url && line.status === 'ok' && (
           <a
             href={line.video_url}
