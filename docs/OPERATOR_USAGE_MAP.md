@@ -1,7 +1,7 @@
 # AdSpark Studio — Operator Usage Map
 
 **Last updated:** 2026-05-09 (post `hackathon-submission-v13`,
-PR CC Spokesperson Workspace Shell + Identity Tab).
+PR CD Home Library Only).
 
 **Read order:** This is the top-to-bottom "how do I actually use
 this thing?" guide. New operators (humans or AI) should read
@@ -15,19 +15,16 @@ has six end-to-end demo paths with timings and credit estimates.
 
 The frontend now has two top-level routes:
 
-- **`/`** — Spokesperson Library. The default homepage. Mounts
-  `<SpokespersonStudio>` (PR BE through PR BU) inside the new
-  `<AppShell>` + `<TopBar>` shell. Sections 1–11 below describe
-  the working surfaces; on `/` they all live inside the
-  Library + lanes, **not** the legacy 4-stage wizard. PR CB
-  added the Library-level header (heading + tagline + 4-chip
-  stats row), the primary `+ Create Spokesperson` CTA (opens
-  a 4-field modal that reuses `POST /api/characters` + auto-
-  fires `POST /api/characters/{id}/generate-portrait`), and
-  per-tile summary chips (voice-state pill + linked-campaign
-  count + outputs count above each card's tab strip). PR CC
-  added an `Open Spokesperson →` primary action on each tile
-  that navigates to the new workspace.
+- **`/`** — Spokesperson Library. The default homepage. After
+  PR CD this is **library only**: a Heading + tagline + 4-chip
+  stats row + primary `+ Create Spokesperson` CTA + tiles +
+  per-tile `Open Spokesperson →` link. The campaign-creation
+  surfaces (`+ New Campaign`, mode pill, lane components,
+  `<CampaignModeModal>`) are suppressed via the new
+  `hideCampaignControls` prop on `<SpokespersonStudio>`.
+  Sections 1–11 below describe the working surfaces; for v2
+  they now live inside `/spokespeople/:id` (workspace) or
+  `/legacy` (the wizard's legacy fallback).
 - **`/spokespeople/:id`** — Spokesperson Workspace (PR CC).
   Dedicated focused page for one spokesperson. Header: back
   link, portrait, name, persona / avatar / voice status
@@ -37,9 +34,12 @@ The frontend now has two top-level routes:
   wired), **Knowledge** / **Campaigns** / **Conversations** /
   **Outputs** (placeholder tabs, "lands next"). Unknown id →
   friendly not-found state with a Back to Library CTA.
-  `+ New Campaign` mode select persists localStorage state +
-  navigates back to `/` where the Library lane mounts the
-  right surface immediately.
+  PR CD update: `+ New Campaign` mode select persists the
+  active mode + spokesperson to localStorage, then navigates
+  to `/legacy` (was `/` before PR CD stripped lanes off the
+  homepage). The legacy wizard remains the canonical
+  campaign-creation surface until lanes land inside the
+  workspace's Campaigns tab.
 - **`/legacy`** — Verbatim v1 four-stage wizard + saved-campaign
   gallery (frozen, PR A through PR AZ-era stack). Reachable via
   the top-bar **Legacy UI ↗** link. The 6 demo paths in section

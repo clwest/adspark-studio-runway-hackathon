@@ -966,13 +966,15 @@ test('AdSpark Studio Spokesperson Library @ /', async ({ page }) => {
     expect(/^\d+$/.test(String(count || ''))).toBeTruthy()
   }
   // PR CB — primary "+ Create Spokesperson" CTA must be on
-  // the homepage. PR BH's "+ New Campaign" stays alongside.
+  // the homepage. PR CD — the legacy global "+ New Campaign"
+  // button is now hidden on `/` (campaign creation lives
+  // inside the per-spokesperson workspace).
   const createBtn = studio.getByTestId('library-create-spokesperson')
   await expect(createBtn).toBeVisible()
   await expect(createBtn).toHaveText(/\+ Create Spokesperson/i)
   await expect(
     studio.getByTestId('spokesperson-new-campaign'),
-  ).toBeVisible()
+  ).toHaveCount(0)
   // PR CB — clicking opens CreateSpokespersonModal; closing
   // restores the homepage. We open + cancel without
   // submitting so the smoke never mutates fixture state.
@@ -1133,314 +1135,24 @@ test('AdSpark Studio Spokesperson Library @ /', async ({ page }) => {
     }
   }
 
-  // PR BH — Mode-first creation modal. The "+ New Campaign" button
-  // lives in the SpokespersonStudio header; clicking it opens the
-  // modal with 3 mode cards. Selecting Spokesperson Ad persists
-  // the mode + closes the modal + flips a "Selected mode" pill
-  // into the section.
-  const newCampaignButton = page.getByTestId('spokesperson-new-campaign')
-  await expect(newCampaignButton).toBeVisible()
-  await expect(newCampaignButton).toHaveText(/^\+ New Campaign$/)
-  // Pill must NOT exist yet — we cleared activeMode at the start of
-  // the v2 case + reloaded.
+  // PR CD — Home Library Only. Campaign-creation surfaces
+  // (global "+ New Campaign" button, selected-mode pill,
+  // CampaignModeModal, Spokesperson / Cinematic / Dialogue
+  // lane components) all live inside `/spokespeople/:id` now.
+  // None of them must render on `/`. The previous PR BH/BI/BK/
+  // BL/BN/BO/BP/BQ/BR/BS/BT/BU lane assertions are exercised
+  // via the legacy fallback path the workspace's mode modal
+  // hands off to (see /legacy smoke for the full lane stack).
+  await expect(
+    page.getByTestId('spokesperson-new-campaign'),
+  ).toHaveCount(0)
   await expect(
     page.getByTestId('spokesperson-active-mode'),
   ).toHaveCount(0)
-  await newCampaignButton.click()
-  // Modal renders with three labelled mode cards.
-  const modal = page.getByTestId('campaign-mode-modal')
-  await expect(modal).toBeVisible()
-  await expect(
-    modal.getByTestId('campaign-mode-card-cinematic'),
-  ).toContainText(/Cinematic Ad/i)
-  await expect(
-    modal.getByTestId('campaign-mode-card-spokesperson'),
-  ).toContainText(/Spokesperson Ad/i)
-  await expect(
-    modal.getByTestId('campaign-mode-card-dialogue'),
-  ).toContainText(/Dialogue Scene/i)
-  // Pick Spokesperson Ad → modal closes → pill appears with the
-  // matching mode label + (PR BI) the "Spokesperson Ad lane open."
-  // copy that signals the new lane is mounted below.
-  await modal.getByTestId('campaign-mode-card-spokesperson').click()
-  await expect(modal).toHaveCount(0)
-  const activeModePill = page.getByTestId('spokesperson-active-mode')
-  await expect(activeModePill).toBeVisible()
-  await expect(activeModePill).toHaveAttribute('data-mode', 'spokesperson')
-  await expect(activeModePill).toContainText(/Spokesperson Ad/i)
-  await expect(activeModePill).toContainText(/Spokesperson Ad lane open/i)
-
-  // PR BI — Spokesperson Ad lane scaffold. Mounts below the pill
-  // when activeMode === "spokesperson". Three step boxes render
-  // unconditionally (so the smoke can rely on the testids); the
-  // two render targets are disabled placeholders in this slice.
-  const lane = page.getByTestId('spokesperson-lane')
-  await expect(lane).toBeVisible()
-  await expect(lane).toHaveAttribute('data-mode', 'spokesperson')
-  await expect(lane).toContainText(/Spokesperson Ad lane/i)
-  await expect(lane.getByTestId('spokesperson-lane-step-brief')).toBeVisible()
-  await expect(lane.getByTestId('spokesperson-lane-step-script')).toBeVisible()
-  await expect(lane.getByTestId('spokesperson-lane-step-render')).toBeVisible()
-  // PR BQ — Step 1 renders LaneBriefEditor when a focused
-  // campaign exists, otherwise empty-state copy. Smoke's v2
-  // case never sets activeCharacterId so linkedCampaigns is
-  // empty → empty-state copy shows.
-  const spokesBriefStep = lane.getByTestId('spokesperson-lane-step-brief')
-  const spokesEditor = spokesBriefStep.getByTestId('lane-brief-editor')
-  const spokesEditorCount = await spokesEditor.count()
-  if (spokesEditorCount > 0) {
-    await expect(spokesEditor).toBeVisible()
-    await expect(
-      spokesBriefStep.getByTestId('lane-brief-business'),
-    ).toBeVisible()
-    await expect(
-      spokesBriefStep.getByTestId('lane-brief-save'),
-    ).toBeVisible()
-  } else {
-    await expect(spokesBriefStep).toContainText(
-      /Create or select a campaign to edit the brief/i,
-    )
-  }
-  // PR BP — both Spokesperson lane buttons are now wired with
-  // resilient gating disjunctions. Horizontal burns Runway
-  // credits; Reels is ffmpeg-only. Both honour
-  // data-source-ready / data-busy attrs.
-  const horizontalBtn = lane.getByTestId('spokesperson-lane-horizontal')
-  const reelsBtn = lane.getByTestId('spokesperson-lane-reels')
-  await expect(horizontalBtn).toBeVisible()
-  await expect(reelsBtn).toBeVisible()
-  await expect(horizontalBtn).toHaveAttribute('data-render-target', 'horizontal')
-  await expect(reelsBtn).toHaveAttribute('data-render-target', 'reels')
-  // Horizontal carries a credit-burn marker so future tooling
-  // can flag it specifically.
-  await expect(horizontalBtn).toHaveAttribute('data-burns-credits', 'true')
-  // Smoke's v2 case never sets activeCharacterId, so neither
-  // button has source-ready data. Both stay disabled with the
-  // correct attrs.
-  await expect(horizontalBtn).toHaveAttribute('data-source-ready', 'false')
-  await expect(horizontalBtn).toHaveAttribute('data-busy', 'false')
-  await expect(horizontalBtn).toBeDisabled()
-  // PR BN — disjunction: the button is enabled iff a campaign
-  // linked to the active spokesperson has a cached source MP4.
-  // Either branch is valid fixture state.
-  const sourceReady = await reelsBtn.getAttribute('data-source-ready')
-  expect(['true', 'false']).toContain(sourceReady)
-  if (sourceReady === 'true') {
-    await expect(reelsBtn).toBeEnabled()
-    await expect(reelsBtn).toHaveText(
-      /(Build|Rebuild) Captioned Reels/i,
-    )
-  } else {
-    await expect(reelsBtn).toBeDisabled()
-  }
-  // Initial busy attribute is "false" — no in-flight click yet.
-  await expect(reelsBtn).toHaveAttribute('data-busy', 'false')
-  // localStorage carries the persisted choice so a future session
-  // surfaces the same pill on first paint.
-  const persisted = await page.evaluate(() =>
-    window.localStorage.getItem('adspark.activeMode'),
-  )
-  expect(persisted).toBe('spokesperson')
-
-  // PR BK — re-open the modal and pick Cinematic Ad. The
-  // SpokespersonLane should unmount and the CinematicLane should
-  // mount in its place (at most one lane visible at a time).
-  await newCampaignButton.click()
-  const modalCinematic = page.getByTestId('campaign-mode-modal')
-  await expect(modalCinematic).toBeVisible()
-  await modalCinematic.getByTestId('campaign-mode-card-cinematic').click()
-  await expect(modalCinematic).toHaveCount(0)
-  await expect(activeModePill).toHaveAttribute('data-mode', 'cinematic')
-  await expect(activeModePill).toContainText(/Cinematic Ad/i)
-  await expect(activeModePill).toContainText(/Cinematic Ad lane open/i)
-  // Spokesperson lane must be gone now.
-  await expect(
-    page.getByTestId('spokesperson-lane'),
-  ).toHaveCount(0)
-  const cinematicLane = page.getByTestId('cinematic-lane')
-  await expect(cinematicLane).toBeVisible()
-  await expect(cinematicLane).toHaveAttribute('data-mode', 'cinematic')
-  await expect(cinematicLane).toContainText(/Cinematic Ad lane/i)
-  await expect(
-    cinematicLane.getByTestId('cinematic-lane-step-brief'),
-  ).toBeVisible()
-  await expect(
-    cinematicLane.getByTestId('cinematic-lane-step-visual'),
-  ).toBeVisible()
-  await expect(
-    cinematicLane.getByTestId('cinematic-lane-step-render'),
-  ).toBeVisible()
-  // PR BQ — Cinematic Step 1 LaneBriefEditor disjunction.
-  const cineBriefStep = cinematicLane.getByTestId('cinematic-lane-step-brief')
-  const cineEditor = cineBriefStep.getByTestId('lane-brief-editor')
-  const cineEditorCount = await cineEditor.count()
-  if (cineEditorCount > 0) {
-    await expect(cineEditor).toBeVisible()
-  } else {
-    await expect(cineBriefStep).toContainText(
-      /Create or select a campaign to edit the brief/i,
-    )
-  }
-  // PR BO/BP/BT — All three render buttons are wired. Cinematic
-  // Video burns Runway credits per click (PR BT — image_to_video
-  // start + poll); Voiced/Storyboard are ffmpeg-only.
-  // Source-readiness disjunctions stay resilient to fixture
-  // variation (no active spokesperson in this test path means
-  // the lane sees no linkedCampaigns → all three stay disabled
-  // with data-source-ready="false"; smoke confirms the structure
-  // without firing real Runway).
-  const cineVideoBtn = cinematicLane.getByTestId('cinematic-lane-video')
-  const cineVoicedBtn = cinematicLane.getByTestId('cinematic-lane-voiced')
-  const cineStoryBtn = cinematicLane.getByTestId('cinematic-lane-storyboard')
-  await expect(cineVideoBtn).toBeVisible()
-  await expect(cineVoicedBtn).toBeVisible()
-  await expect(cineStoryBtn).toBeVisible()
-  // PR BT — Cinematic Video is now the third credit-burn button
-  // alongside PR BP's Spokesperson Ad. data-burns-credits is the
-  // platform-wide marker for "this costs money".
-  await expect(cineVideoBtn).toHaveAttribute('data-burns-credits', 'true')
-  await expect(cineVideoBtn).toHaveAttribute('data-busy', 'false')
-  await expect(cineVideoBtn).toHaveAttribute(
-    'data-render-target',
-    'cinematic-video',
-  )
-  // PR BU — data-persisted reflects whether the campaign's
-  // cached_video_url is set. When the lane has no focused
-  // campaign (smoke's no-active-spokesperson path) the attr
-  // reads "false" since `focused` is null.
-  const cineVideoPersisted = await cineVideoBtn.getAttribute('data-persisted')
-  expect(['true', 'false']).toContain(cineVideoPersisted)
-  const cineVideoReady = await cineVideoBtn.getAttribute('data-source-ready')
-  expect(['true', 'false']).toContain(cineVideoReady)
-  if (cineVideoReady === 'true') {
-    await expect(cineVideoBtn).toBeEnabled()
-    await expect(cineVideoBtn).toHaveText(
-      /(Generate|Regenerate) Real Cinematic Video/i,
-    )
-  } else {
-    await expect(cineVideoBtn).toBeDisabled()
-  }
-  await expect(cineVoicedBtn).toHaveAttribute(
-    'data-render-target',
-    'voiced-cinematic',
-  )
-  await expect(cineStoryBtn).toHaveAttribute(
-    'data-render-target',
-    'storyboard',
-  )
-  // PR BP — Storyboard button carries source-ready + busy attrs.
-  // No active spokesperson → button stays disabled with
-  // source-ready="false".
-  await expect(cineStoryBtn).toHaveAttribute('data-busy', 'false')
-  const cineStoryReady = await cineStoryBtn.getAttribute(
-    'data-source-ready',
-  )
-  expect(['true', 'false']).toContain(cineStoryReady)
-  if (cineStoryReady === 'true') {
-    await expect(cineStoryBtn).toBeEnabled()
-  } else {
-    await expect(cineStoryBtn).toBeDisabled()
-  }
-  // Voiced disjunction: enabled iff data-source-ready="true".
-  // Smoke's v2 case never sets activeCharacterId so the lane
-  // sees no linkedCampaigns → button stays disabled with
-  // data-source-ready="false". Stays resilient to fixtures
-  // that change later.
-  const cineVoicedReady = await cineVoicedBtn.getAttribute(
-    'data-source-ready',
-  )
-  expect(['true', 'false']).toContain(cineVoicedReady)
-  if (cineVoicedReady === 'true') {
-    await expect(cineVoicedBtn).toBeEnabled()
-    await expect(cineVoicedBtn).toHaveText(
-      /(Build|Rebuild) Voiced Cinematic/i,
-    )
-  } else {
-    await expect(cineVoicedBtn).toBeDisabled()
-  }
-  await expect(cineVoicedBtn).toHaveAttribute('data-busy', 'false')
-
-  // PR BL — re-open the modal and pick Dialogue Scene. The
-  // cinematic lane should unmount and DialogueLane should mount
-  // in its place.
-  await newCampaignButton.click()
-  const modalDialogue = page.getByTestId('campaign-mode-modal')
-  await expect(modalDialogue).toBeVisible()
-  await modalDialogue.getByTestId('campaign-mode-card-dialogue').click()
-  await expect(modalDialogue).toHaveCount(0)
-  await expect(activeModePill).toHaveAttribute('data-mode', 'dialogue')
-  await expect(activeModePill).toContainText(/Dialogue Scene/i)
-  await expect(activeModePill).toContainText(/Dialogue Scene lane open/i)
-  // Cinematic lane must be gone.
-  await expect(
-    page.getByTestId('cinematic-lane'),
-  ).toHaveCount(0)
-  const dialogueLane = page.getByTestId('dialogue-lane')
-  await expect(dialogueLane).toBeVisible()
-  await expect(dialogueLane).toHaveAttribute('data-mode', 'dialogue')
-  await expect(dialogueLane).toContainText(/Dialogue Scene lane/i)
-  await expect(
-    dialogueLane.getByTestId('dialogue-lane-step-brief'),
-  ).toBeVisible()
-  await expect(
-    dialogueLane.getByTestId('dialogue-lane-step-cast'),
-  ).toBeVisible()
-  await expect(
-    dialogueLane.getByTestId('dialogue-lane-step-lines'),
-  ).toBeVisible()
-  // PR BQ — Dialogue Step 1 LaneBriefEditor disjunction.
-  const dlgBriefStep = dialogueLane.getByTestId('dialogue-lane-step-brief')
-  const dlgEditor = dlgBriefStep.getByTestId('lane-brief-editor')
-  const dlgEditorCount = await dlgEditor.count()
-  if (dlgEditorCount > 0) {
-    await expect(dlgEditor).toBeVisible()
-  } else {
-    await expect(dlgBriefStep).toContainText(
-      /Create or select a campaign to edit the brief/i,
-    )
-  }
-  // PR BP — all 3 dialogue buttons are now wired with their
-  // own source-ready / busy attrs. Smoke's v2 case has no
-  // active spokesperson so source-ready is always false →
-  // buttons disabled.
-  for (const [tid, target] of [
-    ['dialogue-lane-lines', 'dialogue-lines'],
-    ['dialogue-lane-stitch', 'dialogue-stitch'],
-    ['dialogue-lane-reels', 'dialogue-reels'],
-  ]) {
-    const btn = dialogueLane.getByTestId(tid)
-    await expect(btn).toBeVisible()
-    await expect(btn).toHaveAttribute('data-render-target', target)
-    await expect(btn).toHaveAttribute('data-busy', 'false')
-    const ready = await btn.getAttribute('data-source-ready')
-    expect(['true', 'false']).toContain(ready)
-    if (ready === 'true') {
-      await expect(btn).toBeEnabled()
-    } else {
-      await expect(btn).toBeDisabled()
-    }
-  }
-
-  // Dismiss link clears the pill + the localStorage entry. The
-  // smoke ends with dialogue active, so the dialogue lane should
-  // be gone after dismiss.
-  await page.getByTestId('spokesperson-active-mode-dismiss').click()
-  await expect(
-    page.getByTestId('spokesperson-active-mode'),
-  ).toHaveCount(0)
-  await expect(
-    page.getByTestId('spokesperson-lane'),
-  ).toHaveCount(0)
-  await expect(
-    page.getByTestId('cinematic-lane'),
-  ).toHaveCount(0)
-  await expect(
-    page.getByTestId('dialogue-lane'),
-  ).toHaveCount(0)
-  const cleared = await page.evaluate(() =>
-    window.localStorage.getItem('adspark.activeMode'),
-  )
-  expect(cleared).toBeNull()
+  await expect(page.getByTestId('campaign-mode-modal')).toHaveCount(0)
+  await expect(page.getByTestId('spokesperson-lane')).toHaveCount(0)
+  await expect(page.getByTestId('cinematic-lane')).toHaveCount(0)
+  await expect(page.getByTestId('dialogue-lane')).toHaveCount(0)
 
   // PR CC — Library tile primary action ("Open Spokesperson →")
   // navigates to the dedicated /spokespeople/:id workspace.

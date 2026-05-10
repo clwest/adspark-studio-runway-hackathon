@@ -193,17 +193,27 @@ export default function SpokespersonWorkspace() {
     }
   }
 
-  // PR CC — + New Campaign flow. Persists the mode + active
-  // spokesperson then navigates to /, where the Library's
-  // existing SpokespersonStudio reads both from localStorage
-  // on mount and renders the appropriate lane immediately.
+  // PR CC + PR CD — + New Campaign flow.
+  //
+  // PR CC originally navigated to `/` after mode select so the
+  // Library's lane mounts would pick up the persisted mode +
+  // spokesperson on first paint. PR CD strips lane mounts off
+  // the Library route entirely (homepage is library-only now),
+  // so navigating to `/` no longer mounts a lane. Until the
+  // upcoming workspace-Campaigns-tab slice mounts lanes
+  // *inside* the workspace, the safest fallback is to hand off
+  // to `/legacy` — the verbatim v1 wizard + saved-card gallery
+  // still hosts the full creation surface, and the active
+  // spokesperson + active mode are already pinned in
+  // localStorage so the legacy Stage 1 picks up the right
+  // person on Stage-1 first render.
   const handleOpenCreateCampaign = () => setModeModalOpen(true)
   const handleCloseCreateCampaign = () => setModeModalOpen(false)
   const handleSelectMode = (mode) => {
     persistActiveMode(mode)
     saveActiveSpokespersonId(id)
     setModeModalOpen(false)
-    navigate('/')
+    navigate('/legacy')
   }
 
   if (loading) {
@@ -454,8 +464,10 @@ export default function SpokespersonWorkspace() {
         <TabComingSoon
           testid="spokesperson-workspace-campaigns"
           title="Campaigns"
-          summary="Compact tile list of every campaign produced for this spokesperson, with regenerate / open actions per output."
-          tease="Campaign workspace lands next."
+          summary={`This spokesperson has ${linkedCampaigns.length} linked campaign${
+            linkedCampaigns.length === 1 ? '' : 's'
+          }. The Campaigns tab will mount the Spokesperson / Cinematic / Dialogue lane builders directly inside this workspace next slice. Until then, click + New Campaign in the header to start one — the flow hands off to /legacy with this spokesperson + the chosen mode pre-selected.`}
+          tease="Lane builders mount here next."
         />
       )}
 

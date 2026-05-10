@@ -61,6 +61,15 @@ export default function SpokespersonStudio({
   // callback with a campaign id when the operator clicks "Open
   // in gallery" on an Appearances row.
   onOpenCampaign,
+  // PR CD — Home Library Only. Parent passes `true` to hide
+  // the campaign-creation surfaces (the global "+ New
+  // Campaign" button, the selected-mode pill, the lane mounts,
+  // and the CampaignModeModal). The Library route on `/` uses
+  // this so the homepage reads as "library only" — the
+  // dedicated /spokespeople/:id workspace owns campaign
+  // creation now. Defaults to `false` for backwards compat
+  // (any other caller still gets PR BH/BI/BK/BL behaviour).
+  hideCampaignControls = false,
 }) {
   const [characters, setCharacters] = useState([])
   const [campaigns, setCampaigns] = useState([])
@@ -672,14 +681,22 @@ export default function SpokespersonStudio({
           >
             + Create Spokesperson
           </button>
-          <button
-            type="button"
-            onClick={handleOpenCreateModal}
-            data-testid="spokesperson-new-campaign"
-            className="rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-200 ring-1 ring-zinc-700 text-xs px-3 py-1.5 transition-colors"
-          >
-            + New Campaign
-          </button>
+          {/* PR CD — "+ New Campaign" only mounts when the
+              parent allows campaign-creation surfaces. The
+              Library route hides it (hideCampaignControls=true)
+              so the homepage stays library-only; the
+              SpokespersonWorkspace's own "+ New Campaign"
+              button is the canonical entry point now. */}
+          {!hideCampaignControls && (
+            <button
+              type="button"
+              onClick={handleOpenCreateModal}
+              data-testid="spokesperson-new-campaign"
+              className="rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-200 ring-1 ring-zinc-700 text-xs px-3 py-1.5 transition-colors"
+            >
+              + New Campaign
+            </button>
+          )}
         </div>
       </div>
 
@@ -689,7 +706,7 @@ export default function SpokespersonStudio({
           with a lane-open status string (the lane itself mounts
           below the pill). Other modes still show the original
           placeholder until their lanes ship in PR BJ–BK. */}
-      {activeMode && (
+      {!hideCampaignControls && activeMode && (
         <div
           data-testid="spokesperson-active-mode"
           data-mode={activeMode}
@@ -706,19 +723,19 @@ export default function SpokespersonStudio({
               {MODE_LABELS[activeMode] || activeMode}
             </span>
             <span className="text-[11px] text-zinc-300">
-              {activeMode === CAMPAIGN_MODES.SPOKESPERSON && (
+              {!hideCampaignControls && activeMode === CAMPAIGN_MODES.SPOKESPERSON && (
                 <>
                   <span className="font-semibold">Spokesperson Ad lane open.</span>{' '}
                   Lip-synced talking-avatar render + reels export below.
                 </>
               )}
-              {activeMode === CAMPAIGN_MODES.CINEMATIC && (
+              {!hideCampaignControls && activeMode === CAMPAIGN_MODES.CINEMATIC && (
                 <>
                   <span className="font-semibold">Cinematic Ad lane open.</span>{' '}
                   Silent visual cut + voiced cinematic + storyboard targets below.
                 </>
               )}
-              {activeMode === CAMPAIGN_MODES.DIALOGUE && (
+              {!hideCampaignControls && activeMode === CAMPAIGN_MODES.DIALOGUE && (
                 <>
                   <span className="font-semibold">Dialogue Scene lane open.</span>{' '}
                   Multi-character stitched skit + reels targets below.
@@ -743,7 +760,7 @@ export default function SpokespersonStudio({
           mode. Receives the active spokesperson (set via PR U
           "Use as Spokesperson") + that spokesperson's linked
           campaigns indexed in this component. */}
-      {activeMode === CAMPAIGN_MODES.SPOKESPERSON && (
+      {!hideCampaignControls && activeMode === CAMPAIGN_MODES.SPOKESPERSON && (
         <SpokespersonLane
           activeSpokesperson={
             activeCharacterId
@@ -770,7 +787,7 @@ export default function SpokespersonStudio({
       {/* PR BK — Cinematic Ad lane scaffold. Same shape as the
           Spokesperson lane; mounts only when the operator has
           chosen the cinematic mode. */}
-      {activeMode === CAMPAIGN_MODES.CINEMATIC && (
+      {!hideCampaignControls && activeMode === CAMPAIGN_MODES.CINEMATIC && (
         <CinematicLane
           activeSpokesperson={
             activeCharacterId
@@ -801,7 +818,7 @@ export default function SpokespersonStudio({
           shape; mounts only when the operator has chosen the
           dialogue mode. Cast list derives from
           `dialogue_lines[*]` on the focused campaign. */}
-      {activeMode === CAMPAIGN_MODES.DIALOGUE && (
+      {!hideCampaignControls && activeMode === CAMPAIGN_MODES.DIALOGUE && (
         <DialogueLane
           activeSpokesperson={
             activeCharacterId
@@ -920,14 +937,20 @@ export default function SpokespersonStudio({
         </p>
       )}
 
-      {/* PR BH — mode-first creation modal. Mounted at the section
-          level so backdrop clicks can dismiss without affecting the
-          rest of the page; never renders when isOpen=false. */}
-      <CampaignModeModal
-        isOpen={modeModalOpen}
-        onSelect={handleSelectMode}
-        onClose={handleCloseCreateModal}
-      />
+      {/* PR BH — mode-first creation modal. Mounted at the
+          section level so backdrop clicks can dismiss without
+          affecting the rest of the page; never renders when
+          isOpen=false. PR CD — only mounts when campaign
+          controls are allowed; the Library route hides this
+          via `hideCampaignControls`. The
+          `<SpokespersonWorkspace>` owns its own mode modal. */}
+      {!hideCampaignControls && (
+        <CampaignModeModal
+          isOpen={modeModalOpen}
+          onSelect={handleSelectMode}
+          onClose={handleCloseCreateModal}
+        />
+      )}
 
       {/* PR CB — Create Spokesperson modal. Mirrors the legacy
           CharacterStudio create form's API contract (POST

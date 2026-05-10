@@ -77,6 +77,14 @@ export default function Library() {
         // "Open in gallery →" affordance until PR CB lands the
         // workspace Campaigns tab.
         onOpenCampaign={undefined}
+        // PR CD — Home Library Only. The homepage is a
+        // pure spokesperson library: Heading + tagline +
+        // stats + tiles + Create Spokesperson + Open
+        // Spokesperson navigation. The "+ New Campaign"
+        // button, mode pill, lane components, and
+        // CampaignModeModal all live inside the
+        // /spokespeople/:id workspace now.
+        hideCampaignControls={true}
       />
     </main>
   )
