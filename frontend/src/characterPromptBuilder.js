@@ -82,7 +82,13 @@ const _TEMPLATES = {
 const _CONSTRAINTS =
   'Centered face, eyes visible, mouth visible, no sunglasses, ' +
   'no props blocking the face'
-const _FINISHERS = 'high detail, mascot portrait, avatar-ready'
+// PR CP cont. — brand-safe + anti-uncanny finishers mirror the
+// backend ``_BRAND_SAFE_TAIL`` so the editable textarea opens with
+// the same safety cues the auto-built backend prompt enforces.
+const _FINISHERS =
+  'high detail, mascot portrait, avatar-ready, brand-safe ' +
+  'advertising character, no horror, no distortion, no extra ' +
+  'limbs, no melted anatomy, no uncanny realism'
 
 /**
  * Build the default Character-Studio portrait prompt. Pure function;

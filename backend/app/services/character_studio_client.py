@@ -49,34 +49,48 @@ _MAX_PORTRAIT_RATIO = "1280:720"  # landscape; predictable face crop on Runway s
 
 # ---- prompt templates (locked in spike §7) ------------------------
 
+# PR CP cont. — every template now leads with a "polished commercial
+# spokesperson portrait" anchor and ends with shared brand-safe / anti-
+# uncanny constraints. ``{subject}`` lands in the noun position so
+# Runway sees the concrete creature/person before the modifier
+# clauses. The mascot anchor explicitly says "anthropomorphic mascot
+# spokesperson" so animal mascots (Brewster Bolt the raccoon) read as
+# creatures rather than abstract shapes when the seed ``subject`` is
+# light.
+_BRAND_SAFE_TAIL = (
+    "Brand-safe advertising character suitable for a marketing "
+    "campaign. No horror, no distortion, no extra limbs, no melted "
+    "anatomy, no uncanny realism. No props or sunglasses."
+)
+
 PORTRAIT_TEMPLATES: dict[str, str] = {
     "mascot": (
-        "Studio portrait of {subject}. {style}. "
-        "Front-facing, head-and-shoulders crop. Expressive eyes, "
-        "soft warm smile. Simple solid mid-grey background. Soft "
-        "three-point studio lighting. Centered composition. No "
-        "props or sunglasses."
+        "A polished commercial mascot portrait of an anthropomorphic "
+        "mascot spokesperson — {subject}. {style}. Head-and-shoulders "
+        "framing, expressive friendly face, soft warm smile. Simple "
+        "solid mid-grey background. Soft three-point studio lighting. "
+        "High-quality 3D character design. " + _BRAND_SAFE_TAIL
     ),
     "founder": (
-        "Friendly studio portrait of {subject}. {style}. "
-        "Head-and-shoulders, front-facing. Direct eye contact. Soft "
-        "natural smile. Clean off-white background. Warm soft "
-        "lighting. Photorealistic. Modern founder aesthetic. No "
-        "props or sunglasses."
+        "A polished commercial spokesperson portrait of {subject}. "
+        "{style}. Head-and-shoulders, front-facing. Direct eye "
+        "contact, soft natural smile. Clean off-white background. "
+        "Warm soft lighting. Photorealistic modern founder "
+        "aesthetic. " + _BRAND_SAFE_TAIL
     ),
     "coach": (
-        "Energetic studio portrait of {subject}. {style}. "
-        "Head-and-shoulders. Confident posture, bright expression, "
-        "open mouth mid-speech. Solid muted-blue background. Crisp "
-        "directional lighting. Athletic-coach aesthetic. No props "
-        "or sunglasses."
+        "A polished commercial spokesperson portrait of {subject}. "
+        "{style}. Head-and-shoulders. Confident posture, bright "
+        "expression, open mouth mid-speech. Solid muted-blue "
+        "background. Crisp directional lighting. Athletic-coach "
+        "aesthetic. " + _BRAND_SAFE_TAIL
     ),
     "local_guide": (
-        "Warm portrait of {subject} in a small-business setting. "
-        "{style}. Head-and-shoulders, front-facing. Welcoming "
-        "smile. Soft-blurred neutral background suggesting indoors. "
-        "Natural daylight. Approachable neighborly aesthetic. No "
-        "props or sunglasses."
+        "A polished commercial spokesperson portrait of {subject} "
+        "in a small-business setting. {style}. Head-and-shoulders, "
+        "front-facing. Welcoming smile. Soft-blurred neutral "
+        "background suggesting indoors. Natural daylight. "
+        "Approachable neighborly aesthetic. " + _BRAND_SAFE_TAIL
     ),
 }
 

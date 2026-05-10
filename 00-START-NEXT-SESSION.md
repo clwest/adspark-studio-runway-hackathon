@@ -1,6 +1,10 @@
 # START NEXT SESSION — AdSpark Studio
 
-**Last touched:** 2026-05-09 (PR AG/AH `6157512`; PR AI
+**Last touched:** 2026-05-10 (PR CP cont. — portrait
+template hardening + brand-safe / anti-uncanny tail in
+both backend `PORTRAIT_TEMPLATES` and frontend
+`characterPromptBuilder._FINISHERS`; smoke 3/3, build
+479.84 KB initial / 131.00 KB gzip. Earlier: PR AG/AH `6157512`; PR AI
 `108ca3b`; PR AJ `444cb6a`; PR AK `c59251a`; PR AL `8a43af2`;
 PR AM `3e12d27`; PR AN `f255c22`; PR AO `5bca7c4`; PR AP
 `3c6483e`; PR AQ `ec35c0e`; PR AR `5aa5579`; PR AS `2321fd7`;
@@ -22,8 +26,9 @@ campaign hint (PR CL)`; PR CM Library Tile Simplification
 `18dbda0`; PR CN Workspace Outputs Gallery `89bfd47`;
 SESSION 070 V2 Full UI QA `45bce42`; PR CO Repair Demo
 Data + Portraits + Stats Accuracy `b0d4bf2`; PR CP
-Restore Delete Spokesperson + Endpoint Audit in flight
-on top — SESSION_012–SESSION_072 handoffs added).
+Restore Delete Spokesperson + Endpoint Audit `82b695f`;
+PR CP cont. portrait template hardening in flight on
+top — SESSION_012–SESSION_073 handoffs added).
 
 ## Where things stand
 

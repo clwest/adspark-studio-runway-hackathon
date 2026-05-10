@@ -28,10 +28,32 @@ cached portrait inlined as `referenceImage` data URI +
 voice binding. **Both endpoints are right.** The PR CO
 rough-portrait observation is a prompt-content issue
 (seed `subject` strings are ad-copy not visual
-subjects), not an endpoint issue — recommended PR CQ to
-sharpen the seed fixture subjects + tighten
-PORTRAIT_TEMPLATES. Backend untouched (route count
-still **71**); no real Runway calls fired this slice. PR CO landed
+subjects), not an endpoint issue. **PR CP cont.**
+hardens the four `PORTRAIT_TEMPLATES`: every template
+now opens with a "polished commercial spokesperson
+portrait" anchor, lands `{subject}` in the noun
+position, and ends with a shared brand-safe / anti-
+uncanny tail — "Brand-safe advertising character
+suitable for a marketing campaign. No horror, no
+distortion, no extra limbs, no melted anatomy, no
+uncanny realism. No props or sunglasses." The mascot
+template explicitly anchors on "an anthropomorphic
+mascot spokesperson" so animal mascots like Brewster
+Bolt the raccoon read as creatures even when the seed
+`subject` is dense ad-copy. The frontend
+`characterPromptBuilder._FINISHERS` mirrors the same
+brand-safe / anti-uncanny cues so the editable textarea
+in CreateSpokespersonFlow Step 2 + CharacterStudio
+opens with the same safety language the auto-built
+backend prompt enforces. `prompt_override` is
+unchanged — when the operator types into the textarea
+the backend still uses their text verbatim (capped
+1000 chars). Recommended next slice (PR CQ) is now
+just sharpening the seed fixture `subject` strings +
+re-firing the 4 demo portraits to confirm the new
+templates produce believable mascots. Backend
+untouched at the route layer (route count still
+**71**); no real Runway calls fired this slice. PR CO landed
 immediately before: Three actions ran this slice:
 (1) re-seeded the four canonical demo spokespeople (Brewster
 Bolt / Clara Vale / Rex Roadside / Mina Spark) — only
