@@ -1,8 +1,29 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after **PR CT — Regression Audit:
-gen4_image_turbo broken upstream**. PR CP cont. through PR CS
+context-kit refresh after **PR CU — Fix Campaign Creation
+Dead-End**. The v2 workspace's "Spokesperson Ad" lane (and
+the sibling Cinematic / Dialogue lanes) used to mount a
+3-step scaffold whose Step 1 read "Create or select a
+campaign to edit the brief." with no button — operators had
+to round-trip to `/legacy` to author a brief. New
+`<LaneBriefCreator>` component provides an inline
+`+ Create campaign brief` CTA → Business* / Product /
+Audience / Tone form → Save POSTs a minimal valid
+`CampaignCreate` + `attach-character` to the active
+spokesperson. Wired into all three lanes. **Spokesperson
+lane Step 2** also got an inline `+ Save script` CTA →
+textarea (≤300 chars) → Save POSTs
+`/api/campaigns/{id}/script` (existing PR AA route); the
+preview / Edit cycle stays inline. **Step 3 disabled-state
+chips** rewrote the cryptic "no avatar" / "no source"
+language to operator-readable "requires avatar" /
+"requires video" / "requires brief"; tooltips point at
+the next step instead of internal field names. Backend
+route count still **71** — every new call uses an existing
+JSON-only route. End-to-end mock probe round-tripped
+create-character → save-campaign → attach-character →
+save-script cleanly. Earlier: PR CP cont. through PR CS
 spent hours prompt-tuning under the assumption that
 `INTERNAL.BAD_OUTPUT.CODE01` failures were prompt content
 issues. The user requested a proper regression audit and the

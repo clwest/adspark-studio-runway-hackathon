@@ -1,7 +1,33 @@
 # START NEXT SESSION — AdSpark Studio
 
-**Last touched:** 2026-05-10 (PR CT — regression audit
-proved `gen4_image_turbo` is broken upstream on Runway
+**Last touched:** 2026-05-10 (PR CU — fix v2 lane
+dead-end. Step 1 empty state mounted dead copy
+("Create or select a campaign to edit the brief.")
+across all three lanes (Spokesperson / Cinematic /
+Dialogue) with no actionable button — operators had
+to round-trip to `/legacy`. New
+`<LaneBriefCreator>` (frontend/src/components/lanes/
+LaneBriefCreator.jsx) provides a `+ Create campaign
+brief` CTA that expands inline to a Business* /
+Product / Audience / Tone form; Save POSTs minimal
+valid `CampaignCreate` + `attach-character` to the
+active spokesperson. Spokesperson lane Step 2 also
+got a real CTA — new `<Step2Script>` subcomponent
+with an inline textarea + Save (POSTs
+`/api/campaigns/{id}/script`); replaces the old
+"author in /legacy" copy. Step 3 disabled-state
+chips rewrote cryptic "no avatar" / "no source" to
+"requires avatar" / "requires video" / "requires
+brief"; tooltips now point operators to the next
+step instead of describing internal field names.
+Pytest 7/7, smoke 3/3, build 491.14 KB initial /
+133.39 KB gzip (+9.64 KB / +1.51 KB). End-to-end
+mock probe round-tripped create-character →
+save-campaign → attach-character → save-script
+cleanly. Backend route count still **71**. No real
+Runway calls fired. Earlier: PR CT — regression
+audit proved `gen4_image_turbo` is broken upstream
+on Runway
 for our account. Direct payload probe with our exact
 body shape + a clean human-founder prompt failed
 `INTERNAL.BAD_OUTPUT.CODE01` at every aspect ratio
@@ -106,8 +132,9 @@ PR CQ Sharpen Demo Seed Subjects + Tiny Prompt Audit
 Reliability `ab8f8b7`; PR CS Capture Failed Prompt +
 Safe-Retry Preset `e34b4ba`; PR CT Regression Audit —
 gen4_image_turbo broken upstream, switched to
-gen4_image — in flight on top —
-SESSION_012–SESSION_077 handoffs added).
+gen4_image `cc38d7d`; PR CU Fix Campaign Creation
+Dead-End in flight on top —
+SESSION_012–SESSION_078 handoffs added).
 
 ## Where things stand
 

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 import { formatHistoryTimestamp } from '../../uiHelpers.js'
+import LaneBriefCreator from './LaneBriefCreator.jsx'
 import LaneBriefEditor from './LaneBriefEditor.jsx'
 
 /**
@@ -50,6 +51,9 @@ export default function CinematicLane({
   onGenerateCinematicVideo = null,
   // PR BQ — Inline brief editor save handler.
   onUpdateBrief = null,
+  // PR CU — closes the empty-state dead-end. Same handler shape as
+  // the spokesperson lane.
+  onCreateCampaign = null,
 }) {
   const campaigns = Array.isArray(linkedCampaigns) ? linkedCampaigns : []
   const sorted = [...campaigns].sort((a, b) => {
@@ -346,9 +350,12 @@ export default function CinematicLane({
               onSave={onUpdateBrief}
             />
           ) : (
-            <p className="text-[11px] text-zinc-400 leading-snug">
-              Create or select a campaign to edit the brief.
-            </p>
+            <LaneBriefCreator
+              onCreate={onCreateCampaign}
+              modeLabel="cinematic ad"
+              testidPrefix="cinematic"
+              hasSpokesperson={hasSpokesperson}
+            />
           )}
         </div>
 

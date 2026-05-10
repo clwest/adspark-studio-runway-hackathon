@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
 import { formatHistoryTimestamp } from '../../uiHelpers.js'
+import LaneBriefCreator from './LaneBriefCreator.jsx'
 import LaneBriefEditor from './LaneBriefEditor.jsx'
 
 /**
@@ -41,6 +42,12 @@ export default function SpokespersonLane({
   // /brief route; no Runway calls. Step 1 mounts <LaneBriefEditor>
   // when the focused campaign exists.
   onUpdateBrief = null,
+  // PR CU — Create campaign from inline brief form. Closes the
+  // empty-state dead-end. POSTs /api/campaigns + /attach-character.
+  onCreateCampaign = null,
+  // PR CU — Save the commercial script inline so Step 2 has a real
+  // CTA instead of a "go to legacy" instruction. POSTs /script.
+  onSaveScript = null,
 }) {
   const campaigns = Array.isArray(linkedCampaigns) ? linkedCampaigns : []
   // Pick the most recently-touched campaign as the lane's "focused"
@@ -83,12 +90,22 @@ export default function SpokespersonLane({
     onBuildReels && hasCampaign && reelsSourceReady && !reelsBusy,
   )
   const reelsDisabledReason = !hasCampaign
-    ? 'Pick a linked campaign first.'
+    ? 'Requires campaign brief — save the brief in Step 1 first.'
     : !reelsSourceReady
-    ? 'Generate the Spokesperson Ad cut first (host_video_url + host_status=ok required).'
+    ? 'Requires saved video — generate the Spokesperson Ad in Step 3 first.'
     : !onBuildReels
     ? 'Wire the v2 onBuildReels handler before this button can fire.'
     : ''
+  // PR CU — operator-readable chip for the Reels button.
+  const reelsChip = reelsBusy
+    ? 'building…'
+    : reelsCached
+    ? 'cached'
+    : reelsSourceReady
+    ? 'ready'
+    : !hasCampaign
+    ? 'requires brief'
+    : 'requires video'
   const handleBuildReels = async () => {
     if (!reelsCanFire) return
     setReelsError('')
@@ -128,12 +145,26 @@ export default function SpokespersonLane({
     ? 'Regenerate Real Spokesperson Ad'
     : 'Generate Real Spokesperson Ad'
   const horizontalDisabledReason = !hasCampaign
-    ? 'Pick a linked campaign first.'
+    ? 'Requires campaign brief — save the brief in Step 1 first.'
     : !horizontalHasUsableAvatar
-    ? 'A usable avatar is required (character_id / selected_avatar_id / host_avatar_id ready).'
+    ? 'Requires avatar — generate or attach a Runway avatar to the campaign first.'
     : !onGenerateSpokesperson
     ? 'Wire the v2 onGenerateSpokesperson handler before this button can fire.'
     : ''
+  // PR CU — short chip text shown adjacent to the button label.
+  // Replaces the cryptic "no avatar" / "no source" labels with
+  // operator-readable prerequisite statements.
+  const horizontalChip = horizontalBusy
+    ? 'generating…'
+    : horizontalCached
+    ? 'cached · burns credits'
+    : horizontalCanFire
+    ? 'burns credits'
+    : !hasCampaign
+    ? 'requires brief'
+    : !horizontalHasUsableAvatar
+    ? 'requires avatar'
+    : 'unavailable'
   const handleGenerateHorizontal = async () => {
     if (!horizontalCanFire) return
     setHorizontalError('')
@@ -211,46 +242,26 @@ export default function SpokespersonLane({
               onSave={onUpdateBrief}
             />
           ) : (
-            <p className="text-[11px] text-zinc-400 leading-snug">
-              Create or select a campaign to edit the brief.
-            </p>
+            // PR CU — replace the dead-end copy with an actionable
+            // empty-state CTA + inline create form.
+            <LaneBriefCreator
+              onCreate={onCreateCampaign}
+              modeLabel="spokesperson ad"
+              testidPrefix="spokesperson"
+              hasSpokesperson={hasSpokesperson}
+            />
           )}
         </div>
 
         {/* Step 2 — Script */}
-        <div
-          data-testid="spokesperson-lane-step-script"
-          className="rounded-lg ring-1 ring-zinc-800 bg-zinc-950/50 p-2.5 space-y-1"
-        >
-          <span className="text-[10px] uppercase tracking-wide text-zinc-500 font-mono">
-            Step 2 · Script
-          </span>
-          {focusedScript ? (
-            <>
-              <pre className="whitespace-pre-wrap break-words text-[10px] text-zinc-300 font-mono leading-snug max-h-[6rem] overflow-y-auto rounded bg-black/30 ring-1 ring-zinc-800 p-1.5">
-                {scriptPreview}
-              </pre>
-              <p className="text-[10px] text-zinc-500 leading-snug">
-                The spokesperson speaks this script verbatim during
-                render. Inline editing lands in a follow-up slice;
-                use the legacy wizard if you need to rewrite it now.
-              </p>
-            </>
-          ) : (
-            <>
-              <p className="text-[11px] text-zinc-400 leading-snug">
-                {hasCampaign
-                  ? 'No script saved on this campaign yet.'
-                  : 'Create or select a campaign to author a script.'}
-              </p>
-              <p className="text-[10px] text-zinc-500 leading-snug">
-                The spokesperson will speak the saved script verbatim
-                during render. Authoring lives in the legacy wizard
-                until inline editing ships.
-              </p>
-            </>
-          )}
-        </div>
+        <Step2Script
+          focusedCampaign={focused}
+          focusedScript={focusedScript}
+          scriptPreview={scriptPreview}
+          hasCampaign={hasCampaign}
+          onSaveScript={onSaveScript}
+        />
+        {/* — original block preserved as Step2Script (PR CU) — */}
 
         {/* Step 3 — Render */}
         <div
@@ -291,13 +302,7 @@ export default function SpokespersonLane({
             >
               <span className="truncate">{horizontalLabel}</span>
               <span className="text-[9px] text-zinc-200/70">
-                {horizontalBusy
-                  ? 'generating…'
-                  : horizontalCached
-                  ? 'cached · burns credits'
-                  : horizontalCanFire
-                  ? 'burns credits'
-                  : 'no avatar'}
+                {horizontalChip}
               </span>
             </button>
             {horizontalCanFire && (
@@ -339,13 +344,7 @@ export default function SpokespersonLane({
                 {reelsLabel}
               </span>
               <span className="text-[9px] text-zinc-200/70">
-                {reelsBusy
-                  ? 'building…'
-                  : reelsCached
-                  ? 'cached'
-                  : reelsSourceReady
-                  ? 'ready'
-                  : 'no source'}
+                {reelsChip}
               </span>
             </button>
           </div>
@@ -439,6 +438,184 @@ export default function SpokespersonLane({
         </p>
       )}
     </section>
+  )
+}
+
+/**
+ * PR CU — Step 2 Script.
+ *
+ * Three states, each with a clear next action:
+ *
+ *   - no campaign       — disabled CTA pointing back to Step 1
+ *   - campaign + script — preview + "Edit script" reveals textarea
+ *   - campaign no script — primary CTA "+ Save script" reveals textarea
+ *
+ * No legacy-wizard round-trip. Plain textarea, ≤300 chars (matches
+ * Runway's `avatar_videos` speech cap). Save POSTs to the existing
+ * `/script` route via `onSaveScript`.
+ */
+function Step2Script({
+  focusedCampaign,
+  focusedScript,
+  scriptPreview,
+  hasCampaign,
+  onSaveScript,
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  const startEditing = () => {
+    setDraft(focusedScript || '')
+    setEditing(true)
+    setError('')
+  }
+  const cancelEditing = () => {
+    setEditing(false)
+    setDraft('')
+    setError('')
+  }
+  const handleSave = async () => {
+    if (!hasCampaign || !onSaveScript || busy) return
+    const trimmed = draft.trim()
+    if (!trimmed) {
+      setError('Script cannot be empty.')
+      return
+    }
+    setError('')
+    setBusy(true)
+    try {
+      await onSaveScript(focusedCampaign.id, trimmed)
+      setEditing(false)
+    } catch (e) {
+      setError(`${e?.message || e}`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div
+      data-testid="spokesperson-lane-step-script"
+      className="rounded-lg ring-1 ring-zinc-800 bg-zinc-950/50 p-2.5 space-y-1"
+    >
+      <span className="text-[10px] uppercase tracking-wide text-zinc-500 font-mono">
+        Step 2 · Script
+      </span>
+
+      {!hasCampaign && (
+        <p className="text-[11px] text-zinc-400 leading-snug">
+          Save a campaign brief in Step 1 to author a script.
+        </p>
+      )}
+
+      {hasCampaign && !editing && focusedScript && (
+        <>
+          <pre
+            data-testid="spokesperson-lane-script-preview"
+            className="whitespace-pre-wrap break-words text-[10px] text-zinc-300 font-mono leading-snug max-h-[6rem] overflow-y-auto rounded bg-black/30 ring-1 ring-zinc-800 p-1.5"
+          >
+            {scriptPreview}
+          </pre>
+          <button
+            type="button"
+            onClick={startEditing}
+            disabled={!onSaveScript}
+            data-testid="spokesperson-lane-script-edit"
+            className="text-[10px] rounded px-2 py-1 font-mono bg-zinc-800/40 hover:bg-zinc-700/60 text-zinc-200 ring-1 ring-zinc-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            title={
+              onSaveScript
+                ? 'Edit the saved script in place.'
+                : 'Wire onSaveScript to enable editing.'
+            }
+          >
+            Edit script
+          </button>
+        </>
+      )}
+
+      {hasCampaign && !editing && !focusedScript && (
+        <>
+          <p className="text-[11px] text-zinc-400 leading-snug">
+            No script yet. The spokesperson will speak the saved
+            script verbatim during render.
+          </p>
+          <button
+            type="button"
+            onClick={startEditing}
+            disabled={!onSaveScript}
+            data-testid="spokesperson-lane-script-cta"
+            className={
+              'w-full text-[11px] rounded px-2 py-1.5 font-mono transition-colors ' +
+              (onSaveScript
+                ? 'bg-pink-500/30 hover:bg-pink-500/45 text-pink-100 ring-1 ring-pink-400/40'
+                : 'bg-zinc-800/40 text-zinc-400 ring-1 ring-zinc-700 cursor-not-allowed disabled:opacity-80')
+            }
+            title={
+              onSaveScript
+                ? 'Author a short script (≤300 chars) — saved on the campaign.'
+                : 'Wire onSaveScript to enable.'
+            }
+          >
+            + Save script
+          </button>
+        </>
+      )}
+
+      {hasCampaign && editing && (
+        <>
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="A short, direct line your spokesperson will speak verbatim. ≤300 chars."
+            rows={4}
+            maxLength={300}
+            disabled={busy}
+            data-testid="spokesperson-lane-script-textarea"
+            className="w-full rounded bg-zinc-950 ring-1 ring-zinc-800 px-1.5 py-1 text-[10px] leading-snug font-mono focus:ring-pink-400 outline-none disabled:opacity-60"
+          />
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={busy || !draft.trim()}
+              data-testid="spokesperson-lane-script-save"
+              className={
+                'text-[10px] rounded px-2 py-1 font-mono transition-colors ' +
+                (busy || !draft.trim()
+                  ? 'bg-zinc-800/40 text-zinc-400 ring-1 ring-zinc-700 cursor-not-allowed disabled:opacity-80'
+                  : 'bg-pink-500/30 hover:bg-pink-500/45 text-pink-100 ring-1 ring-pink-400/40')
+              }
+            >
+              {busy ? 'Saving…' : 'Save'}
+            </button>
+            <button
+              type="button"
+              onClick={cancelEditing}
+              disabled={busy}
+              data-testid="spokesperson-lane-script-cancel"
+              className="text-[10px] text-zinc-500 hover:text-zinc-200 px-1 py-1 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <span className="text-[9px] text-zinc-600 font-mono ml-auto">
+              {draft.length}/300
+            </span>
+          </div>
+          {error && (
+            <p
+              data-testid="spokesperson-lane-script-status"
+              className="text-[10px] text-rose-300 leading-snug"
+              role="status"
+              aria-live="polite"
+            >
+              {error}
+            </p>
+          )}
+        </>
+      )}
+    </div>
   )
 }
 

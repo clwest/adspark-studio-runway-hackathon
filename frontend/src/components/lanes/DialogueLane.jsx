@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
 import { formatHistoryTimestamp } from '../../uiHelpers.js'
+import LaneBriefCreator from './LaneBriefCreator.jsx'
 import LaneBriefEditor from './LaneBriefEditor.jsx'
 
 /**
@@ -36,6 +37,9 @@ export default function DialogueLane({
   onBuildDialogueReels = null,
   // PR BQ — Inline brief editor save handler.
   onUpdateBrief = null,
+  // PR CU — closes the empty-state dead-end. Same shape as the
+  // other lanes.
+  onCreateCampaign = null,
 }) {
   const campaigns = Array.isArray(linkedCampaigns) ? linkedCampaigns : []
   const sorted = [...campaigns].sort((a, b) => {
@@ -237,9 +241,12 @@ export default function DialogueLane({
               onSave={onUpdateBrief}
             />
           ) : (
-            <p className="text-[11px] text-zinc-400 leading-snug">
-              Create or select a campaign to edit the brief.
-            </p>
+            <LaneBriefCreator
+              onCreate={onCreateCampaign}
+              modeLabel="dialogue scene"
+              testidPrefix="dialogue"
+              hasSpokesperson={hasSpokesperson}
+            />
           )}
         </div>
 

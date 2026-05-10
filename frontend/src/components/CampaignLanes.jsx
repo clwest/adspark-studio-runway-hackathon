@@ -144,6 +144,65 @@ export default function CampaignLanes({
     return propagate(await api.updateCampaignBrief(campaignId, body))
   }
 
+  // PR CU — close the v2 lane dead-end. Build a minimal valid
+  // CampaignCreate payload from the empty-state brief form, POST
+  // it, then attach to the active spokesperson so the lane's
+  // `linkedCampaigns` filter picks it up immediately. The
+  // selected_concept / runway_prompt / social_post defaults are
+  // *placeholders* — the legacy wizard refines them. The brief
+  // editor surfaces the four fields the operator just typed for
+  // continued editing.
+  const handleCreateCampaign = async ({ business, product = '', audience = '', tone = '' } = {}) => {
+    if (!activeSpokesperson?.id) {
+      throw new Error('active spokesperson required to attach the new campaign')
+    }
+    const trimmedBusiness = String(business || '').trim()
+    if (!trimmedBusiness) {
+      throw new Error('business / campaign name is required')
+    }
+    const trimmedProduct = String(product || '').trim()
+    const trimmedAudience = String(audience || '').trim()
+    const trimmedTone = String(tone || '').trim()
+    const payload = {
+      business: trimmedBusiness,
+      product: trimmedProduct,
+      audience: trimmedAudience,
+      tone: trimmedTone,
+      selected_concept: {
+        title: trimmedBusiness,
+        hook: trimmedAudience || `Meet ${trimmedBusiness}.`,
+        visual: trimmedProduct || trimmedBusiness,
+        caption: trimmedProduct || trimmedBusiness,
+        cta: 'Learn more',
+      },
+      runway_prompt: `A polished commercial visual for ${trimmedBusiness}${trimmedProduct ? ` featuring ${trimmedProduct}` : ''}.`,
+      social_post: {
+        caption: trimmedProduct || trimmedBusiness,
+        cta: 'Learn more',
+        hashtags: [],
+      },
+    }
+    const created = await api.saveCampaign(payload)
+    let final = created
+    try {
+      final = await api.attachCharacter(created.id, activeSpokesperson.id)
+    } catch (e) {
+      // Attach failure is recoverable — campaign exists, lane just
+      // won't see it via the character_id filter. Surface the error
+      // so the operator can retry.
+      throw new Error(`Campaign ${created.id} saved but attach failed: ${e?.message || e}`)
+    }
+    return propagate(final)
+  }
+
+  // PR CU — Save commercial script inline so Step 2 has a real
+  // CTA. Backend route already exists (PR AA — `/script`); this
+  // just wires it into the lane.
+  const handleSaveScript = async (campaignId, script) => {
+    if (!campaignId) throw new Error('campaign id required')
+    return propagate(await api.saveCommercialScript(campaignId, script))
+  }
+
   // PR BT + PR BU — start + poll + persist for the cinematic
   // video. Polling matches v1 `App.handleGenerateVideo` exactly.
   const handleGenerateCinematicVideo = async (campaignId, onProgress) => {
@@ -291,6 +350,8 @@ export default function CampaignLanes({
           onBuildReels={handleBuildSpokespersonReels}
           onGenerateSpokesperson={handleGenerateSpokespersonAd}
           onUpdateBrief={handleUpdateBrief}
+          onCreateCampaign={handleCreateCampaign}
+          onSaveScript={handleSaveScript}
         />
       )}
       {activeMode === CAMPAIGN_MODES.CINEMATIC && (
@@ -301,6 +362,7 @@ export default function CampaignLanes({
           onStitchStoryboard={handleStitchStoryboard}
           onGenerateCinematicVideo={handleGenerateCinematicVideo}
           onUpdateBrief={handleUpdateBrief}
+          onCreateCampaign={handleCreateCampaign}
         />
       )}
       {activeMode === CAMPAIGN_MODES.DIALOGUE && (
@@ -311,6 +373,7 @@ export default function CampaignLanes({
           onStitchDialogue={handleStitchDialogue}
           onBuildDialogueReels={handleBuildDialogueReels}
           onUpdateBrief={handleUpdateBrief}
+          onCreateCampaign={handleCreateCampaign}
         />
       )}
 
