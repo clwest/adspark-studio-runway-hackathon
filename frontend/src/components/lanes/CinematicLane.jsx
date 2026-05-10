@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { formatHistoryTimestamp } from '../../uiHelpers.js'
 import LaneBriefEditor from './LaneBriefEditor.jsx'
@@ -42,6 +42,12 @@ export default function CinematicLane({
   // of the three cached per-shot MP4s; gated on every shot
   // status === 'ok'.
   onStitchStoryboard = null,
+  // PR BT — Generate Real Cinematic Video handler. Fires real
+  // Runway image_to_video (start + poll). Resolves with the
+  // final task on SUCCEEDED, throws otherwise. Optional second
+  // arg is a progress callback `({phase, task, attempts}) =>
+  // void` we surface in the lane's status row.
+  onGenerateCinematicVideo = null,
   // PR BQ — Inline brief editor save handler.
   onUpdateBrief = null,
 }) {
@@ -165,6 +171,80 @@ export default function CinematicLane({
     }
   }
 
+  // PR BT — Cinematic Video gating. Fires real Runway
+  // `image_to_video` (start + poll). Required source: a
+  // saved campaign with `runway_prompt`. The reference image
+  // is optional (text_to_video path when null), mirroring v1
+  // App.handleGenerateVideo. Burns Runway credits per click;
+  // mock mode short-circuits to a fast-resolving SUCCEEDED.
+  const videoPromptReady = Boolean((focused?.runway_prompt || '').trim())
+  const videoCached = Boolean(focused?.cached_video_url)
+  const [videoBusy, setVideoBusy] = useState(false)
+  const [videoError, setVideoError] = useState('')
+  const [videoTaskInfo, setVideoTaskInfo] = useState(null)
+  const [videoOutputUrl, setVideoOutputUrl] = useState('')
+  // Cancellation flag so a mid-poll unmount doesn't try to
+  // setState after the lane is gone (effect cleanup below).
+  const videoActiveRef = useRef(true)
+  useEffect(() => {
+    videoActiveRef.current = true
+    return () => {
+      videoActiveRef.current = false
+    }
+  }, [])
+  const videoCanFire = Boolean(
+    onGenerateCinematicVideo && hasCampaign && videoPromptReady && !videoBusy,
+  )
+  const videoLabel = videoBusy
+    ? 'Generating Real Cinematic Video…'
+    : videoOutputUrl
+    ? 'Regenerate Real Cinematic Video'
+    : videoCached
+    ? 'Regenerate Real Cinematic Video'
+    : 'Generate Real Cinematic Video'
+  const videoDisabledReason = !hasCampaign
+    ? 'Pick a linked campaign first.'
+    : !videoPromptReady
+    ? 'Campaign has no runway_prompt — re-save in classic UX.'
+    : !onGenerateCinematicVideo
+    ? 'Wire the v2 onGenerateCinematicVideo handler before this button can fire.'
+    : ''
+  const handleGenerateVideo = async () => {
+    if (!videoCanFire) return
+    setVideoError('')
+    setVideoOutputUrl('')
+    setVideoTaskInfo(null)
+    setVideoBusy(true)
+    try {
+      const finalTask = await onGenerateCinematicVideo(
+        focused.id,
+        (progress) => {
+          if (!videoActiveRef.current) return
+          setVideoTaskInfo(progress.task || null)
+        },
+      )
+      if (!videoActiveRef.current) return
+      setVideoTaskInfo(finalTask || null)
+      const url =
+        Array.isArray(finalTask?.output) && finalTask.output.length > 0
+          ? finalTask.output[0]
+          : ''
+      setVideoOutputUrl(url || '')
+    } catch (e) {
+      if (!videoActiveRef.current) return
+      setVideoError(`${e?.message || e}`)
+    } finally {
+      if (videoActiveRef.current) setVideoBusy(false)
+    }
+  }
+  const videoStatusText = videoBusy
+    ? videoTaskInfo
+      ? `polling Runway… status=${videoTaskInfo.status} progress=${Math.round(
+          (videoTaskInfo.progress || 0) * 100,
+        )}%`
+      : 'starting Runway image_to_video…'
+    : ''
+
   return (
     <section
       data-testid="cinematic-lane"
@@ -284,20 +364,56 @@ export default function CinematicLane({
             Step 3 · Render
           </span>
           <div className="space-y-1">
+            {/* PR BT — Cinematic Video button is now wired to
+                real Runway image_to_video. Same start + poll
+                pattern v1 App.handleGenerateVideo uses. Burns
+                credits per click; rose chrome to mirror PR BP's
+                "this costs money" vocabulary. */}
             <button
               type="button"
-              disabled
+              onClick={handleGenerateVideo}
+              disabled={!videoCanFire}
               data-testid="cinematic-lane-video"
               data-render-target="cinematic-video"
-              data-has-output={focused?.cached_video_url ? 'true' : 'false'}
-              title="Render wiring lands with the cinematic lane builder. Use the classic gallery to render today."
-              className="w-full flex items-center justify-between gap-2 text-[11px] rounded ring-1 ring-zinc-700 bg-zinc-800/40 text-zinc-300 px-2 py-1 font-mono cursor-not-allowed disabled:opacity-80"
+              data-has-output={
+                videoOutputUrl || focused?.cached_video_url ? 'true' : 'false'
+              }
+              data-source-ready={videoPromptReady ? 'true' : 'false'}
+              data-busy={videoBusy ? 'true' : 'false'}
+              data-burns-credits="true"
+              title={
+                videoCanFire
+                  ? '⚠️ POST /api/runway/generate (image_to_video) — burns Runway credits per click. Polls until SUCCEEDED (≈ 30 s – 5 min cap).'
+                  : videoDisabledReason
+              }
+              className={
+                'w-full flex items-center justify-between gap-2 text-[11px] rounded px-2 py-1 font-mono transition-colors ' +
+                (videoCanFire
+                  ? 'ring-1 ring-rose-400/50 bg-rose-500/30 hover:bg-rose-500/45 text-rose-100'
+                  : 'ring-1 ring-zinc-700 bg-zinc-800/40 text-zinc-300 cursor-not-allowed disabled:opacity-80')
+              }
             >
-              <span className="truncate">Cinematic Video</span>
-              <span className="text-[9px] text-zinc-500">
-                {focused?.cached_video_url ? 'cached' : 'placeholder'}
+              <span className="truncate">{videoLabel}</span>
+              <span className="text-[9px] text-zinc-200/70">
+                {videoBusy
+                  ? 'generating…'
+                  : videoOutputUrl
+                  ? 'fresh · burns credits'
+                  : videoCached
+                  ? 'cached · burns credits'
+                  : videoCanFire
+                  ? 'burns credits'
+                  : 'no prompt'}
               </span>
             </button>
+            {videoCanFire && (
+              <p
+                data-testid="cinematic-lane-video-warning"
+                className="text-[9px] text-rose-300 leading-snug"
+              >
+                ⚠️ Real Runway. Each click bills `image_to_video`.
+              </p>
+            )}
             {/* PR BO — Voiced Cinematic button is now wired.
                 Enabled only when the focused campaign has the
                 silent cinematic cut cached AND either a host
@@ -456,6 +572,44 @@ export default function CinematicLane({
               className="text-[10px] text-spark hover:underline font-mono"
             >
               download storyboard commercial ↗
+            </a>
+          )}
+          {/* PR BT — Cinematic Video status row. Renders one of:
+              - rose error from the click handler
+              - zinc "polling Runway…" while busy
+              - emerald "open generated video ↗" when the new
+                output URL came back this session.
+              The campaign's persisted `cached_video_url` (set
+              at create time) is intentionally NOT shown here —
+              that surface stays in the classic gallery's
+              Visuals tab. PR BT only surfaces fresh outputs. */}
+          {videoError && (
+            <p
+              data-testid="cinematic-lane-video-status"
+              className="text-[10px] text-rose-300 leading-snug"
+              title={videoError}
+            >
+              {videoError}
+            </p>
+          )}
+          {!videoError && videoBusy && (
+            <p
+              data-testid="cinematic-lane-video-status"
+              className="text-[10px] text-zinc-500 leading-snug"
+            >
+              {videoStatusText}
+            </p>
+          )}
+          {!videoError && !videoBusy && videoOutputUrl && (
+            <a
+              href={videoOutputUrl}
+              target="_blank"
+              rel="noreferrer"
+              download
+              data-testid="cinematic-lane-video-link"
+              className="text-[10px] text-spark hover:underline font-mono"
+            >
+              open generated cinematic video ↗
             </a>
           )}
           {focused?.realtime_transcript_fetched_at && (

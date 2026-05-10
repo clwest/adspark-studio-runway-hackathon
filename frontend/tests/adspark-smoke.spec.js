@@ -1256,21 +1256,39 @@ test('AdSpark Studio UX v2 SpokespersonStudio scaffold', async ({ page }) => {
       /Create or select a campaign to edit the brief/i,
     )
   }
-  // PR BO/BP — Voiced + Storyboard buttons are wired. Cinematic
-  // Video stays a disabled placeholder (would require async
-  // image_to_video polling, deferred). Source-readiness
-  // disjunctions mirror PR BN's pattern.
+  // PR BO/BP/BT — All three render buttons are wired. Cinematic
+  // Video burns Runway credits per click (PR BT — image_to_video
+  // start + poll); Voiced/Storyboard are ffmpeg-only.
+  // Source-readiness disjunctions stay resilient to fixture
+  // variation (no active spokesperson in this test path means
+  // the lane sees no linkedCampaigns → all three stay disabled
+  // with data-source-ready="false"; smoke confirms the structure
+  // without firing real Runway).
   const cineVideoBtn = cinematicLane.getByTestId('cinematic-lane-video')
   const cineVoicedBtn = cinematicLane.getByTestId('cinematic-lane-voiced')
   const cineStoryBtn = cinematicLane.getByTestId('cinematic-lane-storyboard')
   await expect(cineVideoBtn).toBeVisible()
   await expect(cineVoicedBtn).toBeVisible()
   await expect(cineStoryBtn).toBeVisible()
-  await expect(cineVideoBtn).toBeDisabled() // PR BP — still placeholder
+  // PR BT — Cinematic Video is now the third credit-burn button
+  // alongside PR BP's Spokesperson Ad. data-burns-credits is the
+  // platform-wide marker for "this costs money".
+  await expect(cineVideoBtn).toHaveAttribute('data-burns-credits', 'true')
+  await expect(cineVideoBtn).toHaveAttribute('data-busy', 'false')
   await expect(cineVideoBtn).toHaveAttribute(
     'data-render-target',
     'cinematic-video',
   )
+  const cineVideoReady = await cineVideoBtn.getAttribute('data-source-ready')
+  expect(['true', 'false']).toContain(cineVideoReady)
+  if (cineVideoReady === 'true') {
+    await expect(cineVideoBtn).toBeEnabled()
+    await expect(cineVideoBtn).toHaveText(
+      /(Generate|Regenerate) Real Cinematic Video/i,
+    )
+  } else {
+    await expect(cineVideoBtn).toBeDisabled()
+  }
   await expect(cineVoicedBtn).toHaveAttribute(
     'data-render-target',
     'voiced-cinematic',

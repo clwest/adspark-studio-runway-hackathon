@@ -11,17 +11,17 @@ PR BA `9d0a99d`; PR BB `8702660`; PR BC `9eae15f`; PR BD
 `af48e28`; SESSION REAL-API `4a68278`; PR BH `600eec9`; PR BI
 `42a8054`; PR BJ `c04aced`; PR BK `7185554`; PR BL `8967061`;
 PR BM `669a584`; PR BN `13bc608`; PR BO `5e7400f`; PR BP
-`18a296b`; PR BQ `74d5dc6`; PR BR `ae7c130 feat: v2
-appearances click-through to campaign gallery (PR BR)`;
-PR BS V2 Appearances Click-Through Tab Hints in flight on
-top — SESSION_012–SESSION_050 handoffs added).
+`18a296b`; PR BQ `74d5dc6`; PR BR `ae7c130`; PR BS `bcbc1d8
+feat: v2 appearances tab hints (PR BS)`; PR BT V2 Cinematic
+Video Async Action in flight on top — SESSION_012–SESSION_051
+handoffs added).
 
 ## Where things stand
 
-- **Branch:** `main` at `ae7c130` (`feat: v2 appearances
-  click-through to campaign gallery (PR BR)`) on
-  `origin/main`. PR BS patch in flight on top — no new
-  commit / tag yet, both pending explicit user approval.
+- **Branch:** `main` at `bcbc1d8` (`feat: v2 appearances tab
+  hints (PR BS)`) on `origin/main`. PR BT patch in flight on
+  top — no new commit / tag yet, both pending explicit user
+  approval.
 - **Latest tag:** still **`hackathon-submission-v13`** at `ec446e4`
   (PR AF). PR AG–BI shipped the full voice arc + audit trails
   + UX v2 foundation + SpokespersonStudio + Knowledge +
@@ -37,22 +37,21 @@ top — SESSION_012–SESSION_050 handoffs added).
   switches modes. **Default load remains v1**; v2 reachable
   via footer toggle or `?ux=v2`.
 - **Backend routes:** **69** application + FastAPI built-ins
-  (unchanged from PR BR; PR BS is frontend-only).
-- **Frontend build:** 394.87 KB initial JS / 106.27 KB gzip +
-  561.97 KB lazy `@runwayml/avatars-react` chunk (+0.71 KB
-  initial / +0.30 KB gzip vs PR BR — mode→tab mapping helper
-  + activeTab override + telemetry attrs).
-- **Playwright smoke:** `3 passed (~26.2 s)` against the mock
+  (unchanged — PR BT reuses the existing `POST
+  /api/runway/generate` + `GET /api/runway/task/{id}` helpers).
+- **Frontend build:** 397.87 KB initial JS / 107.07 KB gzip +
+  561.97 KB lazy `@runwayml/avatars-react` chunk (+3.00 KB
+  initial / +0.80 KB gzip vs PR BS — Cinematic Video gating +
+  start/poll handler + status row + warning copy + `useRef`
+  for cancellation).
+- **Playwright smoke:** `3 passed (~27.3 s)` against the mock
   backend booted via `bash scripts/start-local-mock.sh`. v1
-  test ~22.0 s unchanged. v2 test ~2.8 s captures the
-  Appearances row's mode pill text, clicks Open in gallery,
-  then asserts the highlighted CampaignCard's
-  `data-active-tab` matches the resolved mode→tab mapping
-  (Spokesperson Ad → character / Cinematic|Storyboard →
-  visuals / Dialogue Scene → dialogue / Realtime → realtime
-  / Mixed|Draft → overview). Status banner's `data-mode`
-  attribute also asserted to match one of the seven literal
-  mode strings. Toggle round-trip ~753 ms unchanged.
+  test ~23.1 s unchanged. v2 test ~2.8 s now also asserts the
+  Cinematic Video button carries `data-burns-credits="true"`
+  + `data-render-target="cinematic-video"` + follows fixture
+  readiness (`data-source-ready` disjunction) just like the
+  Spokesperson Horizontal button from PR BP. Toggle
+  round-trip ~810 ms unchanged.
   ```bash
   bash scripts/start-local-mock.sh
   (cd frontend && npm run test:e2e)
@@ -77,7 +76,7 @@ top — SESSION_012–SESSION_050 handoffs added).
 
 ## What's implemented (full feature stack on `main`)
 
-### UX redesign foundation (PR BD — UX v2 Flag + Shared Helpers · PR BE — SpokespersonStudio Scaffold · PR BF — Knowledge Tab Wiring · PR BG — Appearances Tab Wiring · PR BH — Mode-First Creation Modal · PR BI — Spokesperson Lane Scaffold · PR BK — Cinematic Lane Scaffold · PR BL — Dialogue Lane Scaffold · PR BM — Lane Regression Pass · PR BN — Spokesperson Reels Action Wired · PR BO — Cinematic Voiced Action Wired · PR BP — All Remaining v2 Lane Actions Wired · PR BQ — V2 Lane Inline Brief Editing · PR BR — V2 Appearances Click-Through · PR BS — Click-Through Tab Hints)
+### UX redesign foundation (PR BD — UX v2 Flag + Shared Helpers · PR BE — SpokespersonStudio Scaffold · PR BF — Knowledge Tab Wiring · PR BG — Appearances Tab Wiring · PR BH — Mode-First Creation Modal · PR BI — Spokesperson Lane Scaffold · PR BK — Cinematic Lane Scaffold · PR BL — Dialogue Lane Scaffold · PR BM — Lane Regression Pass · PR BN — Spokesperson Reels Action Wired · PR BO — Cinematic Voiced Action Wired · PR BP — All Remaining v2 Lane Actions Wired · PR BQ — V2 Lane Inline Brief Editing · PR BR — V2 Appearances Click-Through · PR BS — Click-Through Tab Hints · PR BT — Cinematic Video Async Action Wired)
 
 - **UX v2 feature flag** at `frontend/src/uxFlag.js`. Resolves
   precedence URL `?ux=v2|v1` > localStorage `adspark.ux` >
@@ -198,6 +197,27 @@ top — SESSION_012–SESSION_050 handoffs added).
   `spokesperson-lane-reels-status`,
   `spokesperson-lane-reels-link`. Reels button new attrs:
   `data-source-ready`, `data-busy`.
+- **V2 Cinematic Video Async Action** (PR BT) — closes the
+  last v2 lane render placeholder. CinematicLane's "Cinematic
+  Video" button now fires real Runway `image_to_video` via
+  the existing `api.startRunway` (POST `/api/runway/generate`)
+  + `api.pollRunway` (GET `/api/runway/task/{id}`) helpers
+  the v1 path already uses. SpokespersonStudio adds
+  `handleGenerateCinematicVideo(id, onProgress)` that mirrors
+  v1 `App.handleGenerateVideo` exactly — same 5 s ± 800 ms
+  jitter, 60-attempt 5-min cap, terminal SUCCEEDED / FAILED /
+  CANCELED handling, no infinite loops. Lane gates the button
+  on the focused campaign having a `runway_prompt` (the saved
+  prompt from create time); `reference_image_url` is optional
+  (text_to_video fallback). Rose chrome + `data-burns-credits=
+  "true"` + warning copy + status row that surfaces start /
+  polling progress / errors / a download link to the fresh
+  output URL. Output URL is **not persisted to the campaign**
+  (would require a new backend route — kept out of scope per
+  brief). data-testid: `cinematic-lane-video-status`,
+  `cinematic-lane-video-link`, `cinematic-lane-video-warning`.
+  Button new attrs: `data-source-ready`, `data-busy`,
+  `data-burns-credits`. v1 default load unchanged.
 - **V2 Click-Through Tab Hints** (PR BS) — extends PR BR so
   the highlighted CampaignCard also lands on the most-relevant
   tab inferred from the row's mode pill. SpokespersonCard

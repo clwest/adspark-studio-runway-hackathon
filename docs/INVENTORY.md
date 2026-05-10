@@ -1,27 +1,33 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after PR BS (V2 Appearances Click-Through
-Tab Hints) on top of the PR AG–BR / SESSION 011 anchors.
-Backend route count remains **69** (no new routes in PR BS).
+context-kit refresh after PR BT (V2 Cinematic Video Async
+Action) on top of the PR AG–BS / SESSION 011 anchors.
+Backend route count remains **69** (no new routes in PR BT —
+reuses `POST /api/runway/generate` + `GET /api/runway/task/{id}`).
 PR BR scrolls + highlights the matching CampaignCard; PR BS
 extends the path so the card also lands on the **most
 relevant tab** inferred from the Appearances row's mode pill
 (Spokesperson Ad → character; Cinematic / Storyboard →
 visuals; Dialogue Scene → dialogue; Realtime → realtime;
-Mixed / Draft → overview). PR BQ's inline brief editor still
-mounts at lane Step 1; the action count from PR BP is
-unchanged:
+Mixed / Draft → overview). PR BT closes the last v2 lane
+placeholder: the **Cinematic Video** button now fires real
+Runway `image_to_video` (start + poll, 5 s ± 800 ms jitter,
+60-attempt 5-min cap), mirroring v1 `App.handleGenerateVideo`
+exactly; the resulting URL surfaces as a download link in the
+lane (not persisted to the campaign — that would require a
+new backend route). PR BQ's inline brief editor still mounts
+at lane Step 1; the action count from PR BP / BT now covers
+**every** lane render target:
 **Spokesperson Lane** Horizontal (real `avatar_videos`, burns
-credits) + Captioned Reels (PR BN); **Cinematic Lane** Voiced
-Cinematic (PR BO) + Storyboard Commercial (`stitchStoryboard`,
-ffmpeg-only); **Dialogue Lane** Plan Lines (`planDialogue`, no
-credits) + Stitch Scene (`stitchDialogue`, ffmpeg) + Captioned
-Reels (`buildDialogueSceneReels`, ffmpeg). Only the Cinematic
-Video button stays a disabled placeholder (async
-`image_to_video` polling deferred). Every credit-burning
-button carries `data-burns-credits="true"` + a rose-chrome
-warning + a "burns credits" caption. Real-mode validated: one
+credits) + Captioned Reels (PR BN); **Cinematic Lane**
+Cinematic Video (real `image_to_video`, burns credits — PR BT)
++ Voiced Cinematic (PR BO) + Storyboard Commercial
+(`stitchStoryboard`, ffmpeg-only); **Dialogue Lane** Plan Lines
+(`planDialogue`, no credits) + Stitch Scene (`stitchDialogue`,
+ffmpeg) + Captioned Reels (`buildDialogueSceneReels`, ffmpeg).
+Every credit-burning button carries `data-burns-credits="true"`
++ a rose-chrome warning + a "burns credits" caption. Real-mode validated: one
 fresh `avatar_videos` task on CEO Buzz / Brewster (task
 `cf7e6067-…`) confirms the Horizontal wiring end-to-end. **Real-mode credit-burn session preserved on disk:**
 Brewster / CEO Buzz spokesperson MP4 (1088×704, 18.4 s, 6.1 MB),
@@ -266,6 +272,7 @@ the line's own `avatar_id`).
 | PR BQ | V2 Lane Inline Brief Editing (gated v2 slice tracked in SESSION_048; new `POST /api/campaigns/{id}/brief` route patches `business / product / audience / tone` on the saved Campaign — only justified backend addition, route count 68 → **69**; new reusable `frontend/src/components/lanes/LaneBriefEditor.jsx` renders four editable form fields + Save / Cancel + busy/error/success states; mounted in Step 1 of all three lanes (SpokespersonLane / CinematicLane / DialogueLane); when no focused campaign, lane shows "Create or select a campaign to edit the brief." copy; SpokespersonStudio adds `handleUpdateBrief` that swaps the campaign in the local slice + bubbles `onCharactersChanged`; no Runway calls; no v1 changes; no generated media touched) | (post-v13) |
 | PR BR | V2 Appearances Click-Through to Campaign Gallery (gated v2 slice tracked in SESSION_049; the previously-disabled "Open in gallery →" affordance on each Appearances row now bubbles up `onOpenCampaign(campaignId)` through SpokespersonStudio → App.jsx → CampaignGallery; CampaignCard accepts new `isOpenedFromV2` + `onClearOpen` props that scroll the matching saved card into view + flash a pink highlight ring for ~2 s; SpokespersonStudio renders a "Opened campaign in gallery: {label}" emerald banner that auto-clears after 2.5 s; no backend changes; route count unchanged at 69; pink chrome on the v2 button mirrors the studio's accent vocabulary) | (post-v13) |
 | PR BS | V2 Appearances Click-Through Tab Hints (gated v2 slice tracked in SESSION_050; extends PR BR by passing the inferred mode through the click chain so App.jsx can resolve a target tab inside the saved CampaignCard; new `_tabFromInferredMode` helper maps Spokesperson Ad → character, Cinematic / Storyboard → visuals, Dialogue Scene → dialogue, Realtime → realtime, Mixed / Draft → overview; new `openCampaignTab` state threaded through CampaignGallery → CampaignCard; the existing v2 effect now flips `setActiveTab(targetTab)` alongside the scroll + highlight; banner copy now reads "Opened campaign in gallery: {label} · {mode} tab"; CampaignCard outer `<li>` carries `data-active-tab` for smoke + future tooling; no backend changes; route count still 69) | (post-v13) |
+| PR BT | Wire V2 Cinematic Video Async Action (gated v2 slice tracked in SESSION_051; closes the last v2 lane render placeholder — Cinematic Video now fires real Runway `image_to_video` via the existing `api.startRunway` (POST `/api/runway/generate`) + `api.pollRunway` (GET `/api/runway/task/{id}`) helpers; SpokespersonStudio adds `handleGenerateCinematicVideo(id, onProgress)` that mirrors v1 `App.handleGenerateVideo` exactly — same 5 s ± 800 ms jitter, 60-attempt 5-min cap, terminal SUCCEEDED / FAILED / CANCELED handling; no infinite loops (cap-on-attempts guarantees termination); CinematicLane wires the button with rose chrome + `data-burns-credits="true"` + `data-source-ready` (gated on `runway_prompt` being truthy on the focused campaign) + `data-busy`; status row surfaces start phase, polling progress percentage, errors, and a download link to the fresh output URL when SUCCEEDED; output URL is **not persisted to the campaign** (would require a new backend route — kept out of scope per brief); smoke asserts the button has `data-burns-credits="true"`, `data-render-target="cinematic-video"`, follows fixture readiness disjunctions; no v1 changes; no backend changes; route count still 69) | (post-v13) |
 
 ## Known limitations (current main)
 

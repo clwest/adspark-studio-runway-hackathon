@@ -290,6 +290,79 @@ export default function SpokespersonStudio({
     return updated
   }
 
+  // PR BT — Generate Real Cinematic Video. Burns Runway credits:
+  // POST /api/runway/generate fires `image_to_video` (or
+  // `text_to_video` when no reference image), then we poll
+  // /api/runway/task/{id} until SUCCEEDED / FAILED / CANCELED.
+  // Uses the saved campaign's `runway_prompt` + optional
+  // `reference_image_url` + `runway_model` so the lane re-renders
+  // the same cinematic visual the operator set up at create time
+  // — no inline prompt edit (today). The output URL lives on the
+  // returned task; persisting it to the campaign would require a
+  // new backend route, so PR BT keeps it lane-local (download /
+  // open link).
+  //
+  // Polling matches v1 App.handleGenerateVideo exactly:
+  //   POLL_INTERVAL_MS = 5000  (+ jitter up to 800 ms)
+  //   POLL_MAX_ATTEMPTS = 60   (≈ 5 min cap)
+  //   terminal = SUCCEEDED | FAILED | CANCELED
+  // No infinite loops; cap-on-attempts guarantees termination.
+  //
+  // ⚠️ Real Runway credits per click (mock mode short-circuits
+  // to a fast-resolving SUCCEEDED in the same shape).
+  const handleGenerateCinematicVideo = async (campaignId, onProgress) => {
+    if (!campaignId) {
+      throw new Error('campaign id required')
+    }
+    const camp = campaigns.find((x) => x.id === campaignId)
+    if (!camp) {
+      throw new Error('campaign not found in local slice')
+    }
+    const promptText = (camp.runway_prompt || '').trim()
+    if (!promptText) {
+      throw new Error('campaign has no runway_prompt — re-save in classic UX')
+    }
+    const referenceImage = (camp.reference_image_url || '').trim() || null
+    const start = await api.startRunway({
+      prompt_text: promptText,
+      prompt_image: referenceImage,
+      duration: 5,
+      ratio: '1280:720',
+      model: camp.runway_model || 'gen4_turbo',
+    })
+    onProgress?.({ phase: 'started', task: start })
+    return await new Promise((resolve, reject) => {
+      let attempts = 0
+      const tick = async () => {
+        attempts += 1
+        let t
+        try {
+          t = await api.pollRunway(start.task_id)
+        } catch (e) {
+          reject(e)
+          return
+        }
+        onProgress?.({ phase: 'polling', task: t, attempts })
+        const terminal = ['SUCCEEDED', 'FAILED', 'CANCELED'].includes(t.status)
+        if (terminal) {
+          if (t.status === 'SUCCEEDED') {
+            resolve(t)
+          } else {
+            reject(new Error(t.failure_reason || t.status))
+          }
+          return
+        }
+        if (attempts >= 60) {
+          reject(new Error('polling timed out at the 5-min cap'))
+          return
+        }
+        const jitter = Math.random() * 800
+        setTimeout(tick, 5000 + jitter)
+      }
+      tick()
+    })
+  }
+
   // PR BP — Stitch Storyboard Commercial. ffmpeg-only concat
   // over the existing per-shot MP4s. Backend route 409s if any
   // shot's status !== 'ok'.
@@ -560,6 +633,9 @@ export default function SpokespersonStudio({
           // concat of cached per-shot MP4s; lane gates on every
           // shot status='ok'.
           onStitchStoryboard={handleStitchStoryboard}
+          // PR BT — wire the Cinematic Video button to real
+          // Runway image_to_video (start + poll). Burns credits.
+          onGenerateCinematicVideo={handleGenerateCinematicVideo}
           // PR BQ — wire Step 1 inline brief editor.
           onUpdateBrief={handleUpdateBrief}
         />
