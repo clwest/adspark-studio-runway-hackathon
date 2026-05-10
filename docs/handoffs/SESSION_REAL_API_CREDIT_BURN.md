@@ -419,3 +419,35 @@ Both still running in real mode (per brief):
 backend: pid=83637 · http://localhost:8000 · runway_mock=false
 vite:    pid=83661 · http://localhost:5173 · http=200
 ```
+
+---
+
+## SESSION 071 follow-up — PR CO demo-portrait restoration (2026-05-10)
+
+After SESSION 070's QA found the live characters.json had
+been pruned to 1 faceless persona, PR CO re-seeded the 4
+demo spokespeople (Brewster Bolt / Clara Vale / Rex
+Roadside / Mina Spark) and fired one portrait generation
+per missing face via `POST /api/characters/{id}/generate-
+portrait`. Logged here per the rule that every real Runway
+call gets recorded in this ledger.
+
+| time (CDT) | character | id | endpoint | result | size |
+|---|---|---|---|---|---|
+| 2026-05-10 00:43 | Brewster Bolt | `4be4ad28f91a` | `POST /api/characters/{id}/generate-portrait` `{}` | **OK** — `portrait_url=/api/characters/4be4ad28f91a/portrait`, source `generated` | 526 KB on disk |
+| 2026-05-10 00:43 | Clara Vale | `920408399d30` | same | **OK** — source `generated` | 575 KB |
+| 2026-05-10 00:44 | Rex Roadside | `cdaeb5b32518` | same | **FAILED** — `portrait task FAILED: An unexpected error occurred.` (Runway upstream — same failure pattern as PR CI/CJ; record kept, portrait_url remains null. Operator can retry via in-app `Generate Portrait` button.) | — |
+| 2026-05-10 00:44 | Mina Spark | `2fd897b776cc` | same | **OK** — source `generated` | 770 KB |
+
+**Total real Runway image calls fired:** 4 (3 succeeded,
+1 upstream failure). No video calls. Portraits land at
+`backend/data/characters/{id}-portrait.png` (gitignored)
+and stream via the existing `/api/characters/{id}/portrait`
+route. Rex Roadside's record stays in `characters.json`
+with `portrait_url=null` — the PR CJ portrait-failed
+retry button + the homepage tile's "Portrait pending"
+placeholder both behave correctly for this state.
+
+**Cumulative session credit:** ~$0.075 in image
+generation (3 successful gen4_image_turbo calls; the
+failure does not bill).

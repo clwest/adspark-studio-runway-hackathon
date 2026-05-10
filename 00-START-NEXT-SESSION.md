@@ -19,19 +19,22 @@ PR CA `8681777`; PR CB `766648c`; PR CC `0b292e0`; PR CD
 `e10ecb5`; PR CJ `8859860`; SESSION 065 `ec70f37`; PR CK
 `6679db9`; PR CL `c016de7 feat: workspace consumes start
 campaign hint (PR CL)`; PR CM Library Tile Simplification
-`18dbda0`; PR CN Workspace Outputs Gallery in flight on top
-— SESSION_012–SESSION_069 handoffs added).
+`18dbda0`; PR CN Workspace Outputs Gallery `89bfd47`;
+SESSION 070 V2 Full UI QA `45bce42`; PR CO Repair Demo
+Data + Portraits + Stats Accuracy in flight on top —
+SESSION_012–SESSION_071 handoffs added).
 
 ## Where things stand
 
-- **Branch:** `main` at `18dbda0` (`feat: library tile
-  simplification (PR CM)`) on `origin/main`. PR CN patch
-  in flight on top — replaces the `/spokespeople/:id`
-  Outputs tab `<TabComingSoon>` with a real
-  `<OutputsGallery>` that surfaces every cached output URL
-  across linked campaigns (closes SESSION 059 Fix #3
-  punch-list item — the last remaining demo-readiness
-  blocker).
+- **Branch:** `main` at `45bce42` (`docs: v2 full manual
+  UI QA + demo readiness review (SESSION 070)`) on
+  `origin/main`. PR CO patch in flight on top — closes
+  every SESSION 070 V2-QA punch-list item: re-seeds the 4
+  demo spokespeople, relinks 5 orphaned demo campaigns by
+  business name, fires real portraits for 3/4 (Rex
+  Roadside again FAILED upstream; record kept), and
+  scopes the library stats row to live-linked
+  campaigns only. Backend untouched.
 - **Latest tag:** still **`hackathon-submission-v13`** at `ec446e4`
   (PR AF). PR AG–BI shipped the full voice arc + audit trails
   + UX v2 foundation + SpokespersonStudio + Knowledge +
@@ -50,23 +53,29 @@ campaign hint (PR CL)`; PR CM Library Tile Simplification
   (PR CK adds `POST /api/characters/{id}/metadata` — a small
   merge route for the `Character.metadata` field; no schema
   change. Route count was 70 from PR BU through PR CJ).
-- **Frontend build:** 476.43 KB initial JS / 130.27 KB gzip +
-  561.97 KB lazy `@runwayml/avatars-react` chunk (+5.51 KB
-  initial / +1.07 KB gzip vs PR CM — the new
-  `<OutputsGallery>` component plus the workspace
-  Outputs-tab swap).
-- **Demo fixtures (PR CG + PR CH):**
+- **Frontend build:** 476.47 KB initial JS / 130.28 KB gzip +
+  561.97 KB lazy `@runwayml/avatars-react` chunk (+0.04 KB
+  initial / +0.01 KB gzip vs PR CN — pure filter on the
+  library stats reducer; no new components).
+- **Demo fixtures (PR CG + PR CH + PR CO):**
   `scripts/seed-demo-spokespeople.py` upserts the 4 demo
   personas (Brewster Bolt / Clara Vale / Rex Roadside /
   Mina Spark). `scripts/seed-demo-campaigns.py` upserts the
   4 matching draft campaigns (CEO Buzz · Dumpster-to-CEO
   Energy Drink, AdSpark Studio · Persistent AI Spokesperson
   Platform, Freedom Ford · F-150 / Ranger truck spotlight,
-  Spark Social · Corner-spokesperson commentary). Brief +
-  business + product + audience + tone + selected_concept
-  + runway_prompt + commercial_script + social_post all
-  populated; outputs blank. Idempotent; re-run-safe;
-  existing user records untouched.
+  Spark Social · Corner-spokesperson commentary).
+  `scripts/relink-orphan-demo-campaigns.py` (new in PR CO)
+  re-points orphaned demo campaigns by business name back
+  to live demo spokespeople — the recovery script that
+  re-attaches Brewster Bolt's CEO Buzz `fc8a20c4` (4
+  cached outputs) when characters.json gets rebuilt.
+  Idempotent; re-run-safe; existing user records and
+  output URLs untouched. **Live state after PR CO:** 4
+  spokespeople, 5 demo-linked campaigns (incl. Brewster's
+  CEO Buzz with 4 cached outputs), 3/4 portraits
+  generated (Rex Roadside upstream-failed; retry available
+  in-app).
 - **Playwright smoke:** `3 passed (~28.1 s)` against the mock
   backend booted via `bash scripts/start-local-mock.sh`.
   Test 1 (`@ /legacy`, ~25.1 s) verbatim. Test 2 (`@ /`,
@@ -110,7 +119,7 @@ campaign hint (PR CL)`; PR CM Library Tile Simplification
 
 ## What's implemented (full feature stack on `main`)
 
-### UX redesign foundation (PR BD — UX v2 Flag + Shared Helpers · PR BE — SpokespersonStudio Scaffold · PR BF — Knowledge Tab Wiring · PR BG — Appearances Tab Wiring · PR BH — Mode-First Creation Modal · PR BI — Spokesperson Lane Scaffold · PR BK — Cinematic Lane Scaffold · PR BL — Dialogue Lane Scaffold · PR BM — Lane Regression Pass · PR BN — Spokesperson Reels Action Wired · PR BO — Cinematic Voiced Action Wired · PR BP — All Remaining v2 Lane Actions Wired · PR BQ — V2 Lane Inline Brief Editing · PR BR — V2 Appearances Click-Through · PR BS — Click-Through Tab Hints · PR BT — Cinematic Video Async Action Wired · PR BU — Cinematic Video Persistence · PR CA — App Shell + Router + Spokesperson Library Home · PR CB — Library Polish + Create Spokesperson CTA · PR CC — Spokesperson Workspace Shell + Identity Tab · PR CD — Home Library Only · PR CE — Workspace Campaigns Tab Mounts Campaign Lanes · PR CF — V2 Copy Cleanup + Remove Dev Jargon · PR CG — Demo Spokespeople Fixtures · PR CH — Demo Campaign Fixtures · PR CK — CreateSpokespersonFlow 4-Step Stepper · PR CL — Workspace Start Campaign Hint · PR CM — Library Tile Simplification · PR CN — Workspace Outputs Gallery)
+### UX redesign foundation (PR BD — UX v2 Flag + Shared Helpers · PR BE — SpokespersonStudio Scaffold · PR BF — Knowledge Tab Wiring · PR BG — Appearances Tab Wiring · PR BH — Mode-First Creation Modal · PR BI — Spokesperson Lane Scaffold · PR BK — Cinematic Lane Scaffold · PR BL — Dialogue Lane Scaffold · PR BM — Lane Regression Pass · PR BN — Spokesperson Reels Action Wired · PR BO — Cinematic Voiced Action Wired · PR BP — All Remaining v2 Lane Actions Wired · PR BQ — V2 Lane Inline Brief Editing · PR BR — V2 Appearances Click-Through · PR BS — Click-Through Tab Hints · PR BT — Cinematic Video Async Action Wired · PR BU — Cinematic Video Persistence · PR CA — App Shell + Router + Spokesperson Library Home · PR CB — Library Polish + Create Spokesperson CTA · PR CC — Spokesperson Workspace Shell + Identity Tab · PR CD — Home Library Only · PR CE — Workspace Campaigns Tab Mounts Campaign Lanes · PR CF — V2 Copy Cleanup + Remove Dev Jargon · PR CG — Demo Spokespeople Fixtures · PR CH — Demo Campaign Fixtures · PR CK — CreateSpokespersonFlow 4-Step Stepper · PR CL — Workspace Start Campaign Hint · PR CM — Library Tile Simplification · PR CN — Workspace Outputs Gallery · PR CO — Repair Demo Data + Portraits + Stats Accuracy)
 
 - **UX v2 feature flag** at `frontend/src/uxFlag.js`. Resolves
   precedence URL `?ux=v2|v1` > localStorage `adspark.ux` >
@@ -252,6 +261,36 @@ campaign hint (PR CL)`; PR CM Library Tile Simplification
   Validated end-to-end via Playwright route-intercept
   tests (no real Runway credit burned for the fix). Backend
   untouched; `/legacy` Create Character flow unchanged.
+- **Repair Demo Data + Portraits + Stats Accuracy** (PR CO)
+  — closes every SESSION 070 V2-QA punch-list item.
+  SESSION 070's manual walk found the v2 interaction
+  model was demo-ready but the data layer had decayed:
+  only 1 of 4 demo personas alive, every cached-output
+  campaign orphaned, library stats overstating
+  reachable counts, no demo portraits. PR CO ran the
+  PR CG seeder (creates Clara / Rex / Mina, updates
+  Brewster), wrote a new
+  `scripts/relink-orphan-demo-campaigns.py` that walks
+  campaigns.json and re-points orphan demo campaigns by
+  business name (CEO Buzz → Brewster Bolt, AdSpark →
+  Clara, Freedom Ford → Rex, Spark Social → Mina —
+  preserving every output URL), re-ran the PR CH seeder
+  to refresh fixture fields, fired real Runway portraits
+  for the 3 missing personas (Brewster 526 KB / Clara
+  575 KB / Mina 770 KB succeeded; Rex Roadside FAILED
+  upstream — same `portrait task FAILED` as PR CI; record
+  kept for in-app retry), and tightened
+  `<SpokespersonStudio>` library-stats-row to count only
+  campaigns whose `character_id` resolves to a live
+  character. Library now reads `4 spokespeople · 5
+  linked campaigns · 4 cached outputs · 1 transcript
+  entry` — every number reconciles with what an operator
+  can click into. Brewster Bolt's workspace Outputs tab
+  surfaces 4 playable cards (cinematic / host / voiced /
+  reels) on first paint. Backend untouched (route count
+  still 71). /legacy unchanged. ~$0.075 in image credits
+  this slice; logged in
+  `docs/handoffs/SESSION_REAL_API_CREDIT_BURN.md`.
 - **Workspace Outputs Gallery** (PR CN) — closes the
   SESSION 059 Fix #3 punch-list item, and with it the
   third and final demo-readiness blocker. The

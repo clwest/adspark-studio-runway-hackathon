@@ -626,20 +626,29 @@ export default function SpokespersonStudio({
             Create persistent AI spokespeople that star in ads, hold
             conversations, and carry campaign memory.
           </p>
-          {/* PR CB — Stats row. Counts derive from the same
-              characters / campaigns slices the library renders, so
-              the surface is self-consistent without an extra
-              backend call. Each stat carries a stable testid +
-              data-count attr the smoke can assert. */}
+          {/* PR CB — Stats row. PR CO — counts now scope to
+              **live-linked** campaigns only (campaigns whose
+              `character_id` resolves to a record in the local
+              characters slice). SESSION 070 manual QA caught
+              the un-scoped variant claiming "6 linked
+              campaigns / 46 cached outputs" while the
+              workspace surfaced 0 — the orphans were inflating
+              the library headline numbers. After PR CO the
+              numbers reconcile with what an operator can
+              actually click into. Each stat carries a stable
+              testid + data-count attr the smoke can assert. */}
           {(() => {
-            const totalSpokespeople = characters.length
-            const linkedCampaignIds = new Set(
-              campaigns
-                .filter((c) => Boolean(c.character_id))
-                .map((c) => c.id),
+            const liveCharacterIds = new Set(
+              characters.map((c) => c.id),
             )
-            const totalLinkedCampaigns = linkedCampaignIds.size
-            const totalOutputs = campaigns.reduce((acc, c) => {
+            const liveLinkedCampaigns = campaigns.filter(
+              (c) =>
+                Boolean(c.character_id) &&
+                liveCharacterIds.has(c.character_id),
+            )
+            const totalSpokespeople = characters.length
+            const totalLinkedCampaigns = liveLinkedCampaigns.length
+            const totalOutputs = liveLinkedCampaigns.reduce((acc, c) => {
               let n = 0
               if (c.cached_video_url) n += 1
               if (c.host_video_url) n += 1
@@ -650,12 +659,15 @@ export default function SpokespersonStudio({
               if (c.dialogue_scene_reels_url) n += 1
               return acc + n
             }, 0)
-            const totalTranscriptEntries = campaigns.reduce((acc, c) => {
-              const list = Array.isArray(c.realtime_transcript_history)
-                ? c.realtime_transcript_history
-                : []
-              return acc + list.length
-            }, 0)
+            const totalTranscriptEntries = liveLinkedCampaigns.reduce(
+              (acc, c) => {
+                const list = Array.isArray(c.realtime_transcript_history)
+                  ? c.realtime_transcript_history
+                  : []
+                return acc + list.length
+              },
+              0,
+            )
             const stats = [
               {
                 testid: 'library-stat-spokespeople',
