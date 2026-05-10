@@ -203,4 +203,98 @@ pkill -f "uvicorn app.main:app"   # killed at end of session
 No frontend dev server was started this session — backend was
 the only running process. Stopped at end.
 
+---
+
+## SESSION 052 follow-up — PR BU validation (V2 Cinematic Video persistence)
+
+**Timestamp:** 2026-05-09T19:50Z (end-of-day local)
+**Driver:** Claude (Opus 4.7)
+**PR validated:** PR BU — `POST /api/campaigns/{id}/cinematic-video`
+**Boot:** `bash scripts/start-local-real.sh` —
+`runway_mock=false`, `image_gen_mock=false`. Backend pid
+18400, vite pid 18436.
+
+### One controlled real generation
+
+| Field | Value |
+|---|---|
+| Campaign | **CEO Buzz** / Dumpster-to-CEO Energy Drink (`fc8a20c42bc5`) |
+| Spokesperson | **Brewster the Raccoon** (`d047894984a4`) |
+| Action | v2 Cinematic Lane → "Generate Real Cinematic Video" → PR BT polling → PR BU persist |
+| Underlying Runway endpoint | `image_to_video` (gen4.5, 1280:720, 5 s) |
+| Reference image | `/api/characters/d047894984a4/portrait` (Brewster portrait, embedded as PNG data URI by `runway_client.maybe_to_data_uri`) |
+| Task id | **`b5d331ba-9844-42ab-b857-982920794a9c`** |
+| Mock flag | `mock_mode: false` ✅ |
+| Polling | 18 polls × 5 s ≈ 90 s wall-clock; status RUNNING → SUCCEEDED at poll 18 |
+| Output URL (Runway, expiring) | `https://dnznrvs05pmza.cloudfront.net/ebef987d-3f2e-44d9-a590-beb29d79b31f.mp4?_jwt=…` (291 chars) |
+| PR BU persist response | 200 OK with `cached_video_url=/api/campaigns/fc8a20c42bc5/video` + `cache_status="ok"` + `cache_error=null` ✅ |
+| Reload check | `GET /api/campaigns` shows persisted fields survive list-read ✅ |
+| Persisted file | `backend/data/videos/fc8a20c42bc5.mp4` (overwrote the prior 10 s placeholder) |
+
+### ffprobe
+
+Pre-regen (existing placeholder, mock-era cache):
+```
+1280×720 / 24 fps / 10.04 s / 6.4 MB / 5.11 Mbps
+```
+
+Post-regen (PR BT/BU output):
+```
+codec=h264 / 1280×720 / 24 fps / 5.04 s / 1.9 MB / 3.18 Mbps
+```
+
+The new file matches the requested 5 s gen4.5 `image_to_video`
+exactly. Smaller / lower bitrate than the 10 s placeholder
+because the output is half the duration.
+
+### Demo-worthy?
+
+**Yes.** The output is 5 s of Brewster reaching for a
+Dumpster-to-CEO Energy Drink at 3 AM in his dim apartment
+kitchen — the canonical CEO Buzz demo prompt rendered by
+real Runway gen4.5 with Brewster's portrait as the
+spokesperson reference. Persisted on the campaign so:
+
+- Refreshing http://localhost:5173 keeps the lane's
+  "open cinematic video ↗" link alive (PR BU
+  `data-persisted="true"` path).
+- The classic gallery's CEO Buzz card now plays this MP4
+  in its Visuals tab (`/api/campaigns/fc8a20c42bc5/video`
+  is the same streamer v1 has always used).
+- The button label flipped to "Regenerate Real Cinematic
+  Video" + the secondary chip reads "saved · burns
+  credits".
+
+### Failures / surprises
+
+- **None.** Single end-to-end validation; zero retries; no
+  502s. PR BU's persist call returned 200 on the first
+  attempt with the freshly-generated Runway output URL.
+- The mock-era pre-regen file (10 s, 6.4 MB) was
+  overwritten cleanly — no orphaned `.tmp` files in
+  `data/videos/`. `VideoCache.fetch`'s `tmp.replace(target)`
+  pattern from PR B keeps the swap atomic.
+
+### Git status at end of session
+
+```
+git status:
+  modified:   docs/handoffs/SESSION_REAL_API_CREDIT_BURN.md  (this file)
+  no other changes
+
+Generated media (gitignored ✅):
+  backend/data/videos/fc8a20c42bc5.mp4   (regenerated, 1.9 MB)
+```
+
+`git ls-files | grep -E '(\.env$|backend/data|\.mp4$|\.mp3$|\.png$)'`
+returns empty — confirmed.
+
+### Servers at end of session
+
+Both still running in real mode (per brief):
+
+```
+backend: pid=18400 · http://localhost:8000 · runway_mock=false
+vite:    pid=18436 · http://localhost:5173 · http=200
+```
 
