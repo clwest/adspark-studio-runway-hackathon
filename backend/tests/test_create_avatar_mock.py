@@ -242,6 +242,82 @@ def test_clean_prompt_under_hard_cap():
     assert len(prompt) <= 700, len(prompt)
 
 
+# ---- PR CX — knowledge sources -----------------------------------
+
+
+def test_knowledge_source_round_trip(client: TestClient):
+    """Add a knowledge source, confirm it persists on the Character
+    record + survives a fresh GET, then delete it cleanly."""
+    char = _create_character(client, name="Knowledge Test")
+    cid = char["id"]
+    assert char["knowledge_sources"] == []
+
+    add = client.post(
+        f"/api/characters/{cid}/knowledge",
+        json={
+            "title": "CEO Buzz brand voice",
+            "source_type": "brand_note",
+            "content": "Punchy, fast-talking, energy-drink confidence. "
+            "Catchphrases: 'Let's get loud' / 'One click. You're in.'",
+        },
+    )
+    assert add.status_code == 200, add.text
+    body = add.json()
+    assert len(body["knowledge_sources"]) == 1
+    src = body["knowledge_sources"][0]
+    assert src["title"] == "CEO Buzz brand voice"
+    assert src["source_type"] == "brand_note"
+    assert "punchy" in src["content"].lower()
+    assert src["id"]
+    assert src["created_at"]
+
+    # Re-fetch confirms persistence (write actually landed on disk).
+    refetch = client.get(f"/api/characters/{cid}")
+    assert refetch.status_code == 200
+    assert len(refetch.json()["knowledge_sources"]) == 1
+
+    # Delete by id.
+    rm = client.delete(
+        f"/api/characters/{cid}/knowledge/{src['id']}"
+    )
+    assert rm.status_code == 200
+    assert rm.json()["knowledge_sources"] == []
+
+
+def test_knowledge_source_404_when_character_missing(client: TestClient):
+    resp = client.post(
+        "/api/characters/no-such-character/knowledge",
+        json={"title": "x", "content": "y"},
+    )
+    assert resp.status_code == 404
+
+
+def test_knowledge_source_404_when_source_missing(client: TestClient):
+    char = _create_character(client, name="Knowledge Delete Test")
+    resp = client.delete(
+        f"/api/characters/{char['id']}/knowledge/no-such-source"
+    )
+    assert resp.status_code == 404
+
+
+def test_knowledge_source_validation(client: TestClient):
+    """Title and content are both required + non-empty."""
+    char = _create_character(client, name="Knowledge Validation Test")
+    cid = char["id"]
+    # Empty title → 422
+    bad = client.post(
+        f"/api/characters/{cid}/knowledge",
+        json={"title": "", "content": "some content"},
+    )
+    assert bad.status_code == 422
+    # Empty content → 422
+    bad = client.post(
+        f"/api/characters/{cid}/knowledge",
+        json={"title": "title", "content": ""},
+    )
+    assert bad.status_code == 422
+
+
 def test_clean_prompt_prompt_override_still_wins():
     """`prompt_override` short-circuits the composer entirely so
     operator-typed text reaches Runway verbatim."""

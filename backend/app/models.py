@@ -356,6 +356,35 @@ class VoiceRepairHistoryEntry(BaseModel):
     mock_mode: Optional[bool] = None
 
 
+# PR CX — Knowledge Source. A small, single-character-scoped record
+# the operator pastes into the Knowledge tab — brand notes, product
+# descriptions, FAQs, audience facts. The lane uses the saved text
+# as a reference panel next to the script editor (not RAG, not
+# embeddings — manual paste with reliable persistence).
+KnowledgeSourceType = Literal[
+    "brand_note", "product", "audience", "offer", "campaign_fact", "other"
+]
+
+
+class KnowledgeSource(BaseModel):
+    """One persisted knowledge entry attached to a Character."""
+
+    id: str  # short hex (uuid4().hex[:12]) generated server-side
+    title: str = Field(..., min_length=1, max_length=120)
+    source_type: KnowledgeSourceType = "brand_note"
+    content: str = Field(..., min_length=1, max_length=8000)
+    created_at: datetime
+    updated_at: datetime
+
+
+class KnowledgeSourceCreate(BaseModel):
+    """Request body for ``POST /api/characters/{id}/knowledge``."""
+
+    title: str = Field(..., min_length=1, max_length=120)
+    source_type: KnowledgeSourceType = "brand_note"
+    content: str = Field(..., min_length=1, max_length=8000)
+
+
 class Character(BaseModel):
     id: str
     slug: str
@@ -422,6 +451,12 @@ class Character(BaseModel):
     # first). Capped at the most recent 20 entries by the store so
     # the JSON record never grows unbounded over a long demo session.
     voice_repair_history: list[VoiceRepairHistoryEntry] = []
+    # PR CX — Knowledge sources. Operator-pasted brand notes /
+    # product descriptions / FAQs / audience facts that the
+    # spokesperson workspace surfaces next to the script editor.
+    # Capped at 20 entries by the store. Manual paste only — no
+    # embeddings, no RAG.
+    knowledge_sources: list[KnowledgeSource] = []
 
     # Portrait — local cache lives at backend/data/characters/<id>-portrait.png
     portrait_url: Optional[str] = None  # /api/characters/{id}/portrait

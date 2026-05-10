@@ -1,7 +1,29 @@
 # START NEXT SESSION — AdSpark Studio
 
-**Last touched:** 2026-05-10 (PR CW — clean portrait
-prompt composer. Replaced PR CR/CS per-template
+**Last touched:** 2026-05-10 (PR CX — Minimum Viable
+Knowledge Flow. The Knowledge tab in the spokesperson
+workspace was the last `<TabComingSoon>` placeholder
+("Knowledge sources will appear here.") — final-day
+demo gap. New `<KnowledgePanel>` provides
+`+ Add Knowledge Source` CTA → inline form
+(title + source-type select + content textarea) →
+saved-source list with delete + short preview +
+`saved · available to campaigns` status pill. Manual
+paste only per spec — no embeddings, no RAG. New
+`Character.knowledge_sources: list[KnowledgeSource]`
+field; new routes `POST /api/characters/{id}/knowledge`
++ `DELETE /api/characters/{id}/knowledge/{source_id}`
+(both return updated Character). Backend route count
+**71 → 73**. Spokesperson lane Step 2 mounts a
+`<details>` reference disclosure when the active
+spokesperson has saved sources — operator reads
+brand notes / product details / FAQs while typing
+the script (no auto-injection). Pytest 17/17 (4 new
+PR CX), smoke 3/3, build 499.56 KB initial / 135.20
+KB gzip (+8.90 KB / +1.90 KB). Live API round-trip
+probe confirmed disk persistence. No real Runway
+calls fired. Earlier: PR CW — clean portrait prompt
+composer. Replaced PR CR/CS per-template
 f-strings + brand-safe tail concatenation (which
 produced ~720-char redundant "polished commercial
 mascot portrait of an anthropomorphic mascot
@@ -192,9 +214,10 @@ Safe-Retry Preset `e34b4ba`; PR CT Regression Audit —
 gen4_image_turbo broken upstream, switched to
 gen4_image `cc38d7d`; PR CU Fix Campaign Creation
 Dead-End `ea4ba88`; PR CV Runway API Contract Audit
-`71e72b2`; PR CW Clean Portrait Prompt Composer in
-flight on top —
-SESSION_012–SESSION_080 handoffs added).
+`71e72b2`; PR CW Clean Portrait Prompt Composer
+`d9e556c`; PR CX Minimum Viable Knowledge Flow in
+flight on top — SESSION_012–SESSION_081 handoffs
+added).
 
 ## Where things stand
 

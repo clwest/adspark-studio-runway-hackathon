@@ -1,8 +1,32 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after **PR CW — Clean Portrait Prompt
-Composer**. Replaced the PR CR/CS per-template f-strings (which
+context-kit refresh after **PR CX — Minimum Viable Knowledge
+Flow**. The Knowledge tab in the spokesperson workspace was the
+last `<TabComingSoon>` placeholder before the demo. New
+`<KnowledgePanel>` provides the operator-facing surface:
+`+ Add Knowledge Source` CTA → inline form (title +
+source-type select + content textarea, ≤8000 chars) →
+saved-source list with delete + short preview +
+`saved · available to campaigns` status pill. Manual paste
+only — no embeddings, no RAG. New
+`Character.knowledge_sources: list[KnowledgeSource]` field;
+new `POST /api/characters/{id}/knowledge` and
+`DELETE /api/characters/{id}/knowledge/{source_id}` routes
+(both return the updated Character so the workspace's local
+slice stays in sync without re-fetching). Backend route
+count **71 → 73**. The Spokesperson lane Step 2 · Script
+card mounts a small `<details>` reference disclosure when
+the active spokesperson has at least one saved source —
+shows up to 5 (title + 200-char preview) inline above the
+script CTA so operators can read brand notes / product
+details / FAQs while typing the script. No auto-injection.
+Four new pytests
+(`test_knowledge_source_round_trip`,
+`test_knowledge_source_404_when_character_missing`,
+`test_knowledge_source_404_when_source_missing`,
+`test_knowledge_source_validation`) pin the contract.
+Earlier: Replaced the PR CR/CS per-template f-strings (which
 produced ~720-char "polished commercial mascot portrait of an
 anthropomorphic mascot spokesperson — anthropomorphic donkey…"
 double-anchored output with raw chip dumps + repeated lighting

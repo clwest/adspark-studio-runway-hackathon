@@ -9,6 +9,7 @@ import {
 } from '../settings'
 import CampaignLanes from './CampaignLanes.jsx'
 import CharacterCard from './CharacterCard.jsx'
+import KnowledgePanel from './KnowledgePanel.jsx'
 import OutputsGallery from './OutputsGallery.jsx'
 
 const TABS = [
@@ -606,13 +607,19 @@ export default function SpokespersonWorkspace() {
       )}
 
       {activeTab === 'knowledge' && (
-        <TabComingSoon
-          testid="spokesperson-workspace-knowledge"
-          title="Knowledge"
-          summary={`Grounding documents and transcript history for this spokesperson. ${linkedCampaigns.length} linked campaign${
-            linkedCampaigns.length === 1 ? '' : 's'
-          } feed this view.`}
-          tease="Knowledge sources will appear here."
+        // PR CX — real Knowledge tab. Operator pastes brand notes /
+        // product details / FAQs etc.; campaign lane Step 2 surfaces
+        // the saved sources next to the script editor for reference.
+        <KnowledgePanel
+          character={character}
+          onCharacterChanged={(updated) => {
+            // Merge the updated record into the local slice so the
+            // tab + lane re-render against the new knowledge_sources
+            // list without a full /api/characters re-fetch.
+            setCharacters((prev) =>
+              prev.map((c) => (c.id === updated.id ? updated : c)),
+            )
+          }}
         />
       )}
 

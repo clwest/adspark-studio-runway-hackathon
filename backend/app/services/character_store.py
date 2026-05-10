@@ -154,6 +154,55 @@ class CharacterStore:
                     return True
         return False
 
+    # PR CX — Knowledge sources. Stored on the Character record's
+    # ``knowledge_sources`` list (newest first). Cap at 20 entries to
+    # keep the JSON file bounded for a long demo session.
+    def append_knowledge_source(
+        self,
+        character_id: str,
+        entry: dict,
+        *,
+        max_entries: int = 20,
+    ) -> Optional[Character]:
+        """Append a single knowledge source. Returns the updated
+        Character, or ``None`` when the id is unknown.
+        """
+        with _LOCK:
+            rows = self._read()
+            for row in rows:
+                if row.get("id") == character_id:
+                    sources = list(row.get("knowledge_sources") or [])
+                    sources.insert(0, entry)
+                    row["knowledge_sources"] = sources[:max_entries]
+                    row["updated_at"] = datetime.now(timezone.utc).isoformat()
+                    self._write(rows)
+                    return Character.model_validate(row)
+        return None
+
+    def delete_knowledge_source(
+        self,
+        character_id: str,
+        source_id: str,
+    ) -> Optional[Character]:
+        """Remove one knowledge source by id. Returns the updated
+        Character on success; ``None`` when neither the character nor
+        the source id is found.
+        """
+        with _LOCK:
+            rows = self._read()
+            for row in rows:
+                if row.get("id") != character_id:
+                    continue
+                sources = list(row.get("knowledge_sources") or [])
+                kept = [s for s in sources if s.get("id") != source_id]
+                if len(kept) == len(sources):
+                    return None
+                row["knowledge_sources"] = kept
+                row["updated_at"] = datetime.now(timezone.utc).isoformat()
+                self._write(rows)
+                return Character.model_validate(row)
+        return None
+
     def delete(self, character_id: str) -> bool:
         """Local delete — does NOT call Runway DELETE. Returns True if
         a record was removed.  Caller is responsible for clearing

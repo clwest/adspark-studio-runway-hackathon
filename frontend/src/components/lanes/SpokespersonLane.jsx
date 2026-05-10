@@ -260,8 +260,13 @@ export default function SpokespersonLane({
           scriptPreview={scriptPreview}
           hasCampaign={hasCampaign}
           onSaveScript={onSaveScript}
+          knowledgeSources={
+            Array.isArray(activeSpokesperson?.knowledge_sources)
+              ? activeSpokesperson.knowledge_sources
+              : []
+          }
         />
-        {/* — original block preserved as Step2Script (PR CU) — */}
+        {/* — original block preserved as Step2Script (PR CU/CX) — */}
 
         {/* Step 3 — Render */}
         <div
@@ -460,7 +465,9 @@ function Step2Script({
   scriptPreview,
   hasCampaign,
   onSaveScript,
+  knowledgeSources = [],
 }) {
+  const knowledgeCount = knowledgeSources.length
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
@@ -503,6 +510,50 @@ function Step2Script({
       <span className="text-[10px] uppercase tracking-wide text-zinc-500 font-mono">
         Step 2 · Script
       </span>
+
+      {/* PR CX — knowledge reference disclosure. Surfaces when the
+          spokesperson has at least one saved knowledge source so the
+          operator can read product / brand notes while authoring
+          the script. Manual paste only — no auto-injection. */}
+      {knowledgeCount > 0 && (
+        <details
+          data-testid="spokesperson-lane-knowledge-reference"
+          data-source-count={knowledgeCount}
+          className="rounded ring-1 ring-emerald-400/30 bg-emerald-500/[0.04] px-2 py-1"
+        >
+          <summary className="text-[10px] text-emerald-200 cursor-pointer select-none hover:text-emerald-100">
+            {knowledgeCount} knowledge source{knowledgeCount === 1 ? '' : 's'} available — open for reference
+          </summary>
+          <div className="space-y-1.5 pt-1.5">
+            {knowledgeSources.slice(0, 5).map((src) => {
+              const preview =
+                src.content.length > 200
+                  ? src.content.slice(0, 200) + '…'
+                  : src.content
+              return (
+                <div
+                  key={src.id}
+                  data-testid="spokesperson-lane-knowledge-row"
+                  data-source-id={src.id}
+                  className="rounded bg-black/20 ring-1 ring-emerald-400/20 px-2 py-1"
+                >
+                  <p className="text-[10px] text-emerald-100 font-semibold">
+                    {src.title}
+                  </p>
+                  <p className="text-[10px] text-zinc-300 leading-snug whitespace-pre-wrap break-words">
+                    {preview}
+                  </p>
+                </div>
+              )
+            })}
+            {knowledgeCount > 5 && (
+              <p className="text-[9px] text-zinc-500 font-mono">
+                + {knowledgeCount - 5} more in Knowledge tab
+              </p>
+            )}
+          </div>
+        </details>
+      )}
 
       {!hasCampaign && (
         <p className="text-[11px] text-zinc-400 leading-snug">

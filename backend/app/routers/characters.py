@@ -10,6 +10,7 @@ Locked design in
 from __future__ import annotations
 
 import logging
+import uuid
 from datetime import datetime, timezone
 from typing import Literal, Optional
 
@@ -18,7 +19,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from ..config import Settings, get_settings
-from ..models import Character, CharacterCreate, CharacterList
+from ..models import Character, CharacterCreate, CharacterList, KnowledgeSourceCreate
 from ..services.character_store import CharacterStore
 from ..services.character_studio_client import (
     create_avatar as studio_create_avatar,
@@ -926,3 +927,63 @@ def delete_character(
     store.portrait_path(character_id).unlink(missing_ok=True)
     store.thumbnail_path(character_id).unlink(missing_ok=True)
     return {"ok": True, "id": character_id}
+
+
+# ---- PR CX — Knowledge sources (manual paste, no embeddings) -----
+#
+# The Knowledge tab in the Spokesperson workspace persists short
+# operator-pasted notes (brand voice, product details, FAQs, audience
+# facts) on the Character record. The lane surfaces them next to
+# the script editor as a reference panel — no RAG, no embeddings, no
+# Runway calls. Two routes: append + delete. Both return the updated
+# Character so the UI's local slice stays in sync without re-fetch.
+
+
+@router.post("/{character_id}/knowledge", response_model=Character)
+def post_knowledge_source(
+    character_id: str,
+    body: KnowledgeSourceCreate,
+    store: CharacterStore = Depends(_store),
+) -> Character:
+    record = store.get(character_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="character not found")
+    now = datetime.now(timezone.utc).isoformat()
+    entry = {
+        "id": uuid.uuid4().hex[:12],
+        "title": body.title.strip(),
+        "source_type": body.source_type,
+        "content": body.content.strip(),
+        "created_at": now,
+        "updated_at": now,
+    }
+    updated = store.append_knowledge_source(character_id, entry)
+    if not updated:
+        raise HTTPException(status_code=404, detail="character not found")
+    logger.info(
+        "character %s knowledge source added id=%s title=%r type=%s content_len=%d",
+        character_id, entry["id"], entry["title"][:40],
+        entry["source_type"], len(entry["content"]),
+    )
+    return updated
+
+
+@router.delete(
+    "/{character_id}/knowledge/{source_id}", response_model=Character
+)
+def delete_knowledge_source(
+    character_id: str,
+    source_id: str,
+    store: CharacterStore = Depends(_store),
+) -> Character:
+    record = store.get(character_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="character not found")
+    updated = store.delete_knowledge_source(character_id, source_id)
+    if not updated:
+        raise HTTPException(status_code=404, detail="knowledge source not found")
+    logger.info(
+        "character %s knowledge source removed id=%s",
+        character_id, source_id,
+    )
+    return updated

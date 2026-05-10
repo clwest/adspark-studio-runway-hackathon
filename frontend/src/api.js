@@ -101,6 +101,19 @@ export const api = {
       `/api/characters/${encodeURIComponent(characterId)}/generate-portrait`,
       { method: 'POST', body: JSON.stringify(body) },
     ),
+  // PR CX — Knowledge sources. Append a source returns the updated
+  // Character so the workspace's local slice stays in sync without
+  // re-fetch.
+  addCharacterKnowledge: (characterId, body) =>
+    jsonFetch(
+      `/api/characters/${encodeURIComponent(characterId)}/knowledge`,
+      { method: 'POST', body: JSON.stringify(body) },
+    ),
+  deleteCharacterKnowledge: (characterId, sourceId) =>
+    jsonFetch(
+      `/api/characters/${encodeURIComponent(characterId)}/knowledge/${encodeURIComponent(sourceId)}`,
+      { method: 'DELETE' },
+    ),
   createCharacterAvatar: (characterId, body = {}) =>
     jsonFetch(
       `/api/characters/${encodeURIComponent(characterId)}/create-avatar`,
