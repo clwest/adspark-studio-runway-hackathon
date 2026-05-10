@@ -480,19 +480,76 @@ export default function SpokespersonWorkspace() {
               = the talking/lip-sync identity that drives Spokesperson Ads
               and realtime conversations.
             </p>
-            <CharacterCard
-              character={character}
-              busyAction={busyAction}
-              isActive={true}
-              onSetActive={null}
-              onGeneratePortrait={handleGeneratePortrait}
-              onCreateAvatar={handleCreateAvatar}
-              onDelete={handleDelete}
-              onCloneVoice={handleCloneVoice}
-              onApplyVoiceToAvatar={handleApplyVoiceToAvatar}
-              onRefreshAvatarVoice={handleRefreshAvatarVoice}
-              onRefreshVoicePreview={handleRefreshVoicePreview}
-            />
+            {/* PR CQ — responsive 2-col grid so the embedded
+                CharacterCard stops dominating the page. Left column
+                caps at 320px on md+ (the card's previous full-width
+                behaviour was rendering the aspect-square portrait at
+                the full workspace width); right column hosts the
+                prompt audit + future per-identity context. On mobile
+                everything stacks via the implicit 1-col grid. */}
+            <div
+              data-testid="spokesperson-workspace-identity-grid"
+              className="grid gap-3 md:grid-cols-[minmax(0,320px)_minmax(0,1fr)] items-start"
+            >
+              <div className="w-full max-w-[320px] mx-auto md:mx-0">
+                <CharacterCard
+                  character={character}
+                  busyAction={busyAction}
+                  isActive={true}
+                  onSetActive={null}
+                  onGeneratePortrait={handleGeneratePortrait}
+                  onCreateAvatar={handleCreateAvatar}
+                  onDelete={handleDelete}
+                  onCloneVoice={handleCloneVoice}
+                  onApplyVoiceToAvatar={handleApplyVoiceToAvatar}
+                  onRefreshAvatarVoice={handleRefreshAvatarVoice}
+                  onRefreshVoicePreview={handleRefreshVoicePreview}
+                />
+              </div>
+              <div className="space-y-2 min-w-0">
+                {/* PR CQ — last-used portrait prompt audit surface.
+                    <details> disclosure shows the prompt that
+                    gen4_image_turbo actually rendered
+                    (Character.portrait_prompt — set on every
+                    successful generate). When empty, renders a
+                    subtle inline hint instead so the right column
+                    doesn't read as broken pre-portrait. */}
+                {character?.portrait_prompt ? (
+                  <details
+                    data-testid="spokesperson-workspace-portrait-prompt"
+                    className="rounded-lg ring-1 ring-zinc-800 bg-zinc-950/60 px-3 py-1.5"
+                  >
+                    <summary className="text-[10px] text-zinc-400 cursor-pointer select-none hover:text-zinc-200">
+                      Last portrait prompt sent to{' '}
+                      <span className="font-mono">gen4_image_turbo</span>{' '}
+                      <span className="text-zinc-600">
+                        ({character.portrait_prompt.length} chars)
+                      </span>
+                    </summary>
+                    <pre
+                      data-testid="spokesperson-workspace-portrait-prompt-text"
+                      className="text-[10px] text-zinc-300 font-mono whitespace-pre-wrap leading-snug pt-2 break-words"
+                    >
+                      {character.portrait_prompt}
+                    </pre>
+                  </details>
+                ) : (
+                  <p
+                    data-testid="spokesperson-workspace-portrait-prompt-empty"
+                    className="rounded-lg ring-1 ring-zinc-800/60 bg-zinc-950/40 px-3 py-2 text-[10px] text-zinc-500 leading-snug"
+                  >
+                    No portrait yet. Click{' '}
+                    <span className="text-zinc-300 font-medium">
+                      Generate Portrait
+                    </span>{' '}
+                    to render this spokesperson — the resolved prompt
+                    sent to{' '}
+                    <span className="font-mono">gen4_image_turbo</span>{' '}
+                    will appear here for audit.
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* PR CP — Danger zone. Explicit visible delete affordance

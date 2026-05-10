@@ -62,10 +62,14 @@ DEMO_SPOKESPEOPLE: list[dict[str, Any]] = [
         "id": "brewster-bolt",
         "name": "Brewster Bolt",
         "template": "mascot",
+        # PR CQ — concrete visual subject (anthropomorphic raccoon
+        # mascot) so gen4_image_turbo renders the creature instead
+        # of improvising a humanoid silhouette from the previous
+        # "kinetic, animated, playful shape" ad-copy.
         "subject": (
-            "high-energy brand mascot — kinetic, animated, playful "
-            "shape with bold accent colours. Built for fast-cut "
-            "social ads and reels."
+            "an anthropomorphic raccoon mascot spokesperson with a "
+            "confident grin, energetic posture, and friendly "
+            "commercial expression"
         ),
         "style": (
             "vibrant, saturated colour palette; clean modern animation; "
@@ -94,11 +98,13 @@ DEMO_SPOKESPEOPLE: list[dict[str, Any]] = [
         "id": "clara-vale",
         "name": "Clara Vale",
         "template": "founder",
+        # PR CQ — concrete visual subject (human local-business
+        # spokesperson) so the founder template renders a believable
+        # founder headshot instead of leaning on the abstract
+        # "polished founder / executive spokesperson —" ad-copy.
         "subject": (
-            "polished founder / executive spokesperson — "
-            "professional headshot framing, warm-but-composed "
-            "tone, suit-or-blazer wardrobe, modern office "
-            "backdrop."
+            "a polished local business spokesperson with a warm "
+            "confident smile, professional but approachable presence"
         ),
         "style": (
             "cinematic studio lighting; neutral palette with one "
@@ -127,12 +133,18 @@ DEMO_SPOKESPEOPLE: list[dict[str, Any]] = [
     {
         "id": "rex-roadside",
         "name": "Rex Roadside",
-        "template": "local_guide",
+        # PR CQ — switched from local_guide → mascot. Rex is now an
+        # anthropomorphic bison dealership spokesperson, so the
+        # mascot template's "an anthropomorphic mascot spokesperson"
+        # anchor matches the concept; previously Runway upstream-
+        # failed every regen attempt against the dense
+        # "lot-and-truck backdrops, weather-worn but cared-for look"
+        # phrasing under the local_guide template.
+        "template": "mascot",
         "subject": (
-            "dealership / automotive sales spokesperson — "
-            "rugged, approachable, casual flannel-or-polo, "
-            "lot-and-truck backdrops, weather-worn but cared-for "
-            "look."
+            "a rugged but friendly anthropomorphic bison truck-"
+            "dealership spokesperson, broad shoulders, warm grin, "
+            "clean commercial mascot design"
         ),
         "style": (
             "natural daylight; truck and lot environments; "
@@ -165,10 +177,14 @@ DEMO_SPOKESPEOPLE: list[dict[str, Any]] = [
         "id": "mina-spark",
         "name": "Mina Spark",
         "template": "coach",
+        # PR CQ — concrete visual subject (human creative-agency
+        # spokesperson) so the coach template renders a believable
+        # studio-host portrait instead of leaning on the framing
+        # / composition ad-copy from the previous seed.
         "subject": (
-            "creator-style social host — corner-of-the-screen "
-            "framing, expressive face, casual streetwear, "
-            "vertical-first composition."
+            "a bright energetic creative agency spokesperson with "
+            "a friendly confident expression and polished studio "
+            "presence"
         ),
         "style": (
             "natural mixed lighting; quick cuts; reaction-style "

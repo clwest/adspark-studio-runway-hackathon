@@ -53,7 +53,41 @@ just sharpening the seed fixture `subject` strings +
 re-firing the 4 demo portraits to confirm the new
 templates produce believable mascots. Backend
 untouched at the route layer (route count still
-**71**); no real Runway calls fired this slice. PR CO landed
+**71**); no real Runway calls fired this slice.
+**PR CQ** ships the sharpened seeds — Brewster Bolt's
+`subject` becomes "an anthropomorphic raccoon mascot
+spokesperson with a confident grin, energetic posture,
+and friendly commercial expression"; Rex Roadside
+becomes "a rugged but friendly anthropomorphic bison
+truck-dealership spokesperson, broad shoulders, warm
+grin, clean commercial mascot design" + his template
+flips `local_guide` → `mascot` to match the new
+anthropomorphic concept; Clara Vale + Mina Spark get
+trimmed concrete subject strings (template unchanged).
+Plus a tiny inline `<details>` block in the workspace
+Identity tab — testid `spokesperson-workspace-portrait-prompt` —
+shows the resolved `Character.portrait_prompt` (the
+exact string sent to `gen4_image_turbo` on the last
+successful generate). Empty-state hint
+(`spokesperson-workspace-portrait-prompt-empty`)
+renders pre-portrait; no editor, no copy button, no
+API. The Identity tab is now a responsive 2-col grid
+(`md:grid-cols-[minmax(0,320px)_minmax(0,1fr)]`,
+testid `spokesperson-workspace-identity-grid`) so the
+embedded `<CharacterCard>` caps at 320px wide on
+desktop with the prompt audit hosted in the right
+column; the previous `aspect-square w-full` portrait
+was rendering at full workspace width and dominating
+the page. Mobile collapses to one column and centres
+the card at `max-w-[320px] mx-auto`. The
+seed-fixture rewrites + audit surface together close
+the "what's this prompt actually saying to Runway?"
+operator question. Real-mode QA checklist (regen
+Brewster + Rex, confirm portrait_prompt persisted +
+avatar references the regenerated portrait, capture
+before/after notes) is documented in
+`docs/handoffs/SESSION_074_SHARPEN_DEMO_SUBJECTS_PR_CQ.md`
+and remains unexecuted pending operator approval. PR CO landed
 immediately before: Three actions ran this slice:
 (1) re-seeded the four canonical demo spokespeople (Brewster
 Bolt / Clara Vale / Rex Roadside / Mina Spark) — only

@@ -1,10 +1,18 @@
 # START NEXT SESSION — AdSpark Studio
 
-**Last touched:** 2026-05-10 (PR CP cont. — portrait
-template hardening + brand-safe / anti-uncanny tail in
-both backend `PORTRAIT_TEMPLATES` and frontend
-`characterPromptBuilder._FINISHERS`; smoke 3/3, build
-479.84 KB initial / 131.00 KB gzip. Earlier: PR AG/AH `6157512`; PR AI
+**Last touched:** 2026-05-10 (PR CQ — sharpened demo
+seed `subject` strings on Brewster / Clara / Rex / Mina;
+flipped Rex Roadside's template `local_guide` →
+`mascot` to match new anthropomorphic-bison concept;
+new `<details>` portrait-prompt audit surface in the
+Identity tab below the embedded CharacterCard;
+Identity tab restructured into a responsive 2-col grid
+so the embedded CharacterCard caps at 320px wide on
+md+ instead of rendering its `aspect-square w-full`
+portrait at full workspace width; smoke 3/3 passed,
+build 481.30 KB initial / 131.30 KB gzip.
+Earlier: PR CP cont. portrait template hardening
+`58a73f2`; PR AG/AH `6157512`; PR AI
 `108ca3b`; PR AJ `444cb6a`; PR AK `c59251a`; PR AL `8a43af2`;
 PR AM `3e12d27`; PR AN `f255c22`; PR AO `5bca7c4`; PR AP
 `3c6483e`; PR AQ `ec35c0e`; PR AR `5aa5579`; PR AS `2321fd7`;
@@ -27,8 +35,10 @@ campaign hint (PR CL)`; PR CM Library Tile Simplification
 SESSION 070 V2 Full UI QA `45bce42`; PR CO Repair Demo
 Data + Portraits + Stats Accuracy `b0d4bf2`; PR CP
 Restore Delete Spokesperson + Endpoint Audit `82b695f`;
-PR CP cont. portrait template hardening in flight on
-top — SESSION_012–SESSION_073 handoffs added).
+PR CP cont. portrait template hardening `58a73f2`;
+PR CQ Sharpen Demo Seed Subjects + Tiny Prompt Audit
+in flight on top —
+SESSION_012–SESSION_074 handoffs added).
 
 ## Where things stand
 
