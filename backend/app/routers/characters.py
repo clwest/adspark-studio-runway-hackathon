@@ -118,6 +118,33 @@ class ApplyVoiceBody(BaseModel):
     mode: Optional[Literal["apply", "repair"]] = None
 
 
+class MetadataPatchBody(BaseModel):
+    """PR CK — request body for the metadata-patch route.
+
+    ``Character.metadata`` is a free-form ``dict`` (PR CG used it
+    for ``demo: True`` flags via a direct store update). The v2
+    multi-step Create Spokesperson flow needs to write
+    ``audience_vibe`` / ``creation_flow`` / ``visual_style_chips``
+    / ``speaking_energy`` from the browser without inventing per-
+    field columns; this route is the smallest possible HTTP path
+    that lets it.
+
+    Semantics:
+    - Missing keys are left alone (merge, not replace).
+    - Pass ``null`` for a key to delete it.
+    - Cap the patch dict at 32 keys + 4 KB serialised so a
+      pathological client can't fill the JSON record.
+    """
+
+    metadata: dict = Field(
+        default_factory=dict,
+        description=(
+            "Partial metadata patch. Existing keys not mentioned "
+            "stay; explicit nulls delete; new keys are added."
+        ),
+    )
+
+
 # ---- PR BB — history helper -------------------------------------
 #
 # Centralised so every route appends entries with a consistent shape.
@@ -741,6 +768,62 @@ def post_refresh_voice_preview(
         character_id,
     )
     return record
+
+
+@router.post("/{character_id}/metadata", response_model=Character)
+def post_character_metadata(
+    character_id: str,
+    body: MetadataPatchBody,
+    store: CharacterStore = Depends(_store),
+) -> Character:
+    """PR CK — merge a metadata patch onto an existing Character.
+
+    The new multi-step Create Spokesperson flow uses this to
+    persist ``audience_vibe`` / ``creation_flow`` /
+    ``visual_style_chips`` / ``speaking_energy`` into the
+    Character.metadata free-form dict without per-field columns.
+    Existing keys not mentioned in the patch stay; explicit
+    ``null`` values delete; new keys are added.
+
+    Failure modes:
+    - 404 — character not found.
+    - 422 — pydantic validation (max payload size).
+    - 413 — patch too large (>32 keys or >4 KB serialised).
+    """
+    record = store.get(character_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="character not found")
+
+    patch = body.metadata or {}
+    if len(patch) > 32:
+        raise HTTPException(
+            status_code=413,
+            detail=f"metadata patch too large ({len(patch)} keys; max 32)",
+        )
+    # Deep-ish guard: serialised size cap.
+    import json as _json  # noqa: WPS433
+    if len(_json.dumps(patch, default=str)) > 4 * 1024:
+        raise HTTPException(
+            status_code=413,
+            detail="metadata patch too large (>4 KB serialised)",
+        )
+
+    merged = dict(record.metadata or {})
+    for k, v in patch.items():
+        if v is None:
+            merged.pop(k, None)
+        else:
+            merged[k] = v
+
+    updated = store.update(character_id, metadata=merged)
+    if not updated:
+        raise HTTPException(status_code=404, detail="character not found")
+    logger.info(
+        "character %s metadata patched (%d keys)",
+        character_id,
+        len(patch),
+    )
+    return updated
 
 
 @router.get("/{character_id}/portrait")

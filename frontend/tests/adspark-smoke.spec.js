@@ -975,24 +975,104 @@ test('AdSpark Studio Spokesperson Library @ /', async ({ page }) => {
   await expect(
     studio.getByTestId('spokesperson-new-campaign'),
   ).toHaveCount(0)
-  // PR CB — clicking opens CreateSpokespersonModal; closing
-  // restores the homepage. We open + cancel without
-  // submitting so the smoke never mutates fixture state.
+  // PR CK — clicking opens the multi-step CreateSpokespersonFlow.
+  // We walk all 4 steps to confirm structural integrity, then
+  // cancel without firing the final API calls. Smoke never
+  // generates real Runway content.
   await createBtn.click()
-  const createModal = page.getByTestId('create-spokesperson-modal')
-  await expect(createModal).toBeVisible()
+  const createFlow = page.getByTestId('create-spokesperson-flow')
+  await expect(createFlow).toBeVisible()
+  // Step 1 — Identity
+  const stepTitle = createFlow.getByTestId('create-spokesperson-step-title')
+  await expect(stepTitle).toContainText(/Step 1 of 4/i)
   await expect(
-    createModal.getByTestId('create-spokesperson-name'),
+    createFlow.getByTestId('create-spokesperson-step-1'),
   ).toBeVisible()
   await expect(
-    createModal.getByTestId('create-spokesperson-template'),
+    createFlow.getByTestId('create-spokesperson-name'),
   ).toBeVisible()
   await expect(
-    createModal.getByTestId('create-spokesperson-voice'),
+    createFlow.getByTestId('create-spokesperson-template'),
   ).toBeVisible()
-  await createModal.getByTestId('create-spokesperson-cancel').click()
   await expect(
-    page.getByTestId('create-spokesperson-modal'),
+    createFlow.getByTestId('create-spokesperson-personality'),
+  ).toBeVisible()
+  await expect(
+    createFlow.getByTestId('create-spokesperson-audience-vibe'),
+  ).toBeVisible()
+  // Next gated by name + template (template defaults to "mascot",
+  // so we just need to fill the name).
+  const nextBtn = createFlow.getByTestId('create-spokesperson-next')
+  await expect(nextBtn).toBeDisabled()
+  await createFlow
+    .getByTestId('create-spokesperson-name')
+    .fill('QA Smoke Spokesperson')
+  await expect(nextBtn).toBeEnabled()
+  await nextBtn.click()
+
+  // Step 2 — Visual Direction
+  await expect(stepTitle).toContainText(/Step 2 of 4/i)
+  await expect(
+    createFlow.getByTestId('create-spokesperson-step-2'),
+  ).toBeVisible()
+  await expect(
+    createFlow.getByTestId('create-spokesperson-style-chips'),
+  ).toBeVisible()
+  await expect(
+    createFlow.getByTestId('create-spokesperson-fashion'),
+  ).toBeVisible()
+  const promptTextarea = createFlow.getByTestId(
+    'create-spokesperson-portrait-prompt',
+  )
+  await expect(promptTextarea).toBeVisible()
+  // Auto-derive must populate the prompt; not empty.
+  expect((await promptTextarea.inputValue()).length).toBeGreaterThan(20)
+  await createFlow.getByTestId('create-spokesperson-next').click()
+
+  // Step 3 — Voice
+  await expect(stepTitle).toContainText(/Step 3 of 4/i)
+  await expect(
+    createFlow.getByTestId('create-spokesperson-step-3'),
+  ).toBeVisible()
+  await expect(
+    createFlow.getByTestId('create-spokesperson-voice'),
+  ).toBeVisible()
+  await expect(
+    createFlow.getByTestId('create-spokesperson-voice-detail'),
+  ).toBeVisible()
+  await expect(
+    createFlow.getByTestId('create-spokesperson-voice-featured'),
+  ).toBeVisible()
+  await createFlow.getByTestId('create-spokesperson-next').click()
+
+  // Step 4 — Generate
+  await expect(stepTitle).toContainText(/Step 4 of 4/i)
+  await expect(
+    createFlow.getByTestId('create-spokesperson-step-4'),
+  ).toBeVisible()
+  await expect(
+    createFlow.getByTestId('create-spokesperson-summary'),
+  ).toBeVisible()
+  await expect(
+    createFlow.getByTestId('create-spokesperson-avatar-toggle'),
+  ).toBeVisible()
+  await expect(
+    createFlow.getByTestId('create-spokesperson-campaign-toggle'),
+  ).toBeVisible()
+  // Back is reachable from step 4.
+  const backBtn = createFlow.getByTestId('create-spokesperson-back')
+  await expect(backBtn).toBeVisible()
+  // Cancel via backdrop click (modal currently has no Cancel
+  // testid in step 4 — only Back + Submit). Submit is the final
+  // create button; we never click it in smoke. Use the close
+  // button's lookup instead via going Back to step 1 and
+  // hitting Cancel there.
+  await backBtn.click() // → step 3
+  await createFlow.getByTestId('create-spokesperson-back').click() // → step 2
+  await createFlow.getByTestId('create-spokesperson-back').click() // → step 1
+  await createFlow.getByTestId('create-spokesperson-cancel').click()
+  await expect(
+    page.getByTestId('create-spokesperson-flow'),
   ).toHaveCount(0)
   // PR CA — legacy v1 wizard surfaces must be ABSENT on `/`.
   // The legacy "+ Create Character" lives at /legacy now.

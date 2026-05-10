@@ -9,7 +9,7 @@ import {
   setActiveMode,
 } from '../uxFlag.js'
 import CampaignModeModal from './CampaignModeModal.jsx'
-import CreateSpokespersonModal from './CreateSpokespersonModal.jsx'
+import CreateSpokespersonFlow from './CreateSpokespersonFlow.jsx'
 import SpokespersonCard from './SpokespersonCard.jsx'
 import CinematicLane from './lanes/CinematicLane.jsx'
 import DialogueLane from './lanes/DialogueLane.jsx'
@@ -522,7 +522,13 @@ export default function SpokespersonStudio({
   const [createOpen, setCreateOpen] = useState(false)
   const handleOpenCreateSpokesperson = () => setCreateOpen(true)
   const handleCloseCreateSpokesperson = () => setCreateOpen(false)
-  const handleSpokespersonCreated = (created) => {
+  // PR CK — onCreated signature extended to
+  //   onCreated(character, { startCampaign }) => void
+  // so the multi-step flow can opt the operator into navigating
+  // straight to the new spokesperson's workspace with the mode
+  // modal pre-opened. The options arg is optional; PR CB-era
+  // callers that pass just a character keep working.
+  const handleSpokespersonCreated = (created, options = {}) => {
     if (!created) {
       setCreateOpen(false)
       return
@@ -542,6 +548,25 @@ export default function SpokespersonStudio({
     onSetActive?.(created.id)
     onCharactersChanged?.()
     setCreateOpen(false)
+    if (options.startCampaign) {
+      // PR CK — the flow's "Start a campaign" checkbox flag.
+      // Persist a hint in localStorage that the workspace at
+      // /spokespeople/{id} can read on mount and open its
+      // mode modal automatically. Workspace integration lives
+      // in a follow-up slice; for now the hint just records
+      // intent — operators who land on the workspace can hit
+      // + New Campaign manually one click later.
+      try {
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem(
+            'adspark.startCampaignHint',
+            created.id,
+          )
+        }
+      } catch {
+        // localStorage can throw in private modes; safe to ignore.
+      }
+    }
   }
 
   const handleDelete = async (c) => {
@@ -953,11 +978,16 @@ export default function SpokespersonStudio({
         />
       )}
 
-      {/* PR CB — Create Spokesperson modal. Mirrors the legacy
-          CharacterStudio create form's API contract (POST
-          /api/characters + POST /api/characters/{id}/generate-portrait)
-          but with a tighter library-level surface (4 fields). */}
-      <CreateSpokespersonModal
+      {/* PR CK — Multi-step Create Spokesperson flow. Replaces
+          the PR CB lightweight modal with a 4-step stepper
+          (Identity / Visual Direction / Voice / Generate) that
+          captures the existing rich Character schema fields
+          (personality, style, portrait_prompt, full 30 voice
+          presets, metadata.audience_vibe). PR CJ portrait-failed
+          retry/skip semantics preserved. Optional avatar bind +
+          starter campaign hint via the extended onCreated
+          signature. */}
+      <CreateSpokespersonFlow
         isOpen={createOpen}
         onClose={handleCloseCreateSpokesperson}
         onCreated={handleSpokespersonCreated}

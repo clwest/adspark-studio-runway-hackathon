@@ -304,4 +304,15 @@ export const api = {
       `/api/characters/${encodeURIComponent(characterId)}/refresh-voice-preview`,
       { method: 'POST' },
     ),
+  // PR CK — merge a metadata patch onto an existing Character.
+  // Used by the v2 multi-step Create Spokesperson flow to persist
+  // audience_vibe / creation_flow / visual_style_chips /
+  // speaking_energy into the existing Character.metadata dict
+  // without per-field schema columns. `patch` is a dict; nulls
+  // delete a key, missing keys leave existing values alone.
+  patchCharacterMetadata: (characterId, patch) =>
+    jsonFetch(
+      `/api/characters/${encodeURIComponent(characterId)}/metadata`,
+      { method: 'POST', body: JSON.stringify({ metadata: patch || {} }) },
+    ),
 }
