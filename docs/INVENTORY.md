@@ -1,8 +1,34 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after **PR CV — Runway API Contract
-Audit**. Reviewed the official Runway docs at
+context-kit refresh after **PR CW — Clean Portrait Prompt
+Composer**. Replaced the PR CR/CS per-template f-strings (which
+produced ~720-char "polished commercial mascot portrait of an
+anthropomorphic mascot spokesperson — anthropomorphic donkey…"
+double-anchored output with raw chip dumps + repeated lighting
+phrases) with a deterministic composer: `Polished {anchor}
+portrait of {subject}[ wearing {wardrobe}]. {expression cue}.
+[{aesthetic sentence}.] Head-and-shoulders composition on a
+clean neutral background. Professional advertising character
+design. [Soft studio lighting.]`. Anchor word picks from
+operator's chips by priority (editorial > cinematic > stylized
+> fallback "commercial"). Aesthetic sentence picks one phrase
+per category (design / color / light) and folds them into a
+single readable line ("Stylized commercial brand-character
+design with muted colors and soft studio lighting."). Wardrobe
+text after a `;` parses naturally
+("dark hoodie, backwards hat" → "a dark hoodie and backwards
+hat"). User-spec fox mascot example lands at 364 chars and
+matches documented expected verbatim. Backend
+`_compose_clean_prompt` + frontend
+`buildCharacterPortraitPrompt` + the embedded
+`CreateSpokespersonFlow.derivePortraitPrompt` all delegate to
+the shared composer — three drift surfaces collapsed into one.
+Six new pytests pin the contract; the legacy v1 smoke regex
+updated to match the new prefix. `prompt_override` and
+`safe_retry` paths unchanged — operator-typed text still
+short-circuits the composer. Backend route count still **71**.
+Earlier: Reviewed the official Runway docs at
 `docs.dev.runwayml.com` and the Stainless-generated Python
 SDK source (`runwayml/sdk-python`) end-to-end. Confirmed
 `gen4_image_turbo` is officially supported (not deprecated

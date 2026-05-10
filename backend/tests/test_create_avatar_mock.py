@@ -145,6 +145,112 @@ def test_create_avatar_409_when_portrait_file_is_empty(
 # ---- PR CS — safe-retry preset + persist-on-failure --------------
 
 
+# ---- PR CW — clean prompt composer -------------------------------
+
+
+def test_clean_prompt_mascot_donkey():
+    """Pin the user-spec example: anthropomorphic donkey mascot,
+    style chips only, no wardrobe. Verifies the headline anchor
+    picks up "editorial" from the chips, the aesthetic sentence
+    folds the remaining chips into one readable line, and the
+    composer doesn't double-anchor "anthropomorphic".
+    """
+    from app.services.character_studio_client import build_prompt
+
+    prompt = build_prompt(
+        "mascot",
+        subject="an anthropomorphic donkey marketing mascot",
+        style="stylized, editorial, muted palette",
+    )
+    assert prompt.startswith(
+        "Polished editorial portrait of an anthropomorphic donkey marketing mascot."
+    ), prompt
+    assert "Calm confident expression." in prompt
+    assert "Stylized commercial brand-character design with muted colors." in prompt
+    assert "Head-and-shoulders composition on a clean neutral background." in prompt
+    # Regression guard — never let the old double-anchor pattern slip back in.
+    assert "anthropomorphic mascot spokesperson — anthropomorphic" not in prompt
+    assert "polished commercial mascot portrait of a mascot" not in prompt.lower()
+    assert "brand-safe advertising character" not in prompt.lower()
+
+
+def test_clean_prompt_fox_mascot_with_wardrobe():
+    """Pin the user-spec fox example verbatim. The composed
+    prompt must match the documented expected output."""
+    from app.services.character_studio_client import build_prompt
+
+    prompt = build_prompt(
+        "mascot",
+        subject="an anthropomorphic fox business spokesperson with polished studio styling",
+        style="stylized, editorial, studio light, muted palette; dark hoodie, backwards hat",
+    )
+    assert prompt == (
+        "Polished editorial portrait of an anthropomorphic fox business "
+        "spokesperson with polished studio styling wearing a dark hoodie "
+        "and backwards hat. Calm confident expression. Stylized commercial "
+        "brand-character design with muted colors and soft studio lighting. "
+        "Head-and-shoulders composition on a clean neutral background. "
+        "Professional advertising character design."
+    ), prompt
+
+
+def test_clean_prompt_founder_no_wardrobe_no_chips():
+    """Empty style + minimal subject still produces a readable
+    prompt using the founder defaults + expression cue."""
+    from app.services.character_studio_client import build_prompt
+
+    prompt = build_prompt("founder", subject="a polished founder, mid-30s")
+    assert prompt.startswith(
+        "Polished commercial portrait of a polished founder, mid-30s."
+    ), prompt
+    assert "Direct trustworthy gaze with a soft natural smile." in prompt
+    # No wardrobe means no "wearing …" clause.
+    assert " wearing " not in prompt, prompt
+    # No chips means no aesthetic sentence — the standard tail
+    # "Soft studio lighting." still lands.
+    assert prompt.rstrip().endswith("Soft studio lighting."), prompt
+
+
+def test_clean_prompt_no_duplicated_anthropomorphic():
+    """Even when the operator's `subject` already contains
+    "anthropomorphic", the composer must not double up on it."""
+    from app.services.character_studio_client import build_prompt
+
+    prompt = build_prompt(
+        "mascot",
+        subject="an anthropomorphic raccoon mascot spokesperson",
+        style="stylized; punk streetwear",
+    )
+    assert prompt.lower().count("anthropomorphic") == 1, prompt
+
+
+def test_clean_prompt_under_hard_cap():
+    """Even with a maximally noisy subject + every chip, the
+    composer caps at 700 chars."""
+    from app.services.character_studio_client import build_prompt
+
+    prompt = build_prompt(
+        "mascot",
+        subject="a " + "very " * 200 + "long subject",
+        style=(
+            "stylized, editorial, plush mascot, muted palette, "
+            "bright palette, vibrant palette, studio light, "
+            "natural light, cinematic; an enormous wardrobe with "
+            "countless items"
+        ),
+    )
+    assert len(prompt) <= 700, len(prompt)
+
+
+def test_clean_prompt_prompt_override_still_wins():
+    """`prompt_override` short-circuits the composer entirely so
+    operator-typed text reaches Runway verbatim."""
+    from app.services.character_studio_client import build_prompt
+
+    custom = "totally custom verbatim prompt the operator typed"
+    assert build_prompt("mascot", prompt_override=custom) == custom
+
+
 def test_safe_retry_uses_simpler_prompt(client: TestClient):
     """`safe_retry=True` should bypass character.style and render a
     short, declarative prompt — not the full PORTRAIT_TEMPLATES
@@ -187,11 +293,11 @@ def test_safe_retry_uses_simpler_prompt(client: TestClient):
     assert len(prompt) < 600, f"safe-retry prompt too long ({len(prompt)})"
 
 
-def test_default_path_still_includes_style(client: TestClient):
-    """Counter-test: when `safe_retry=False` (default), character.style
-    is still composed into the resolved prompt. This pins the
-    behaviour so a future cleanup doesn't accidentally drop style
-    from the happy path.
+def test_default_path_maps_style_chips(client: TestClient):
+    """PR CW — style chips are MAPPED into natural language by the
+    composer, not dumped verbatim. "muted palette" should land as
+    "muted colors" in the aesthetic sentence; free-form text after
+    a `;` becomes wardrobe.
     """
     resp = client.post(
         "/api/characters",
@@ -199,7 +305,7 @@ def test_default_path_still_includes_style(client: TestClient):
             "name": "Default Path Donkey",
             "template": "mascot",
             "subject": "an anthropomorphic donkey",
-            "style": "muted palette, premium modern hoodie",
+            "style": "muted palette; premium modern hoodie",
             "voice_preset": "drew",
         },
     )
@@ -210,5 +316,8 @@ def test_default_path_still_includes_style(client: TestClient):
     )
     assert resp.status_code == 200, resp.text
     prompt = resp.json()["portrait_prompt"]
-    assert "muted palette" in prompt.lower(), prompt
-    assert "premium modern hoodie" in prompt.lower(), prompt
+    # The chip was mapped, not dumped raw.
+    assert "muted colors" in prompt.lower(), prompt
+    assert "muted palette" not in prompt.lower(), prompt
+    # The free-form post-`;` text becomes wardrobe.
+    assert "wearing a premium modern hoodie" in prompt.lower(), prompt

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { api } from '../api'
+import { buildCharacterPortraitPrompt } from '../characterPromptBuilder'
 import { friendlyError } from '../errors'
 import {
   FEATURED_VOICE_PRESETS,
@@ -1086,60 +1087,23 @@ function SummaryRow({ label, value, multiline = false }) {
 // backend's PORTRAIT_TEMPLATES shape (mascot / founder / coach /
 // local_guide) so the on-screen preview matches what the gen
 // route will use when prompt_override isn't sent.
-// PR CR — rewrote to mirror the backend positive-only templates in
-// `character_studio_client.PORTRAIT_TEMPLATES`. The previous trailing
-// "No props or sunglasses." line was a negation; diffusion models
-// routinely misread inline negations and Runway's gen4_image_turbo
-// rejected the resulting outputs as `INTERNAL.BAD_OUTPUT.CODE01`
-// (Donny Sparks repro). Mascot template now leads with "polished
+// PR CW — delegate to the shared composer in `characterPromptBuilder`.
+// The legacy approach hand-rolled per-template f-strings in this file
+// AND in the backend, which drifted into redundancy ("polished
 // commercial mascot portrait of an anthropomorphic mascot
-// spokesperson — {subject}" so animal mascots render as creatures
-// instead of humanoid silhouettes.
+// spokesperson — an anthropomorphic donkey…"). The shared composer
+// produces clean, deterministic prompts (300–500 char target, 700
+// hard cap) for both surfaces. `style` here packs chips + free-form
+// wardrobe text together with a `;` separator; the composer parses
+// that contract.
 function derivePortraitPrompt(form) {
-  const subject =
-    (form.subject || '').trim() ||
-    'a friendly brand spokesperson'
   const styleParts = []
   if (form.style_chips?.length) styleParts.push(form.style_chips.join(', '))
   if (form.fashion?.trim()) styleParts.push(form.fashion.trim())
-  const style = styleParts.join('; ') || 'modern, warm, on-brand'
-  const tail =
-    'Brand-safe advertising character suitable for a marketing ' +
-    'campaign. Polished commercial illustration with believable ' +
-    'character anatomy and a clean face.'
-  switch (form.template) {
-    case 'founder':
-      return (
-        `A polished commercial spokesperson portrait of ${subject}. ` +
-        `${style}. Head-and-shoulders, front-facing. Direct eye ` +
-        `contact, soft natural smile. Clean off-white background. ` +
-        `Warm soft lighting. Photorealistic modern founder ` +
-        `aesthetic. ${tail}`
-      )
-    case 'coach':
-      return (
-        `A polished commercial spokesperson portrait of ${subject}. ` +
-        `${style}. Head-and-shoulders. Confident posture, bright ` +
-        `expression, open mouth mid-speech. Solid muted-blue ` +
-        `background. Crisp directional lighting. Athletic-coach ` +
-        `aesthetic. ${tail}`
-      )
-    case 'local_guide':
-      return (
-        `A polished commercial spokesperson portrait of ${subject} ` +
-        `in a small-business setting. ${style}. Head-and-shoulders, ` +
-        `front-facing. Welcoming smile. Soft-blurred neutral ` +
-        `background suggesting indoors. Natural daylight. ` +
-        `Approachable neighborly aesthetic. ${tail}`
-      )
-    case 'mascot':
-    default:
-      return (
-        `A polished commercial mascot portrait of an anthropomorphic ` +
-        `mascot spokesperson — ${subject}. ${style}. Head-and-` +
-        `shoulders framing, expressive friendly face, soft warm ` +
-        `smile. Simple solid mid-grey background. Soft three-point ` +
-        `studio lighting. High-quality 3D character design. ${tail}`
-      )
-  }
+  const style = styleParts.join('; ')
+  return buildCharacterPortraitPrompt({
+    template: form.template,
+    subject: form.subject || '',
+    style,
+  })
 }

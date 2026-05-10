@@ -178,9 +178,11 @@ test('AdSpark Studio mock-mode end-to-end smoke @ /legacy', async ({ page }) => 
   const portraitPromptTextarea = page.getByLabel(/^Portrait Prompt/i)
   await expect(portraitPromptTextarea).toBeVisible()
   // Default content auto-derives from form fields — must open with
-  // the structured "front-facing head-and-shoulders portrait" prefix.
+  // the PR CW composer's "Polished {anchor} portrait of " prefix
+  // (anchor falls back to "commercial" when no priority chip is
+  // present in the legacy form).
   await expect(portraitPromptTextarea).toHaveValue(
-    /^A front-facing head-and-shoulders portrait/i,
+    /^Polished (commercial|editorial|cinematic|stylized) portrait of /i,
   )
   // Helper text spelling out the avatar-ready rules of thumb.
   await expect(

@@ -1,183 +1,177 @@
 /**
- * PR V — Character portrait prompt builder.
+ * PR CW — Clean portrait prompt composer (frontend).
  *
- * Mirrors the backend's PORTRAIT_TEMPLATES (services/character_studio_client.py)
- * but produces a richer, avatar-ready string the user can edit before
- * the request fires. The backend's text already auto-builds something
- * sensible from {template, subject, style}; PR V exposes that string
- * as an editable textarea + folds in the optional `name` and
- * `personality` fields the backend ignored at portrait time.
+ * Mirrors `backend/app/services/character_studio_client.py`'s
+ * `_compose_clean_prompt` byte-for-byte so the v1 CharacterStudio
+ * textarea + the v2 CreateSpokespersonFlow textarea + the backend
+ * default path all produce the same string for the same inputs.
  *
- * The output prompt is what the frontend POSTs to
- * /api/characters/{id}/generate-portrait as `prompt_override`. The
- * backend's `build_prompt` short-circuits to the override when it's
- * present, so this string ends up being the exact text passed to
- * Runway's gen4_image_turbo.
+ * Output shape:
+ *   "Polished {anchor} portrait of {subject}[ wearing {wardrobe}]. "
+ *   "{expression cue}. "
+ *   "[{aesthetic sentence}.] "
+ *   "Head-and-shoulders composition on a clean neutral background. "
+ *   "Professional advertising character design. "
+ *   "[Soft studio lighting.]"
  *
- * Best-practice prompt rules (matched to the canonical raccoon prompt
- * the user provided):
- *   - centered head-and-shoulders portrait
- *   - face / eyes / mouth visible
- *   - clean background, no sunglasses, no props blocking the face
- *   - single subject, single environment hint
- *   - avatar-ready
+ * Operator-typed text in the textarea still gets POSTed verbatim as
+ * `prompt_override` and the backend `build_prompt` short-circuits
+ * to it before the composer runs — so manual edits are preserved.
  */
 
 const _trim = (s) => String(s || '').trim()
-const _terminate = (s) => {
-  const t = _trim(s)
+
+const _DEFAULT_SUBJECT = {
+  mascot: 'a friendly brand mascot',
+  founder: 'a polished founder spokesperson, mid-30s',
+  coach: 'an energetic coach spokesperson, mid-30s',
+  local_guide: 'a welcoming local-business spokesperson',
+}
+
+// Per-template expression cue. Drives the second sentence of the
+// composed prompt.
+const _EXPRESSION_CUE = {
+  mascot: 'Calm confident expression',
+  founder: 'Direct trustworthy gaze with a soft natural smile',
+  coach: 'Confident bright expression',
+  local_guide: 'Welcoming friendly expression',
+}
+
+// Style chip mapping — each chip lands in one of three categories
+// (design / color / light). The composer picks one phrase per
+// category and folds them into a single readable sentence.
+const _STYLE_CHIPS = {
+  // design
+  stylized: ['design', 'stylized commercial brand-character design'],
+  editorial: ['design', 'editorial advertising aesthetic'],
+  'plush mascot': ['design', 'plush mascot character design'],
+  // colors
+  'muted palette': ['color', 'muted colors'],
+  'bright palette': ['color', 'bright friendly colors'],
+  'vibrant palette': ['color', 'vibrant colors'],
+  // lighting
+  'studio light': ['light', 'soft studio lighting'],
+  'natural light': ['light', 'natural soft lighting'],
+  cinematic: ['light', 'cinematic lighting'],
+}
+
+// Anchor word for "Polished {anchor} portrait of …" — first chip
+// in this priority list that appears in the operator's chips wins.
+// Falls back to "commercial" when no priority chip is present.
+const _ANCHOR_PRIORITY = ['editorial', 'cinematic', 'stylized']
+const _DEFAULT_ANCHOR = 'commercial'
+
+const _PROMPT_HARD_CAP = 700
+
+function _ensureArticle(text) {
+  const t = _trim(text)
   if (!t) return ''
-  return /[.!?]$/.test(t) ? t : `${t}.`
+  const lower = t.toLowerCase()
+  for (const prefix of ['a ', 'an ', 'the ', 'his ', 'her ', 'their ']) {
+    if (lower.startsWith(prefix)) return t
+  }
+  const article = 'aeiou'.includes(t[0].toLowerCase()) ? 'an ' : 'a '
+  return article + t
 }
 
-// Default subject + style fallbacks matching the backend's
-// TEMPLATE_DEFAULTS so the auto-builder produces parsable text even
-// when the user hasn't filled out subject / style yet.
-const _DEFAULTS = {
-  mascot: {
-    subject: 'a friendly raccoon barista mascot',
-    style: 'photorealistic stylised plush texture',
-  },
-  founder: {
-    subject: 'an indie brand founder, mid-30s',
-    style: 'polished modern editorial style',
-  },
-  coach: {
-    subject: 'a fitness coach, mid-30s',
-    style: 'bright high-energy editorial style',
-  },
-  local_guide: {
-    subject: 'a friendly local-business shopkeeper',
-    style: 'warm documentary editorial style',
-  },
+function _formatWardrobe(text) {
+  const items = String(text || '')
+    .split(',')
+    .map((w) => w.trim())
+    .filter(Boolean)
+  if (items.length === 0) return ''
+  const head = _ensureArticle(items[0])
+  if (items.length === 1) return head
+  return [head, ...items.slice(1)].join(' and ')
 }
 
-// Per-template scene anchors used in the auto-built prompt. The
-// constraints + finishers are shared across templates to enforce the
-// avatar-ready shape the smoke + the user's canonical prompt both
-// hint at.
-const _TEMPLATES = {
-  mascot: {
-    background: 'Clean warm studio background',
-    light: 'soft three-point studio lighting',
-    expression: 'expressive eyes, soft warm smile',
-  },
-  founder: {
-    background: 'Clean off-white studio background',
-    light: 'soft natural lighting',
-    expression: 'direct eye contact, soft natural smile',
-  },
-  coach: {
-    background: 'Solid muted-blue background',
-    light: 'crisp directional lighting',
-    expression: 'confident posture, bright expression, mid-speech',
-  },
-  local_guide: {
-    background: 'Soft-blurred neutral indoor background',
-    light: 'natural daylight',
-    expression: 'welcoming smile, neighborly',
-  },
+function _parseStyle(style) {
+  if (!style) return { chips: [], wardrobe: '' }
+  const s = _trim(style)
+  let chipsPart = s
+  let wardrobe = ''
+  const sep = s.indexOf(';')
+  if (sep >= 0) {
+    chipsPart = s.slice(0, sep)
+    wardrobe = s.slice(sep + 1)
+  }
+  const chips = chipsPart
+    .split(',')
+    .map((c) => c.trim().toLowerCase())
+    .filter(Boolean)
+  return { chips, wardrobe: _trim(wardrobe) }
 }
 
-// PR CR — rewrote to drop "no sunglasses, no props blocking the
-// face" negations that diffusion models misread as content
-// directives. Pure positive phrasing renders the same intent: a
-// clean, fully-visible face is implied by "unobstructed view of the
-// face" — the absence of obstructions is the shape we want, but we
-// describe it as a *positive* attribute the model can render.
-const _CONSTRAINTS =
-  'Centered face with eyes and mouth fully visible, ' +
-  'unobstructed view of the face'
-// PR CP cont. — brand-safe finishers mirror the backend
-// ``_BRAND_SAFE_TAIL`` so the editable textarea opens with the same
-// language the auto-built backend prompt uses.
-//
-// PR CR — dropped the inline negation list ("no horror, no
-// distortion, no extra limbs, no melted anatomy, no uncanny
-// realism"). Diffusion models often misread negations as
-// instructions to include those concepts, and Donny Sparks
-// reproducibly hit `INTERNAL.BAD_OUTPUT.CODE01` against
-// gen4_image_turbo until the negations were removed. Positive-only
-// phrasing renders the same brand-safe intent without tripping the
-// downstream output check.
-const _FINISHERS =
-  'high detail, mascot portrait, avatar-ready, brand-safe ' +
-  'advertising character, polished commercial illustration with ' +
-  'believable anatomy'
+function _composeAesthetic(chips, usedAnchor) {
+  const byCat = { design: null, color: null, light: null }
+  for (const chip of chips) {
+    if (chip === usedAnchor) continue
+    const mapped = _STYLE_CHIPS[chip]
+    if (!mapped) continue
+    const [cat, phrase] = mapped
+    if (byCat[cat] === null) byCat[cat] = phrase
+  }
+  if (!byCat.design && !byCat.color && !byCat.light) return ''
+  const subjectPhrase = byCat.design || 'Polished commercial illustration'
+  const modifiers = [byCat.color, byCat.light].filter(Boolean)
+  if (modifiers.length === 0) return subjectPhrase
+  return `${subjectPhrase} with ${modifiers.join(' and ')}`
+}
+
+function _capitalizeFirst(text) {
+  if (!text) return text
+  return text.slice(0, 1).toUpperCase() + text.slice(1)
+}
 
 /**
- * Build the default Character-Studio portrait prompt. Pure function;
- * deterministic for the same inputs. The output mirrors the canonical
- * raccoon test prompt's shape.
+ * Build the auto-derived portrait prompt. Pure / deterministic.
  *
- *   buildCharacterPortraitPrompt({
- *     template: 'mascot',
- *     subject:  'a sleepy raccoon coffee mascot',
- *     style:    'realistic fur, plush texture',
- *     personality: 'tired expressive eyes, slightly sarcastic but lovable',
- *     name:     'Brewster',
- *   })
+ * @param  {object} args
+ * @param  {string} [args.template='mascot']
+ * @param  {string} [args.subject='']
+ * @param  {string} [args.style='']  - "chip1, chip2; wardrobe text"
+ * @returns {string}
  */
 export function buildCharacterPortraitPrompt({
   template = 'mascot',
   subject = '',
   style = '',
-  personality = '',
-  name = '',
 } = {}) {
-  const tpl = _TEMPLATES[template] || _TEMPLATES.mascot
-  const def = _DEFAULTS[template] || _DEFAULTS.mascot
-  const sub = _trim(subject) || def.subject
-  const sty = _trim(style) || def.style
-  const pers = _trim(personality)
-  const nm = _trim(name)
+  const tmpl = _EXPRESSION_CUE[template] ? template : 'mascot'
+  const defaults = _DEFAULT_SUBJECT[tmpl] || _DEFAULT_SUBJECT.mascot
+  const { chips, wardrobe } = _parseStyle(style)
 
-  // Opener: anchor the scene with subject + optional name.
-  const namePhrase = nm ? ` named ${nm}` : ''
-  const opener = `A front-facing head-and-shoulders portrait of ${sub}${namePhrase}.`
+  const subjectText = _ensureArticle(_trim(subject) || defaults)
+  const anchor =
+    _ANCHOR_PRIORITY.find((c) => chips.includes(c)) || _DEFAULT_ANCHOR
+  const usedAnchor = chips.includes(anchor) ? anchor : null
 
-  // Personality clause — kept as a separate beat so users can read +
-  // edit it without untangling style or constraints.
-  const personalityClause = pers ? `${_terminate(pers)} ` : ''
+  const wardrobePhrase = _formatWardrobe(wardrobe)
+  const wardrobeClause = wardrobePhrase ? ` wearing ${wardrobePhrase}` : ''
+  const expressionCue = _EXPRESSION_CUE[tmpl]
+  const aesthetic = _composeAesthetic(chips, usedAnchor)
 
-  // Style is its own beat too. We don't merge it into the subject
-  // because Runway gives each comma-clause its own attention slot.
-  const styleClause = `${_terminate(sty)}`
-
-  // Background + lighting come from the template preset.
-  const bgClause = `${_terminate(tpl.background)}`
-  const lightClause = `${_terminate(tpl.light)}`
-  const expressionClause = `${_terminate(tpl.expression)}`
-
-  // Constraints + finishers anchor the avatar-ready shape.
-  const constraintsClause = `${_CONSTRAINTS}.`
-  const finishersClause = `${_FINISHERS}.`
-
-  const beats = [
-    opener,
-    personalityClause + styleClause,
-    bgClause,
-    lightClause,
-    expressionClause,
-    constraintsClause,
-    finishersClause,
+  const lines = [
+    `Polished ${anchor} portrait of ${subjectText}${wardrobeClause}.`,
+    `${expressionCue}.`,
   ]
-    .map((s) => _trim(s))
-    .filter(Boolean)
+  if (aesthetic) lines.push(`${_capitalizeFirst(aesthetic)}.`)
+  lines.push('Head-and-shoulders composition on a clean neutral background.')
+  lines.push('Professional advertising character design.')
+  const lightAlreadyUsed = chips.some(
+    (c) =>
+      c !== usedAnchor &&
+      _STYLE_CHIPS[c] &&
+      _STYLE_CHIPS[c][0] === 'light',
+  )
+  if (!lightAlreadyUsed) lines.push('Soft studio lighting.')
 
-  return beats.join(' ').trim()
+  return lines.join(' ').slice(0, _PROMPT_HARD_CAP)
 }
 
 /**
- * Helper-text shown above the textarea. Single source of truth so the
- * smoke can match either the docs or the rendered UI.
- *
- * PR CR — keep this purely positive. Earlier copy listed
- * "no sunglasses, no props blocking the face" as guidance, but
- * recommending negations to operators teaches them to write prompts
- * that diffusion models misread (Runway gen4_image_turbo rejects
- * negation-laden prompts as `INTERNAL.BAD_OUTPUT.CODE01`). Describe
- * the *positive* shape we want instead.
+ * Helper-text shown above the portrait textarea. Reflects the new
+ * composer's positive-only direction.
  */
 export const PORTRAIT_PROMPT_HELPER =
   'Best avatar results: centered head-and-shoulders portrait, face ' +

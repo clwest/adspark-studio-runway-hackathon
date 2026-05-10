@@ -64,87 +64,73 @@ _MAX_IMAGE_BYTES = 16 * 1024 * 1024
 _MAX_PORTRAIT_RATIO = "1280:720"  # landscape; predictable face crop on Runway side
 
 
-# ---- prompt templates (locked in spike §7) ------------------------
-
-# PR CP cont. — every template now leads with a "polished commercial
-# spokesperson portrait" anchor and ends with shared brand-safe
-# constraints. ``{subject}`` lands in the noun position so Runway
-# sees the concrete creature/person before the modifier clauses.
-# The mascot anchor explicitly says "anthropomorphic mascot
-# spokesperson" so animal mascots (Brewster Bolt the raccoon) read
-# as creatures rather than abstract shapes when the seed ``subject``
-# is light.
+# ---- prompt composer (PR CW) -------------------------------------
 #
-# PR CR — rewrote the brand-safe tail to be **positive-only**.
-# `gen4_image_turbo` consistently rejected outputs (FAILED with
-# `INTERNAL.BAD_OUTPUT.CODE01`) when the previous tail listed
-# negations ("no horror, no distortion, no extra limbs, no melted
-# anatomy, no uncanny realism, no props or sunglasses"). Diffusion
-# models routinely misread inline negations as instructions to
-# include those concepts, then Runway's downstream output check
-# rejects the result. Donny Sparks the donkey mascot reproduced the
-# failure across three attempts under the negation-laden tail and
-# rendered cleanly the moment the negations were dropped. The new
-# tail says what we DO want — believable anatomy, clean face — in
-# positive phrasing that the model can render directly.
-_BRAND_SAFE_TAIL = (
-    "Brand-safe advertising character suitable for a marketing "
-    "campaign. Polished commercial illustration with believable "
-    "character anatomy and a clean face."
-)
+# Replaces the PR CP cont. f-string templates that produced redundant
+# "polished commercial mascot portrait of an anthropomorphic mascot
+# spokesperson — an anthropomorphic donkey mascot…" prompts. The
+# composer is deterministic, short (~300–500 chars target, 700 hard
+# cap), and produces clean output without double-anchoring or raw
+# comma-list style dumps.
+#
+# Output shape:
+#   "Polished {anchor} portrait of {subject}[ wearing {wardrobe}]. "
+#   "{expression cue}. "
+#   "[{aesthetic sentence}.] "
+#   "Head-and-shoulders composition on a clean neutral background. "
+#   "Professional advertising character design. "
+#   "[Soft studio lighting.]"
+#
+# `prompt_override` (operator-typed) and `safe_retry` (operator-
+# triggered preset) both short-circuit before the composer runs, so
+# manual edits + the safe-retry path are preserved verbatim.
 
+# Per-template expression cue. The dict keys also serve as the
+# valid-template list for the `/generate-portrait` route's
+# membership check (`if template not in PORTRAIT_TEMPLATES:`).
 PORTRAIT_TEMPLATES: dict[str, str] = {
-    "mascot": (
-        "A polished commercial mascot portrait of an anthropomorphic "
-        "mascot spokesperson — {subject}. {style}. Head-and-shoulders "
-        "framing, expressive friendly face, soft warm smile. Simple "
-        "solid mid-grey background. Soft three-point studio lighting. "
-        "High-quality 3D character design. " + _BRAND_SAFE_TAIL
-    ),
-    "founder": (
-        "A polished commercial spokesperson portrait of {subject}. "
-        "{style}. Head-and-shoulders, front-facing. Direct eye "
-        "contact, soft natural smile. Clean off-white background. "
-        "Warm soft lighting. Photorealistic modern founder "
-        "aesthetic. " + _BRAND_SAFE_TAIL
-    ),
-    "coach": (
-        "A polished commercial spokesperson portrait of {subject}. "
-        "{style}. Head-and-shoulders. Confident posture, bright "
-        "expression, open mouth mid-speech. Solid muted-blue "
-        "background. Crisp directional lighting. Athletic-coach "
-        "aesthetic. " + _BRAND_SAFE_TAIL
-    ),
-    "local_guide": (
-        "A polished commercial spokesperson portrait of {subject} "
-        "in a small-business setting. {style}. Head-and-shoulders, "
-        "front-facing. Welcoming smile. Soft-blurred neutral "
-        "background suggesting indoors. Natural daylight. "
-        "Approachable neighborly aesthetic. " + _BRAND_SAFE_TAIL
-    ),
+    "mascot":      "Calm confident expression",
+    "founder":     "Direct trustworthy gaze with a soft natural smile",
+    "coach":       "Confident bright expression",
+    "local_guide": "Welcoming friendly expression",
 }
 
-
-# Default subject + style hints when the user doesn't supply them. Keep
-# these neutral so the Runway face check passes.
+# Defaults when the operator hasn't filled `subject` or
+# `style`. Subject defaults are short, concrete, and articled.
 TEMPLATE_DEFAULTS: dict[str, dict[str, str]] = {
-    "mascot": {
-        "subject": "a friendly raccoon barista mascot",
-        "style": "Photorealistic stylised plush texture",
-    },
-    "founder": {
-        "subject": "an indie brand founder, mid-30s",
-        "style": "Polished modern editorial style",
-    },
-    "coach": {
-        "subject": "a fitness coach, mid-30s",
-        "style": "Bright high-energy editorial style",
-    },
-    "local_guide": {
-        "subject": "a friendly local-business shopkeeper",
-        "style": "Warm documentary editorial style",
-    },
+    "mascot":      {"subject": "a friendly brand mascot"},
+    "founder":     {"subject": "a polished founder spokesperson, mid-30s"},
+    "coach":       {"subject": "an energetic coach spokesperson, mid-30s"},
+    "local_guide": {"subject": "a welcoming local-business spokesperson"},
 }
+
+# PR CW — Style chip mapping. Each chip maps to (category, phrase).
+# The composer uses one phrase per category in a single aesthetic
+# sentence: "<design> with <colors> and <lighting>." — chips
+# absent from any category are ignored, free-form text in `style`
+# is treated as wardrobe (after a `;` separator) or dropped.
+_STYLE_CHIPS: dict[str, tuple[str, str]] = {
+    # design
+    "stylized":        ("design", "stylized commercial brand-character design"),
+    "editorial":       ("design", "editorial advertising aesthetic"),
+    "plush mascot":    ("design", "plush mascot character design"),
+    # colors
+    "muted palette":   ("color", "muted colors"),
+    "bright palette":  ("color", "bright friendly colors"),
+    "vibrant palette": ("color", "vibrant colors"),
+    # lighting
+    "studio light":    ("light", "soft studio lighting"),
+    "natural light":   ("light", "natural soft lighting"),
+    "cinematic":       ("light", "cinematic lighting"),
+}
+
+# Anchor word for "Polished {anchor} portrait of …" — first chip
+# in this priority list that appears in the operator's chips wins.
+# Falls back to "commercial" when no priority chip is present.
+_ANCHOR_PRIORITY: tuple[str, ...] = ("editorial", "cinematic", "stylized")
+_DEFAULT_ANCHOR = "commercial"
+
+_PROMPT_HARD_CAP = 700
 
 
 # PR CS — Safe-retry preset. When `gen4_image_turbo` rejects a
@@ -200,6 +186,87 @@ _SAFE_RETRY_TEMPLATES: dict[str, str] = {
 }
 
 
+def _ensure_article(text: str) -> str:
+    """Prefix `a`/`an` when the noun phrase doesn't already carry an
+    article. Conservative — does NOT modify text that already starts
+    with a/an/the/his/her/their.
+    """
+    t = (text or "").strip()
+    if not t:
+        return ""
+    lower = t.lower()
+    for prefix in ("a ", "an ", "the ", "his ", "her ", "their "):
+        if lower.startswith(prefix):
+            return t
+    return ("an " if t[0].lower() in "aeiou" else "a ") + t
+
+
+def _format_wardrobe(text: str) -> str:
+    """Turn a comma-separated wardrobe list into a clean phrase.
+
+    "dark hoodie, backwards hat" → "a dark hoodie and backwards hat"
+    "leather jacket"             → "a leather jacket"
+    ""                           → ""
+    """
+    items = [w.strip() for w in (text or "").split(",") if w.strip()]
+    if not items:
+        return ""
+    head = _ensure_article(items[0])
+    if len(items) == 1:
+        return head
+    return " and ".join([head, *items[1:]])
+
+
+def _parse_style(style: Optional[str]) -> tuple[list[str], str]:
+    """Split `"chip1, chip2; wardrobe"` into (chips, wardrobe).
+
+    The frontend joins chip-list and free-form fashion text with
+    `; ` (see CreateSpokespersonFlow.derivePortraitPrompt). The
+    composer mirrors that contract: anything before the first `;`
+    is parsed as a chip list (lowercased + comma-split); anything
+    after is treated as free-form wardrobe text. When no `;` is
+    present, the whole string is the chip list (free-form text
+    that doesn't match a known chip is ignored).
+    """
+    if not style:
+        return [], ""
+    s = style.strip()
+    if ";" in s:
+        chips_part, wardrobe = s.split(";", 1)
+    else:
+        chips_part, wardrobe = s, ""
+    chips = [c.strip().lower() for c in chips_part.split(",") if c.strip()]
+    return chips, wardrobe.strip()
+
+
+def _compose_aesthetic(chips: list[str], used_anchor: Optional[str]) -> str:
+    """Pick one phrase per category (design/color/light) from the
+    operator's chips, skipping the chip that's already used as the
+    headline anchor. Compose a single readable sentence.
+    """
+    by_cat: dict[str, Optional[str]] = {"design": None, "color": None, "light": None}
+    for chip in chips:
+        if chip == used_anchor:
+            continue
+        mapped = _STYLE_CHIPS.get(chip)
+        if not mapped:
+            continue
+        cat, phrase = mapped
+        if by_cat[cat] is None:
+            by_cat[cat] = phrase
+    if not any(by_cat.values()):
+        return ""
+    subject_phrase = by_cat["design"] or "Polished commercial illustration"
+    modifiers = [m for m in (by_cat["color"], by_cat["light"]) if m]
+    if not modifiers:
+        return subject_phrase
+    return f"{subject_phrase} with {' and '.join(modifiers)}"
+
+
+def _capitalize_first(text: str) -> str:
+    return text[:1].upper() + text[1:] if text else text
+
+
 def build_prompt(
     template: str,
     subject: Optional[str] = None,
@@ -208,14 +275,15 @@ def build_prompt(
     prompt_override: Optional[str] = None,
     safe_retry: bool = False,
 ) -> str:
-    """Assemble the portrait prompt. ``prompt_override`` wins over
-    everything; otherwise we fill the named template.
+    """Assemble the portrait prompt.
 
-    PR CS — when ``safe_retry=True`` we bypass ``style`` entirely and
-    fill a simpler ``_SAFE_RETRY_TEMPLATES`` entry. The character's
-    ``subject`` is still honoured. Operator-triggered after a
-    ``BAD_OUTPUT`` failure so we don't double-bill credits on the
-    same unstable prompt.
+    Precedence:
+      1. `prompt_override` (operator-typed) — used verbatim, capped 1000.
+      2. `safe_retry=True` — fills `_SAFE_RETRY_TEMPLATES[template]`
+         which deliberately bypasses ``style`` (PR CS — operator-
+         triggered after a BAD_OUTPUT failure).
+      3. Default — `_compose_clean_prompt(template, subject, style)`
+         renders a short, deterministic, generation-friendly prompt.
     """
     if prompt_override and prompt_override.strip():
         return prompt_override.strip()[:1000]
@@ -225,12 +293,55 @@ def build_prompt(
         return tpl.format(
             subject=(subject or defaults["subject"]).strip(),
         )[:1000]
-    tpl = PORTRAIT_TEMPLATES.get(template) or PORTRAIT_TEMPLATES["mascot"]
-    defaults = TEMPLATE_DEFAULTS.get(template) or TEMPLATE_DEFAULTS["mascot"]
-    return tpl.format(
-        subject=(subject or defaults["subject"]).strip(),
-        style=(style or defaults["style"]).strip(),
-    )[:1000]
+    return _compose_clean_prompt(template, subject, style)
+
+
+def _compose_clean_prompt(
+    template: Optional[str],
+    subject: Optional[str],
+    style: Optional[str],
+) -> str:
+    """PR CW — clean prompt composer.
+
+    Output shape (see module-level comment for the full pattern).
+    Keeps prompt 300–500 chars on typical inputs; hard-capped at 700.
+    """
+    tmpl = (template or "mascot").lower()
+    if tmpl not in PORTRAIT_TEMPLATES:
+        tmpl = "mascot"
+    defaults = TEMPLATE_DEFAULTS.get(tmpl, TEMPLATE_DEFAULTS["mascot"])
+    chips, wardrobe = _parse_style(style)
+
+    subject_text = _ensure_article((subject or "").strip() or defaults["subject"])
+
+    # Pick a headline anchor. Priority chip wins; default to "commercial".
+    anchor = next((c for c in _ANCHOR_PRIORITY if c in chips), _DEFAULT_ANCHOR)
+    used_anchor = anchor if anchor in chips else None
+
+    wardrobe_phrase = _format_wardrobe(wardrobe)
+    wardrobe_clause = f" wearing {wardrobe_phrase}" if wardrobe_phrase else ""
+    expression_cue = PORTRAIT_TEMPLATES.get(tmpl, PORTRAIT_TEMPLATES["mascot"])
+    aesthetic = _compose_aesthetic(chips, used_anchor)
+
+    lines: list[str] = [
+        f"Polished {anchor} portrait of {subject_text}{wardrobe_clause}.",
+        f"{expression_cue}.",
+    ]
+    if aesthetic:
+        lines.append(f"{_capitalize_first(aesthetic)}.")
+    lines.append("Head-and-shoulders composition on a clean neutral background.")
+    lines.append("Professional advertising character design.")
+    # Add a closing lighting line ONLY if no light chip was already
+    # woven into the aesthetic sentence — avoids "soft studio
+    # lighting" appearing twice.
+    light_already_used = any(
+        _STYLE_CHIPS.get(c, (None, None))[0] == "light" and c != used_anchor
+        for c in chips
+    )
+    if not light_already_used:
+        lines.append("Soft studio lighting.")
+
+    return " ".join(lines)[:_PROMPT_HARD_CAP]
 
 
 # ---- result dataclasses ------------------------------------------

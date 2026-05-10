@@ -1,7 +1,39 @@
 # START NEXT SESSION — AdSpark Studio
 
-**Last touched:** 2026-05-10 (PR CV — Runway API
-contract audit. Reviewed official docs + the
+**Last touched:** 2026-05-10 (PR CW — clean portrait
+prompt composer. Replaced PR CR/CS per-template
+f-strings + brand-safe tail concatenation (which
+produced ~720-char redundant "polished commercial
+mascot portrait of an anthropomorphic mascot
+spokesperson — anthropomorphic donkey…" output) with a
+deterministic composer:
+`Polished {anchor} portrait of {subject}[ wearing
+{wardrobe}]. {expression cue}. [{aesthetic sentence}.]
+Head-and-shoulders composition on a clean neutral
+background. Professional advertising character design.
+[Soft studio lighting.]`. Anchor word picked from
+operator's chips by priority (editorial > cinematic >
+stylized > fallback "commercial"); aesthetic sentence
+picks one phrase per category (design / color / light)
+and folds them into a single readable line. Wardrobe
+text after a `;` separator parses naturally
+("dark hoodie, backwards hat" → "a dark hoodie and
+backwards hat"). The user-spec fox mascot example
+lands at 364 chars and matches the documented expected
+output verbatim. Backend `_compose_clean_prompt` +
+JS port in `characterPromptBuilder.buildCharacterPortraitPrompt`
++ `CreateSpokespersonFlow.derivePortraitPrompt` now
+delegate to the shared composer — three drift surfaces
+collapsed into one. Six new pytests (mascot donkey, fox
+with wardrobe, founder no-wardrobe, no-double-
+anthropomorphic, hard-cap, override-wins) + the PR CR
+`test_default_path_still_includes_style` updated to
+assert the new mapped phrasing. Smoke regex updated to
+match the new prefix. `prompt_override` and
+`safe_retry` paths unchanged. Pytest 13/13, smoke 3/3,
+build 490.66 KB initial / 133.30 KB gzip (-0.48 KB).
+No real Runway calls fired. Backend route count still
+**71**. Earlier: PR CV — Runway API contract audit. Reviewed official docs + the
 Stainless-generated Python SDK source
 (`runwayml/sdk-python` types) and confirmed: (a)
 `gen4_image_turbo` IS officially supported (not
@@ -160,8 +192,9 @@ Safe-Retry Preset `e34b4ba`; PR CT Regression Audit —
 gen4_image_turbo broken upstream, switched to
 gen4_image `cc38d7d`; PR CU Fix Campaign Creation
 Dead-End `ea4ba88`; PR CV Runway API Contract Audit
-in flight on top —
-SESSION_012–SESSION_079 handoffs added).
+`71e72b2`; PR CW Clean Portrait Prompt Composer in
+flight on top —
+SESSION_012–SESSION_080 handoffs added).
 
 ## Where things stand
 
