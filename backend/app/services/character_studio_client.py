@@ -438,12 +438,24 @@ def _is_transient_failure(message: str) -> bool:
 
 
 def _generate_portrait_real(prompt: str, target: Path, settings: Settings) -> int:
-    body = {
+    # PR CV — referenceImages is REQUIRED by `gen4_image_turbo`'s
+    # OpenAPI schema (`reference_images: Required[Iterable[...]]`)
+    # and OPTIONAL for `gen4_image` (`reference_images: Annotated`,
+    # not Required). We were sending a flat 320×320 charcoal seed
+    # under both models because turbo required it; for non-turbo
+    # the model interprets the seed as a literal visual reference,
+    # which steers the output toward a featureless dark frame
+    # instead of letting the prompt drive it. Conditionally
+    # include the seed only when the model requires it.
+    body: dict = {
         "model": _IMAGE_MODEL,
         "promptText": prompt,
         "ratio": _MAX_PORTRAIT_RATIO,
-        "referenceImages": [{"uri": _seed_reference_data_uri(), "tag": "seed"}],
     }
+    if _IMAGE_MODEL == "gen4_image_turbo":
+        body["referenceImages"] = [
+            {"uri": _seed_reference_data_uri(), "tag": "seed"}
+        ]
 
     # PR CR — single retry on transient INTERNAL.* failure codes.
     # Runway's gen4_image_turbo occasionally returns

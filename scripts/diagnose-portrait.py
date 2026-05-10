@@ -134,10 +134,19 @@ def _diagnose(character_id: str) -> int:
     print()
 
     print("-- runway request shape (no base64 / no secrets) --")
-    print(f"  endpoint:  POST /v1/text_to_image")
-    print(f"  model:     {_IMAGE_MODEL}")
-    print(f"  ratio:     {_MAX_PORTRAIT_RATIO}")
-    print(f"  reference: 320×320 charcoal seed PNG (data URI, ~570 bytes base64)")
+    print(f"  endpoint:        POST /v1/text_to_image")
+    print(f"  model:           {_IMAGE_MODEL}")
+    print(f"  ratio:           {_MAX_PORTRAIT_RATIO}")
+    # PR CV — reference image inclusion is now contract-driven.
+    # `gen4_image_turbo` requires referenceImages (1–3); `gen4_image`
+    # accepts them as optional. We only attach the charcoal seed
+    # when the model requires it.
+    if _IMAGE_MODEL == "gen4_image_turbo":
+        print(f"  referenceImages: 1× 320×320 charcoal seed PNG (data URI, required by {_IMAGE_MODEL})")
+    else:
+        print(f"  referenceImages: omitted (optional for {_IMAGE_MODEL}; flat seed steers output)")
+    print(f"  body keys:       model, promptText, ratio"
+          + (", referenceImages" if _IMAGE_MODEL == "gen4_image_turbo" else ""))
     print(f"  X-Runway-Version: 2024-11-06")
     print()
 

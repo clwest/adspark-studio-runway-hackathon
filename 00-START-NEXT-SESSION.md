@@ -1,6 +1,32 @@
 # START NEXT SESSION — AdSpark Studio
 
-**Last touched:** 2026-05-10 (PR CU — fix v2 lane
+**Last touched:** 2026-05-10 (PR CV — Runway API
+contract audit. Reviewed official docs + the
+Stainless-generated Python SDK source
+(`runwayml/sdk-python` types) and confirmed: (a)
+`gen4_image_turbo` IS officially supported (not
+deprecated, just upstream-flaky during the PR CT
+window); (b) **`reference_images` is REQUIRED for
+`gen4_image_turbo` but OPTIONAL for `gen4_image`** —
+sending the flat 320×320 charcoal seed under the
+non-turbo path was steering output toward a featureless
+dark frame and triggering the safety/quality reject
+loop. Conditionally include `referenceImages` only
+when `_IMAGE_MODEL == "gen4_image_turbo"`; under
+`gen4_image` the body now sends just `model + promptText
++ ratio` matching the SDK schema. One real Runway
+validation call rendered a clean founder portrait in
+27 s under the contract-correct payload. Avatar create
+contract matches in 4/5 fields (missing optional
+`imageProcessing: "optimize"` — recommended PR CW
+follow-up). avatar_videos `model: "gwm1_avatars"`
+confirmed correct. `X-Runway-Version: 2024-11-06`
+still current. Diagnostic script updated to print
+which body keys + whether referenceImages will be
+sent. Pytest 7/7, smoke 3/3 (after first-run flake on
+the legacy 25s cache), build unchanged. Backend route
+count still **71**. 1 real Runway call fired (per
+operator budget). Earlier: PR CU — fix v2 lane
 dead-end. Step 1 empty state mounted dead copy
 ("Create or select a campaign to edit the brief.")
 across all three lanes (Spokesperson / Cinematic /
@@ -133,8 +159,9 @@ Reliability `ab8f8b7`; PR CS Capture Failed Prompt +
 Safe-Retry Preset `e34b4ba`; PR CT Regression Audit —
 gen4_image_turbo broken upstream, switched to
 gen4_image `cc38d7d`; PR CU Fix Campaign Creation
-Dead-End in flight on top —
-SESSION_012–SESSION_078 handoffs added).
+Dead-End `ea4ba88`; PR CV Runway API Contract Audit
+in flight on top —
+SESSION_012–SESSION_079 handoffs added).
 
 ## Where things stand
 

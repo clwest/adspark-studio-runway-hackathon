@@ -1,8 +1,32 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after **PR CU — Fix Campaign Creation
-Dead-End**. The v2 workspace's "Spokesperson Ad" lane (and
+context-kit refresh after **PR CV — Runway API Contract
+Audit**. Reviewed the official Runway docs at
+`docs.dev.runwayml.com` and the Stainless-generated Python
+SDK source (`runwayml/sdk-python`) end-to-end. Confirmed
+`gen4_image_turbo` is officially supported (not deprecated
+— the PR CT-era failures were upstream availability flakes
+specific to that window). The headline contract finding:
+**`reference_images` is REQUIRED for `gen4_image_turbo`
+but OPTIONAL for `gen4_image`**. We were sending a flat
+320×320 charcoal seed PNG under both models because turbo
+required it; under `gen4_image` the model interprets the
+seed as a literal visual reference and steers output
+toward a featureless dark frame, which triggers the
+safety / quality reject loop. Now conditionally included:
+under `gen4_image_turbo` the seed stays; under `gen4_image`
+the body sends just `{model, promptText, ratio}` matching
+the SDK's `Gen4Image` TypedDict exactly. One real Runway
+validation call rendered a clean founder portrait in 27s
+under the contract-correct payload. Avatar create contract
+matches in 4/5 fields — missing optional `imageProcessing:
+"optimize"` flagged as a one-line PR CW follow-up.
+avatar_videos `model: "gwm1_avatars"` confirmed correct.
+`X-Runway-Version: 2024-11-06` still current. Diagnostic
+script (`scripts/diagnose-portrait.py`) updated to print
+exact body keys + whether referenceImages would be sent.
+Backend route count still **71**. Earlier: The v2 workspace's "Spokesperson Ad" lane (and
 the sibling Cinematic / Dialogue lanes) used to mount a
 3-step scaffold whose Step 1 read "Create or select a
 campaign to edit the brief." with no button — operators had
