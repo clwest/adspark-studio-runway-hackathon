@@ -261,6 +261,33 @@ class CampaignStore:
                     return Campaign.model_validate(row)
         return None
 
+    # PR CY — Append-only output history. Every successful render
+    # appends one OutputRecord to ``Campaign.outputs`` so the gallery
+    # surfaces every prior render instead of the single "latest" URL
+    # the legacy fields hold. Capped at 50 entries to keep the
+    # campaigns.json file bounded over a long demo session.
+    def append_output(
+        self,
+        campaign_id: str,
+        entry: dict,
+        *,
+        max_entries: int = 50,
+    ) -> Optional[Campaign]:
+        """Append one render record to the campaign's outputs list
+        (newest-first). Returns the updated Campaign on success;
+        ``None`` when the id is unknown.
+        """
+        with _LOCK:
+            rows = self._read()
+            for row in rows:
+                if row.get("id") == campaign_id:
+                    history = list(row.get("outputs") or [])
+                    history.insert(0, entry)
+                    row["outputs"] = history[:max_entries]
+                    self._write(rows)
+                    return Campaign.model_validate(row)
+        return None
+
     def delete(self, campaign_id: str) -> bool:
         """Remove the campaign record from the JSON store. Returns True
         when a row was removed, False when no campaign matched.

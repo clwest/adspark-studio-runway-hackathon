@@ -111,6 +111,47 @@ HostStatus = Literal["ok", "failed", "unavailable"]
 StoryboardShotStatus = Literal["idle", "pending", "running", "ok", "failed"]
 
 
+# ---- PR CY — Append-only output history ---------------------------
+#
+# Every successful render (Spokesperson Ad, Captioned Reels, etc.)
+# appends one OutputRecord to ``Campaign.outputs`` so older renders
+# survive the next click instead of being overwritten by the
+# single-value `host_video_url` / `spokesperson_reels_url` URL
+# fields. Cache filenames are now per-output so historical files
+# stay on disk; the legacy single-field URLs continue to point at
+# the canonical "latest" path for backward compat.
+
+OutputKind = Literal[
+    "spokesperson_ad",
+    "spokesperson_reels",
+    "cinematic_video",
+    "voiced_commercial",
+    "storyboard",
+    "storyboard_voiced",
+    "dialogue_scene",
+    "dialogue_scene_reels",
+]
+
+
+class OutputRecord(BaseModel):
+    """One persisted render belonging to a Campaign. Append-only."""
+
+    id: str  # 12-char hex generated server-side
+    kind: OutputKind
+    # Operator-facing URL (e.g. /api/campaigns/{id}/output/{output_id}).
+    video_url: str
+    # On-disk filename relative to the per-kind cache dir. The
+    # /output/{id} route resolves this back to a FileResponse.
+    cache_filename: str
+    # Optional contextual fields for distinguishing outputs in the
+    # gallery without re-fetching the campaign.
+    script: Optional[str] = None
+    task_id: Optional[str] = None
+    mock_mode: Optional[bool] = None
+    parent_output_id: Optional[str] = None  # for derived outputs (e.g. reels)
+    created_at: datetime
+
+
 # ---- PR AF — Multi-Character Dialogue Scene Builder ---------------
 
 DialogueLineStatus = Literal["idle", "pending", "running", "ok", "failed"]
@@ -314,6 +355,13 @@ class Campaign(CampaignCreate):
     # ``realtime_transcript_*`` fields above so existing UI / export
     # surfaces continue operating against the latest fetch.
     realtime_transcript_history: list["TranscriptHistoryEntry"] = []
+    # PR CY — Append-only render history. Every successful render
+    # appends one OutputRecord here; the canonical
+    # `host_video_url` / `spokesperson_reels_url` fields above
+    # continue to point at the **latest** render for backward compat,
+    # while this list preserves prior renders so the Outputs gallery
+    # surfaces full history.
+    outputs: list[OutputRecord] = []
 
 
 class CampaignList(BaseModel):

@@ -1,8 +1,35 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after **PR CX — Minimum Viable Knowledge
-Flow**. The Knowledge tab in the spokesperson workspace was the
+context-kit refresh after **PR CY — Append-Only Output History**.
+Spokesperson Ad re-renders used to overwrite the prior MP4
+(canonical filename `data/host/{id}.mp4` plus single-value
+`host_video_url` URL), so the Outputs gallery only ever showed
+the latest take. New `Campaign.outputs: list[OutputRecord]`
+field captures every successful render with its `kind`
+(`spokesperson_ad` / `spokesperson_reels` / etc.), `video_url`
+(pointing at the new generic `/api/campaigns/{id}/output/{output_id}`
+route), `cache_filename`, optional `script` (for spokesperson_ad
+takes), `task_id`, `mock_mode`, and `parent_output_id` (links
+derived reels back to the source ad). Per-output cache filenames
+preserve historical MP4s on disk while the canonical `<id>.mp4`
+keeps backward-compat for legacy single-field URL consumers.
+Backend route count **73 → 74**. Hooks wired into the existing
+`POST /host-video` and `POST /spokesperson-ad/reels` success
+paths (additive only, no schema break). OutputsGallery rewritten
+to walk `campaign.outputs` newest-first; falls back to the legacy
+`host_video_url`/etc. single-value reads for pre-PR-CY campaigns
+without a migration. Cards now distinguish multiple renders via
+a script preview, relative-time stamp, and `derived from
+<parent kind>` line on reels. Lane Step 3 UX copy refreshed:
+button label flips from "Regenerate Real Spokesperson Ad" to
+"Render new Spokesperson Ad" with a "previous render saved"
+chip and the warning copy now reads "Re-rendering creates a new
+billable video. Prior renders are preserved in the Outputs tab."
+Three new pytests pin the contract (`test_host_video_appends_output_history`,
+`test_output_route_404s_for_unknown_id`,
+`test_output_route_404s_for_unknown_campaign`).
+Earlier: The Knowledge tab in the spokesperson workspace was the
 last `<TabComingSoon>` placeholder before the demo. New
 `<KnowledgePanel>` provides the operator-facing surface:
 `+ Add Knowledge Source` CTA → inline form (title +

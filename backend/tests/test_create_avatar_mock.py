@@ -318,6 +318,100 @@ def test_knowledge_source_validation(client: TestClient):
     assert bad.status_code == 422
 
 
+# ---- PR CY — append-only output history -------------------------
+
+
+def _create_campaign_with_avatar(client: TestClient, character_id: str) -> str:
+    """Helper: create a minimal valid CampaignCreate, attach the
+    character + its avatar so /host-video can fire end-to-end in
+    mock mode."""
+    payload = {
+        "business": "Output History Test",
+        "product": "Test product",
+        "selected_concept": {
+            "title": "Output History Test",
+            "hook": "Hook",
+            "visual": "Visual",
+            "caption": "Caption",
+            "cta": "Learn more",
+        },
+        "runway_prompt": "A polished commercial visual.",
+        "social_post": {"caption": "Caption", "cta": "Learn more", "hashtags": []},
+    }
+    resp = client.post("/api/campaigns", json=payload)
+    assert resp.status_code == 200, resp.text
+    cid = resp.json()["id"]
+    # Attach character + force mock-mode avatar so /host-video can fire.
+    resp = client.post(
+        f"/api/campaigns/{cid}/attach-character",
+        json={"character_id": character_id},
+    )
+    assert resp.status_code == 200, resp.text
+    resp = client.post(f"/api/campaigns/{cid}/avatar", json={})
+    assert resp.status_code == 200, resp.text
+    return cid
+
+
+def test_host_video_appends_output_history(client: TestClient, tmp_path: Path):
+    """Two consecutive /host-video POSTs must produce TWO entries in
+    Campaign.outputs. Both historical files must persist on disk so
+    the /output/{id} server can serve either render later. The
+    canonical legacy `host_video_url` keeps pointing at /host-video
+    (latest), so existing UI consumers stay backward-compatible."""
+    char = _create_character(client, name="Output History Test")
+    _generate_portrait(client, char["id"])
+    cid = _create_campaign_with_avatar(client, char["id"])
+
+    # First render.
+    r1 = client.post(f"/api/campaigns/{cid}/host-video", json={})
+    assert r1.status_code == 200, r1.text
+    body1 = r1.json()
+    assert body1["host_status"] == "ok"
+    assert body1["host_video_url"] == f"/api/campaigns/{cid}/host-video"
+    assert len(body1["outputs"]) == 1
+    o1 = body1["outputs"][0]
+    assert o1["kind"] == "spokesperson_ad"
+    assert o1["video_url"] == f"/api/campaigns/{cid}/output/{o1['id']}"
+    assert o1["cache_filename"]
+    assert o1["created_at"]
+
+    # Second render — appends a new history entry without erasing the first.
+    r2 = client.post(f"/api/campaigns/{cid}/host-video", json={})
+    assert r2.status_code == 200, r2.text
+    body2 = r2.json()
+    assert len(body2["outputs"]) == 2
+    o2 = body2["outputs"][0]  # newest-first
+    assert o2["kind"] == "spokesperson_ad"
+    assert o2["id"] != o1["id"]
+    assert o2["cache_filename"] != o1["cache_filename"]
+
+    # Both historical files exist on disk.
+    f1 = tmp_path / "host" / o1["cache_filename"]
+    f2 = tmp_path / "host" / o2["cache_filename"]
+    assert f1.exists() and f1.stat().st_size > 0, f"missing or empty: {f1}"
+    assert f2.exists() and f2.stat().st_size > 0, f"missing or empty: {f2}"
+
+    # /output/{id} route serves both.
+    s1 = client.get(f"/api/campaigns/{cid}/output/{o1['id']}")
+    assert s1.status_code == 200
+    assert s1.headers["content-type"].startswith("video/")
+    s2 = client.get(f"/api/campaigns/{cid}/output/{o2['id']}")
+    assert s2.status_code == 200
+
+
+def test_output_route_404s_for_unknown_id(client: TestClient):
+    char = _create_character(client, name="Output 404 Test")
+    _generate_portrait(client, char["id"])
+    cid = _create_campaign_with_avatar(client, char["id"])
+    r = client.get(f"/api/campaigns/{cid}/output/no-such-output")
+    assert r.status_code == 404
+
+
+def test_output_route_404s_for_unknown_campaign(client: TestClient):
+    r = client.get("/api/campaigns/no-such-campaign/output/no-such-output")
+    assert r.status_code == 404
+
+
 def test_clean_prompt_prompt_override_still_wins():
     """`prompt_override` short-circuits the composer entirely so
     operator-typed text reaches Runway verbatim."""

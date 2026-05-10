@@ -84,7 +84,7 @@ export default function SpokespersonLane({
   const reelsLabel = reelsBusy
     ? 'Building Captioned Reels…'
     : reelsCached
-    ? 'Rebuild Captioned Reels'
+    ? 'Rebuild captions from saved video'
     : 'Build Captioned Reels'
   const reelsCanFire = Boolean(
     onBuildReels && hasCampaign && reelsSourceReady && !reelsBusy,
@@ -139,10 +139,14 @@ export default function SpokespersonLane({
       horizontalHasUsableAvatar &&
       !horizontalBusy,
   )
+  // PR CY — re-render is now append-not-overwrite (Outputs gallery
+  // shows every prior render). Updated label so operators understand
+  // they're spending fresh credits, not "regenerating" an existing
+  // file in place.
   const horizontalLabel = horizontalBusy
     ? 'Generating Real Spokesperson Ad…'
     : horizontalCached
-    ? 'Regenerate Real Spokesperson Ad'
+    ? 'Render new Spokesperson Ad'
     : 'Generate Real Spokesperson Ad'
   const horizontalDisabledReason = !hasCampaign
     ? 'Requires campaign brief — save the brief in Step 1 first.'
@@ -152,12 +156,13 @@ export default function SpokespersonLane({
     ? 'Wire the v2 onGenerateSpokesperson handler before this button can fire.'
     : ''
   // PR CU — short chip text shown adjacent to the button label.
-  // Replaces the cryptic "no avatar" / "no source" labels with
-  // operator-readable prerequisite statements.
+  // PR CY — clearer copy: "previous render saved" instead of
+  // "cached · burns credits" so operators understand re-renders are
+  // billed and don't overwrite the prior take.
   const horizontalChip = horizontalBusy
     ? 'generating…'
     : horizontalCached
-    ? 'cached · burns credits'
+    ? 'previous render saved'
     : horizontalCanFire
     ? 'burns credits'
     : !hasCampaign
@@ -315,7 +320,8 @@ export default function SpokespersonLane({
                 data-testid="spokesperson-lane-horizontal-warning"
                 className="text-[9px] text-rose-300 leading-snug"
               >
-                ⚠️ Real Runway. Each click bills `avatar_videos`.
+                ⚠️ Re-rendering creates a new billable video. Prior
+                renders are preserved in the Outputs tab.
               </p>
             )}
             {/* PR BN — Reels button is now wired. Enabled only

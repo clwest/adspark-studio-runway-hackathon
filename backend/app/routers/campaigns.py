@@ -1,4 +1,7 @@
 import logging
+import shutil
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -1765,6 +1768,129 @@ def post_create_avatar(
     return updated or record
 
 
+# ---- PR CY — Append-only output history --------------------------
+#
+# Each successful render appends an OutputRecord to
+# `Campaign.outputs` so prior renders survive the next click.
+# Cache filenames are per-output (`<campaign>-<output_id>.mp4`);
+# the canonical legacy filename (`<campaign>.mp4`) is retained as
+# the "latest" copy so the existing single-field URLs keep working.
+
+def _new_output_id() -> str:
+    return uuid.uuid4().hex[:12]
+
+
+def _persist_output_copy(
+    canonical_path: Path,
+    output_id: str,
+    suffix: str = "",
+) -> Optional[str]:
+    """Copy the freshly-rendered canonical file to a per-output
+    historical filename + return the new filename (basename only).
+    Returns ``None`` when the canonical file is missing or the copy
+    fails so the caller can skip appending the history record.
+    Best-effort — never raises into the route handler.
+    """
+    if not canonical_path.exists():
+        logger.warning(
+            "output history: canonical file missing for copy: %s", canonical_path,
+        )
+        return None
+    new_name = (
+        f"{canonical_path.stem}-{output_id}{suffix}{canonical_path.suffix}"
+    )
+    new_path = canonical_path.with_name(new_name)
+    try:
+        shutil.copy2(canonical_path, new_path)
+    except OSError as exc:
+        logger.warning(
+            "output history: copy %s -> %s failed: %s",
+            canonical_path, new_path, exc,
+        )
+        return None
+    return new_name
+
+
+def _append_output_record(
+    store: CampaignStore,
+    campaign_id: str,
+    *,
+    output_id: str,
+    kind: str,
+    cache_filename: str,
+    script: Optional[str] = None,
+    task_id: Optional[str] = None,
+    mock_mode: Optional[bool] = None,
+    parent_output_id: Optional[str] = None,
+) -> None:
+    entry = {
+        "id": output_id,
+        "kind": kind,
+        "video_url": f"/api/campaigns/{campaign_id}/output/{output_id}",
+        "cache_filename": cache_filename,
+        "script": (script or None),
+        "task_id": task_id,
+        "mock_mode": mock_mode,
+        "parent_output_id": parent_output_id,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        store.append_output(campaign_id, entry)
+    except Exception as exc:  # pragma: no cover — audit is best-effort
+        logger.warning(
+            "output history append failed campaign=%s kind=%s: %s",
+            campaign_id, kind, exc,
+        )
+
+
+@router.get("/{campaign_id}/output/{output_id}")
+def get_campaign_output(
+    campaign_id: str,
+    output_id: str,
+    settings: Settings = Depends(get_settings),
+    store: CampaignStore = Depends(_store),
+) -> FileResponse:
+    """PR CY — generic file server for historical render outputs.
+    Looks up the OutputRecord on the campaign by id and returns the
+    matching cached file from disk.
+    """
+    record = store.get(campaign_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="campaign not found")
+    match = next(
+        (o for o in record.outputs if o.id == output_id),
+        None,
+    )
+    if not match:
+        raise HTTPException(status_code=404, detail="output not found")
+    # Resolve the cache file by kind. Each kind lives under its
+    # canonical cache directory; mapping kept tight + explicit so
+    # we don't accidentally serve a wrong-kind file.
+    if match.kind in {"spokesperson_ad"}:
+        cache_dir = host_path_for(settings, campaign_id).parent
+    elif match.kind in {
+        "spokesperson_reels",
+        "voiced_commercial",
+        "storyboard",
+        "storyboard_voiced",
+        "dialogue_scene",
+        "dialogue_scene_reels",
+    }:
+        cache_dir = settings.data_path / "finished"
+    elif match.kind in {"cinematic_video"}:
+        cache_dir = settings.data_path / "videos"
+    else:
+        raise HTTPException(status_code=404, detail="unknown output kind")
+    file_path = cache_dir / match.cache_filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="output file missing")
+    return FileResponse(
+        str(file_path),
+        media_type="video/mp4",
+        filename=f"adspark-{campaign_id}-{match.kind}-{output_id}.mp4",
+    )
+
+
 @router.post("/{campaign_id}/host-video", response_model=Campaign)
 def post_host_video(
     campaign_id: str,
@@ -1813,6 +1939,26 @@ def post_host_video(
             host_task_id=result.task_id,
             host_mock_mode=result.mock_mode,
         )
+        # PR CY — preserve the just-rendered MP4 as a historical copy
+        # so the next render doesn't overwrite it from the gallery's
+        # perspective. Canonical file stays for backward-compat
+        # `host_video_url` consumers; the historical file backs the
+        # `/output/{id}` route.
+        canonical_path = host_path_for(settings, campaign_id)
+        output_id = _new_output_id()
+        cache_filename = _persist_output_copy(canonical_path, output_id)
+        if cache_filename:
+            _append_output_record(
+                store,
+                campaign_id,
+                output_id=output_id,
+                kind="spokesperson_ad",
+                cache_filename=cache_filename,
+                script=script_override,
+                task_id=result.task_id,
+                mock_mode=result.mock_mode,
+            )
+            updated = store.get(campaign_id) or updated
     else:
         logger.warning(
             "host video %s for campaign=%s: %s",
@@ -2041,6 +2187,31 @@ def post_spokesperson_reels(
             status="ok",
             error=None,
         )
+        # PR CY — preserve the just-built reels MP4 as a historical
+        # copy so rebuilds don't overwrite it from the gallery's
+        # perspective. Parent_output_id links the derived reels back
+        # to the most recent spokesperson_ad output for visual
+        # grouping in the gallery.
+        output_id = _new_output_id()
+        cache_filename = _persist_output_copy(target, output_id)
+        if cache_filename:
+            parent = next(
+                (
+                    o.id
+                    for o in (record.outputs or [])
+                    if o.kind == "spokesperson_ad"
+                ),
+                None,
+            )
+            _append_output_record(
+                store,
+                campaign_id,
+                output_id=output_id,
+                kind="spokesperson_reels",
+                cache_filename=cache_filename,
+                parent_output_id=parent,
+            )
+            updated = store.get(campaign_id) or updated
     else:
         logger.warning(
             "spokesperson reels %s campaign=%s err=%s",

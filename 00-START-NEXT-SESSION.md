@@ -1,7 +1,34 @@
 # START NEXT SESSION — AdSpark Studio
 
-**Last touched:** 2026-05-10 (PR CX — Minimum Viable
-Knowledge Flow. The Knowledge tab in the spokesperson
+**Last touched:** 2026-05-10 (PR CY — append-only
+output history. Spokesperson Ad re-renders used to
+overwrite the prior MP4 + the single-value
+`host_video_url` URL, so the Outputs gallery only ever
+showed the latest take. New `Campaign.outputs:
+list[OutputRecord]` field captures every successful
+render (id, kind, video_url, cache_filename, script,
+task_id, mock_mode, parent_output_id, created_at).
+Per-output cache filenames preserve historical MP4s on
+disk while the canonical `<id>.mp4` keeps backward-compat
+for the legacy single-field URLs. New
+`GET /api/campaigns/{id}/output/{output_id}` route
+serves any historical output (route count **73 → 74**).
+Hooks live on `/host-video` (spokesperson_ad) +
+`/spokesperson-ad/reels` (spokesperson_reels, with
+`parent_output_id` linking back to the source ad).
+OutputsGallery rewritten to walk `campaign.outputs`
+(falls back to legacy single-field reads for
+pre-PR-CY records). Cards distinguish renders via
+script preview + relative time + derived-from line.
+Lane Step 3 copy refreshed: "Render new Spokesperson
+Ad" / "previous render saved" / "Re-rendering creates
+a new billable video". Three new pytests
+(20/20 total). Smoke 3/3, build 501.64 KB initial /
+135.76 KB gzip. No real Runway calls fired. **Note:**
+PR CX (Knowledge flow) is still uncommitted from the
+prior turn — should land before PR CY in the
+commit graph.
+Earlier: PR CX — Minimum Viable Knowledge Flow. The Knowledge tab in the spokesperson
 workspace was the last `<TabComingSoon>` placeholder
 ("Knowledge sources will appear here.") — final-day
 demo gap. New `<KnowledgePanel>` provides
@@ -215,9 +242,9 @@ gen4_image_turbo broken upstream, switched to
 gen4_image `cc38d7d`; PR CU Fix Campaign Creation
 Dead-End `ea4ba88`; PR CV Runway API Contract Audit
 `71e72b2`; PR CW Clean Portrait Prompt Composer
-`d9e556c`; PR CX Minimum Viable Knowledge Flow in
-flight on top — SESSION_012–SESSION_081 handoffs
-added).
+`d9e556c`; PR CX Minimum Viable Knowledge Flow +
+PR CY Append-Only Output History both in flight on
+top — SESSION_012–SESSION_082 handoffs added).
 
 ## Where things stand
 
