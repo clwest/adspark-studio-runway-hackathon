@@ -1,7 +1,7 @@
 # AdSpark Studio — Operator Usage Map
 
 **Last updated:** 2026-05-09 (post `hackathon-submission-v13`,
-PR CD Home Library Only).
+PR CE Workspace Campaigns Tab Mounts Campaign Lanes).
 
 **Read order:** This is the top-to-bottom "how do I actually use
 this thing?" guide. New operators (humans or AI) should read
@@ -34,12 +34,16 @@ The frontend now has two top-level routes:
   wired), **Knowledge** / **Campaigns** / **Conversations** /
   **Outputs** (placeholder tabs, "lands next"). Unknown id →
   friendly not-found state with a Back to Library CTA.
-  PR CD update: `+ New Campaign` mode select persists the
-  active mode + spokesperson to localStorage, then navigates
-  to `/legacy` (was `/` before PR CD stripped lanes off the
-  homepage). The legacy wizard remains the canonical
-  campaign-creation surface until lanes land inside the
-  workspace's Campaigns tab.
+  PR CE: the Campaigns tab now mounts the Spokesperson /
+  Cinematic / Dialogue lanes directly via the new
+  `<CampaignLanes>` component. `+ New Campaign` flips the
+  active tab to `campaigns` + opens the mode modal in-place.
+  Mode select stays at `/spokespeople/{id}` — no more
+  `/legacy` hand-off. Lanes operate on the active
+  spokesperson's linked campaigns; every lane handler
+  (Spokesperson Reels / Spokesperson Ad / Voiced Cinematic /
+  Cinematic Video / Storyboard Stitch / Dialogue Plan / Stitch
+  / Reels / Brief Edit) is wired through.
 - **`/legacy`** — Verbatim v1 four-stage wizard + saved-campaign
   gallery (frozen, PR A through PR AZ-era stack). Reachable via
   the top-bar **Legacy UI ↗** link. The 6 demo paths in section

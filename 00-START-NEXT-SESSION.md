@@ -13,17 +13,18 @@ PR BA `9d0a99d`; PR BB `8702660`; PR BC `9eae15f`; PR BD
 PR BM `669a584`; PR BN `13bc608`; PR BO `5e7400f`; PR BP
 `18a296b`; PR BQ `74d5dc6`; PR BR `ae7c130`; PR BS `bcbc1d8`; PR BT `065a557`; PR BU
 `1f61fc0`; SESSION 053 real-API PR BU validation `9148cd9`;
-PR CA `8681777`; PR CB `766648c`; PR CC `0b292e0 feat:
-spokesperson workspace shell + identity tab (PR CC)`; PR CD
-Home Library Only in flight on top — SESSION_012–SESSION_057
+PR CA `8681777`; PR CB `766648c`; PR CC `0b292e0`; PR CD
+`d002b8c feat: home library only — strip campaign controls
+off / (PR CD)`; PR CE Workspace Campaigns Tab Mounts
+Campaign Lanes in flight on top — SESSION_012–SESSION_058
 handoffs added).
 
 ## Where things stand
 
-- **Branch:** `main` at `0b292e0` (`feat: spokesperson
-  workspace shell + identity tab (PR CC)`) on `origin/main`.
-  PR CD patch in flight on top — no new commit / tag yet,
-  both pending explicit user approval.
+- **Branch:** `main` at `d002b8c` (`feat: home library
+  only — strip campaign controls off / (PR CD)`) on
+  `origin/main`. PR CE patch in flight on top — no new
+  commit / tag yet, both pending explicit user approval.
 - **Latest tag:** still **`hackathon-submission-v13`** at `ec446e4`
   (PR AF). PR AG–BI shipped the full voice arc + audit trails
   + UX v2 foundation + SpokespersonStudio + Knowledge +
@@ -39,25 +40,24 @@ handoffs added).
   switches modes. **Default load remains v1**; v2 reachable
   via footer toggle or `?ux=v2`.
 - **Backend routes:** **70** application + FastAPI built-ins
-  (PR CD is frontend-only).
-- **Frontend build:** 459.45 KB initial JS / 125.93 KB gzip +
-  561.97 KB lazy `@runwayml/avatars-react` chunk (+0.35 KB
-  initial / +0.10 KB gzip vs PR CC — three new conditional
-  gates and a workspace navigate-target change).
-- **Playwright smoke:** `3 passed (~25.2 s)` against the mock
+  (PR CE is frontend-only — pure component extraction).
+- **Frontend build:** 465.64 KB initial JS / 127.54 KB gzip +
+  561.97 KB lazy `@runwayml/avatars-react` chunk (+6.19 KB
+  initial / +1.61 KB gzip vs PR CD — `<CampaignLanes>`
+  component + workspace Campaigns tab content + mode modal
+  handoff).
+- **Playwright smoke:** `3 passed (~29.3 s)` against the mock
   backend booted via `bash scripts/start-local-mock.sh`.
-  Test 1 (`@ /legacy`, ~23.0 s) — verbatim v1 wizard
-  walkthrough; **the previous PR BH/BI/BK/BL/BN/BO/BP/BQ/BR
-  /BS/BT/BU lane assertions are still exercised here** since
-  /legacy is the equivalent v1 surface. Test 2 (`@ /`,
-  ~940 ms) — Spokesperson Library is now **library only**:
-  the v2 lane testids (`spokesperson-new-campaign`,
-  `spokesperson-active-mode`, `campaign-mode-modal`,
-  `spokesperson-lane`, `cinematic-lane`, `dialogue-lane`)
-  must all be absent on `/`; tile `Open Spokesperson →` link
-  still navigates to `/spokespeople/{id}`; workspace
-  assertions unchanged. Test 3 (top-bar Legacy round-trip,
-  ~610 ms) — / → /legacy → / via top-bar links.
+  Test 1 (`@ /legacy`, ~27.1 s) — verbatim v1 wizard +
+  saved-campaign gallery walkthrough. Test 2 (`@ /`, ~1.0 s)
+  — Spokesperson Library library-only on `/` + per-tile
+  workspace navigation + workspace **Campaigns tab now
+  mounts `<CampaignLanes>`**: + New Campaign opens the
+  modal in-place (no /legacy hand-off), picking Cinematic
+  Ad mounts the cinematic lane scoped to the active
+  spokesperson, dismiss-mode unmounts the lane and clears
+  localStorage `adspark.activeMode`. Test 3 (top-bar Legacy
+  round-trip, ~600 ms) — / → /legacy → / via top-bar links.
 - **Real-mode validation:** PR BU end-to-end validated
   against real Runway on CEO Buzz / Brewster (task
   `b5d331ba-9844-42ab-b857-982920794a9c`, 5 s gen4.5,
@@ -88,7 +88,7 @@ handoffs added).
 
 ## What's implemented (full feature stack on `main`)
 
-### UX redesign foundation (PR BD — UX v2 Flag + Shared Helpers · PR BE — SpokespersonStudio Scaffold · PR BF — Knowledge Tab Wiring · PR BG — Appearances Tab Wiring · PR BH — Mode-First Creation Modal · PR BI — Spokesperson Lane Scaffold · PR BK — Cinematic Lane Scaffold · PR BL — Dialogue Lane Scaffold · PR BM — Lane Regression Pass · PR BN — Spokesperson Reels Action Wired · PR BO — Cinematic Voiced Action Wired · PR BP — All Remaining v2 Lane Actions Wired · PR BQ — V2 Lane Inline Brief Editing · PR BR — V2 Appearances Click-Through · PR BS — Click-Through Tab Hints · PR BT — Cinematic Video Async Action Wired · PR BU — Cinematic Video Persistence · PR CA — App Shell + Router + Spokesperson Library Home · PR CB — Library Polish + Create Spokesperson CTA · PR CC — Spokesperson Workspace Shell + Identity Tab · PR CD — Home Library Only)
+### UX redesign foundation (PR BD — UX v2 Flag + Shared Helpers · PR BE — SpokespersonStudio Scaffold · PR BF — Knowledge Tab Wiring · PR BG — Appearances Tab Wiring · PR BH — Mode-First Creation Modal · PR BI — Spokesperson Lane Scaffold · PR BK — Cinematic Lane Scaffold · PR BL — Dialogue Lane Scaffold · PR BM — Lane Regression Pass · PR BN — Spokesperson Reels Action Wired · PR BO — Cinematic Voiced Action Wired · PR BP — All Remaining v2 Lane Actions Wired · PR BQ — V2 Lane Inline Brief Editing · PR BR — V2 Appearances Click-Through · PR BS — Click-Through Tab Hints · PR BT — Cinematic Video Async Action Wired · PR BU — Cinematic Video Persistence · PR CA — App Shell + Router + Spokesperson Library Home · PR CB — Library Polish + Create Spokesperson CTA · PR CC — Spokesperson Workspace Shell + Identity Tab · PR CD — Home Library Only · PR CE — Workspace Campaigns Tab Mounts Campaign Lanes)
 
 - **UX v2 feature flag** at `frontend/src/uxFlag.js`. Resolves
   precedence URL `?ux=v2|v1` > localStorage `adspark.ux` >
@@ -209,6 +209,30 @@ handoffs added).
   `spokesperson-lane-reels-status`,
   `spokesperson-lane-reels-link`. Reels button new attrs:
   `data-source-ready`, `data-busy`.
+- **Workspace Campaigns Tab Mounts Campaign Lanes** (PR CE)
+  — closes the loop the v2 IA reset opened: campaign
+  creation now stays inside `/spokespeople/:id`. New
+  reusable `<CampaignLanes>` component owns the mode modal
+  + active-mode pill + Spokesperson / Cinematic / Dialogue
+  lane mounts + every lane handler (Spokesperson Reels,
+  Spokesperson Ad, Voiced Cinematic, Cinematic Video
+  start-poll-persist, Storyboard Stitch, Dialogue Plan /
+  Stitch / Reels, Brief Edit). Controlled-modal pattern
+  (`modalOpen` + `onModalClose` props) lets any caller
+  flip the modal from header CTAs / tile shortcuts.
+  `onCampaignsChanged(updated)` callback merges per-handler
+  updates into the parent's local slice. Workspace
+  integration: Campaigns tab placeholder replaced with a
+  real section listing linked campaigns (compact rows: id
+  prefix · business · product · `rendered`/`draft` chip)
+  above `<CampaignLanes>`. Workspace `+ New Campaign`
+  header CTA flips `setActiveTab('campaigns')` + opens the
+  modal in-place — **no more `/legacy` hand-off**. The
+  standalone `<CampaignModeModal>` mount inside the
+  workspace removed (CampaignLanes owns it now).
+  `<SpokespersonStudio>` lane code preserved unchanged so
+  the lane internals stay single-sourced. v1 / `/legacy`
+  unchanged. No real Runway calls fired this session.
 - **Home Library Only** (PR CD) — homepage cleanup so `/`
   reads as a pure spokesperson library. New
   `hideCampaignControls` prop on `<SpokespersonStudio>` —

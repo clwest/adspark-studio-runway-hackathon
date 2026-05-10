@@ -1208,14 +1208,11 @@ test('AdSpark Studio Spokesperson Library @ /', async ({ page }) => {
       page.getByTestId('spokesperson-workspace-identity'),
     ).toBeVisible()
 
-    // Each placeholder tab mounts its own coming-soon panel
-    // when clicked. Round-trip through all four.
-    for (const placeholder of [
-      'knowledge',
-      'campaigns',
-      'conversations',
-      'outputs',
-    ]) {
+    // PR CC — Knowledge / Conversations / Outputs render
+    // <TabComingSoon> placeholders. Campaigns moved to its
+    // own block below since PR CE replaced the placeholder
+    // with the real CampaignLanes mount.
+    for (const placeholder of ['knowledge', 'conversations', 'outputs']) {
       await page
         .getByTestId(`spokesperson-workspace-tab-${placeholder}`)
         .click()
@@ -1227,6 +1224,82 @@ test('AdSpark Studio Spokesperson Library @ /', async ({ page }) => {
         page.getByTestId(`spokesperson-workspace-${placeholder}`),
       ).toBeVisible()
     }
+
+    // PR CE — Campaigns tab now mounts <CampaignLanes>.
+    // Asserts: tab section renders, + New Campaign button
+    // opens the controlled mode modal in-place (no
+    // navigation to /legacy), picking Cinematic Ad mounts
+    // the cinematic lane scoped to this spokesperson, and
+    // the active-mode pill dismisses cleanly. Smoke never
+    // clicks any lane action button (no real Runway calls).
+    await page
+      .getByTestId('spokesperson-workspace-tab-campaigns')
+      .click()
+    await expect(workspace).toHaveAttribute(
+      'data-active-tab',
+      'campaigns',
+    )
+    const campaignsSection = page.getByTestId(
+      'spokesperson-workspace-campaigns',
+    )
+    await expect(campaignsSection).toBeVisible()
+    const newCampaignBtn = campaignsSection.getByTestId(
+      'spokesperson-workspace-campaigns-new',
+    )
+    await expect(newCampaignBtn).toBeVisible()
+    // CampaignLanes mounts; mode modal not yet open. Use
+    // toHaveCount(1) instead of toBeVisible() because the
+    // section is empty until a mode is selected — an empty
+    // <section> has zero height and Playwright's
+    // visibility check treats that as hidden.
+    const campaignLanes = page.getByTestId('campaign-lanes')
+    await expect(campaignLanes).toHaveCount(1)
+    await expect(page.getByTestId('campaign-mode-modal')).toHaveCount(0)
+
+    // Click + New Campaign → modal opens INSIDE the
+    // workspace (no navigation away).
+    await newCampaignBtn.click()
+    await expect(page).toHaveURL(new RegExp(`/spokespeople/${cardId}$`))
+    const inWorkspaceModal = page.getByTestId('campaign-mode-modal')
+    await expect(inWorkspaceModal).toBeVisible()
+
+    // Pick Cinematic Ad → CinematicLane mounts inside the
+    // workspace's CampaignLanes; the modal dismisses;
+    // active-mode pill renders with data-mode="cinematic".
+    await inWorkspaceModal
+      .getByTestId('campaign-mode-card-cinematic')
+      .click()
+    await expect(
+      page.getByTestId('campaign-mode-modal'),
+    ).toHaveCount(0)
+    await expect(page).toHaveURL(new RegExp(`/spokespeople/${cardId}$`))
+    await expect(campaignLanes).toHaveAttribute(
+      'data-active-mode',
+      'cinematic',
+    )
+    const activeModePill = page.getByTestId(
+      'campaign-lanes-active-mode',
+    )
+    await expect(activeModePill).toBeVisible()
+    await expect(activeModePill).toHaveAttribute('data-mode', 'cinematic')
+    await expect(page.getByTestId('cinematic-lane')).toBeVisible()
+    // Spokesperson + Dialogue lanes must NOT mount alongside.
+    await expect(page.getByTestId('spokesperson-lane')).toHaveCount(0)
+    await expect(page.getByTestId('dialogue-lane')).toHaveCount(0)
+
+    // Dismiss the active mode → pill + lane unmount.
+    await page
+      .getByTestId('campaign-lanes-active-mode-dismiss')
+      .click()
+    await expect(
+      page.getByTestId('campaign-lanes-active-mode'),
+    ).toHaveCount(0)
+    await expect(page.getByTestId('cinematic-lane')).toHaveCount(0)
+    // localStorage activeMode cleared.
+    const lanesCleared = await page.evaluate(() =>
+      window.localStorage.getItem('adspark.activeMode'),
+    )
+    expect(lanesCleared).toBeNull()
 
     // PR CC — unknown id falls back to the not-found state with
     // a "Back to Library" CTA.

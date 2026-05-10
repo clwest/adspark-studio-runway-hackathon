@@ -7,10 +7,7 @@ import {
   loadActiveSpokespersonId,
   saveActiveSpokespersonId,
 } from '../settings'
-import {
-  setActiveMode as persistActiveMode,
-} from '../uxFlag.js'
-import CampaignModeModal from './CampaignModeModal.jsx'
+import CampaignLanes from './CampaignLanes.jsx'
 import CharacterCard from './CharacterCard.jsx'
 
 const TABS = [
@@ -193,27 +190,36 @@ export default function SpokespersonWorkspace() {
     }
   }
 
-  // PR CC + PR CD — + New Campaign flow.
+  // PR CE — + New Campaign flow stays inside the workspace.
   //
-  // PR CC originally navigated to `/` after mode select so the
-  // Library's lane mounts would pick up the persisted mode +
-  // spokesperson on first paint. PR CD strips lane mounts off
-  // the Library route entirely (homepage is library-only now),
-  // so navigating to `/` no longer mounts a lane. Until the
-  // upcoming workspace-Campaigns-tab slice mounts lanes
-  // *inside* the workspace, the safest fallback is to hand off
-  // to `/legacy` — the verbatim v1 wizard + saved-card gallery
-  // still hosts the full creation surface, and the active
-  // spokesperson + active mode are already pinned in
-  // localStorage so the legacy Stage 1 picks up the right
-  // person on Stage-1 first render.
-  const handleOpenCreateCampaign = () => setModeModalOpen(true)
+  // PR CC originally navigated to `/` after mode select; PR CD
+  // routed it to `/legacy` instead. PR CE finally mounts the
+  // lane components **inside** the workspace's Campaigns tab
+  // via `<CampaignLanes>`, so a mode pick keeps the operator
+  // on `/spokespeople/{id}`. Header `+ New Campaign` flips
+  // the active tab to "campaigns" + opens the controlled
+  // `<CampaignLanes>` modal; mode select inside CampaignLanes
+  // dismisses the modal and mounts the matching lane.
+  const handleOpenCreateCampaign = () => {
+    setActiveTab('campaigns')
+    setModeModalOpen(true)
+  }
   const handleCloseCreateCampaign = () => setModeModalOpen(false)
-  const handleSelectMode = (mode) => {
-    persistActiveMode(mode)
-    saveActiveSpokespersonId(id)
-    setModeModalOpen(false)
-    navigate('/legacy')
+
+  // PR CE — propagate a single updated Campaign from
+  // `<CampaignLanes>` handlers into our local slice so lanes
+  // re-render with the freshest data without a list refetch.
+  const handleCampaignsChanged = (updated) => {
+    if (!updated) return
+    setCampaigns((cs) => {
+      const idx = cs.findIndex((c) => c.id === updated.id)
+      if (idx >= 0) {
+        const next = cs.slice()
+        next[idx] = updated
+        return next
+      }
+      return [updated, ...cs]
+    })
   }
 
   if (loading) {
@@ -461,14 +467,80 @@ export default function SpokespersonWorkspace() {
       )}
 
       {activeTab === 'campaigns' && (
-        <TabComingSoon
-          testid="spokesperson-workspace-campaigns"
-          title="Campaigns"
-          summary={`This spokesperson has ${linkedCampaigns.length} linked campaign${
-            linkedCampaigns.length === 1 ? '' : 's'
-          }. The Campaigns tab will mount the Spokesperson / Cinematic / Dialogue lane builders directly inside this workspace next slice. Until then, click + New Campaign in the header to start one — the flow hands off to /legacy with this spokesperson + the chosen mode pre-selected.`}
-          tease="Lane builders mount here next."
-        />
+        <section
+          data-testid="spokesperson-workspace-campaigns"
+          className="space-y-3"
+        >
+          <header className="rounded-2xl ring-1 ring-zinc-800 bg-zinc-950/40 p-3 flex items-center justify-between gap-2 flex-wrap">
+            <div className="space-y-0.5 min-w-0">
+              <h2 className="text-sm font-semibold text-zinc-100">
+                Campaigns
+              </h2>
+              <p className="text-[11px] text-zinc-400 leading-snug">
+                {linkedCampaigns.length === 0
+                  ? 'No campaigns linked yet — pick a mode to start one for this spokesperson.'
+                  : `${linkedCampaigns.length} linked campaign${
+                      linkedCampaigns.length === 1 ? '' : 's'
+                    }. Each lane below targets the most-recent campaign.`}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setModeModalOpen(true)}
+              data-testid="spokesperson-workspace-campaigns-new"
+              className="rounded-md bg-pink-500/80 hover:bg-pink-500 text-zinc-100 text-xs px-3 py-1.5 font-semibold transition-colors"
+            >
+              + New Campaign
+            </button>
+          </header>
+          {linkedCampaigns.length > 0 && (
+            <ul
+              data-testid="spokesperson-workspace-campaigns-list"
+              className="space-y-1 text-[11px] text-zinc-300"
+            >
+              {linkedCampaigns
+                .slice()
+                .sort((a, b) =>
+                  String(b.created_at || '').localeCompare(
+                    String(a.created_at || ''),
+                  ),
+                )
+                .map((c) => (
+                  <li
+                    key={c.id}
+                    data-testid="spokesperson-workspace-campaigns-row"
+                    data-campaign-id={c.id}
+                    className="rounded-md ring-1 ring-zinc-800 bg-zinc-950/50 px-2 py-1.5 flex items-center justify-between gap-2"
+                  >
+                    <span className="font-mono text-[10px] text-zinc-400 shrink-0">
+                      {String(c.id).slice(0, 8)}
+                    </span>
+                    <span className="truncate flex-1">
+                      {c.business || 'untitled'}
+                      {c.product ? (
+                        <span className="text-zinc-500"> · {c.product}</span>
+                      ) : null}
+                    </span>
+                    <span className="font-mono text-[9px] text-zinc-500 shrink-0">
+                      {c.cached_video_url ||
+                      c.host_video_url ||
+                      c.dialogue_scene_video_url
+                        ? 'rendered'
+                        : 'draft'}
+                    </span>
+                  </li>
+                ))}
+            </ul>
+          )}
+          <CampaignLanes
+            activeSpokesperson={character}
+            linkedCampaigns={linkedCampaigns}
+            campaigns={campaigns}
+            modalOpen={modeModalOpen}
+            onModalClose={handleCloseCreateCampaign}
+            onCampaignsChanged={handleCampaignsChanged}
+          />
+        </section>
       )}
 
       {activeTab === 'conversations' && (
@@ -498,12 +570,6 @@ export default function SpokespersonWorkspace() {
           {errMsg}
         </p>
       )}
-
-      <CampaignModeModal
-        isOpen={modeModalOpen}
-        onSelect={handleSelectMode}
-        onClose={handleCloseCreateCampaign}
-      />
     </main>
   )
 }
