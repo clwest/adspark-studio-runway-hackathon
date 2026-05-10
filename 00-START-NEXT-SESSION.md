@@ -16,18 +16,20 @@ PR BM `669a584`; PR BN `13bc608`; PR BO `5e7400f`; PR BP
 PR CA `8681777`; PR CB `766648c`; PR CC `0b292e0`; PR CD
 `d002b8c`; PR CE `1586400`; SESSION 059 V2 UI manual QA
 `16fa39f`; PR CF `6ad1bf7`; PR CG `3f2987b`; PR CH `1f3b91a`; PR CI
-`e10ecb5 docs: PR CI demo spokesperson portraits — real
-Runway gen log`; PR CJ Fix Create Spokesperson Portrait
-Generation in flight on top — SESSION_012–SESSION_064
-handoffs added).
+`e10ecb5`; PR CJ `8859860 fix: create spokesperson modal
+stops swallowing portrait failures (PR CJ)`; SESSION 065
+Spokesperson Creation Flow audit + proposal in flight on
+top — SESSION_012–SESSION_065 handoffs added).
 
 ## Where things stand
 
-- **Branch:** `main` at `e10ecb5` (`docs: PR CI demo
-  spokesperson portraits — real Runway gen log`) on
-  `origin/main`. PR CJ patch in flight on top — frontend-
-  only bugfix to `<CreateSpokespersonModal>` so portrait
-  failures stop being silently swallowed.
+- **Branch:** `main` at `8859860` (`fix: create spokesperson
+  modal stops swallowing portrait failures (PR CJ)`) on
+  `origin/main`. SESSION 065 is a planning-only docs slice
+  — full audit + UX architecture proposal for the future
+  PR CK `<CreateSpokespersonFlow>` 4-step stepper. No code
+  changes, no real Runway calls. The audit confirms **zero
+  backend expansion needed** for the proposed flow.
 - **Latest tag:** still **`hackathon-submission-v13`** at `ec446e4`
   (PR AF). PR AG–BI shipped the full voice arc + audit trails
   + UX v2 foundation + SpokespersonStudio + Knowledge +

@@ -1,9 +1,19 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after **PR CJ — Fix Create Spokesperson
-Portrait Generation** (frontend bugfix) on top of PR AG–CI
-/ SESSION 011 anchors. PR CJ stops the Create Spokesperson
+context-kit refresh after **SESSION 065 — Spokesperson
+Creation Flow Audit + Proposal** (planning-only; no code).
+PR CJ (Create Spokesperson portrait fix) shipped at
+`8859860` on top of PR AG–CI / SESSION 011 anchors. SESSION
+065 audits the existing Character schema + character routes
+and proposes a 4-step `<CreateSpokespersonFlow>` (Identity /
+Visual Direction / Voice / Generate) that exposes
+already-supported but currently-hidden capabilities (long-
+form personality, editable portrait prompt, full 30 voice
+presets with detail copy, optional avatar bind + starter
+campaign on create) without any backend expansion. Findings
+in `docs/handoffs/SESSION_065_SPOKESPERSON_CREATION_FLOW_AUDIT.md`.
+Implementation slice locked as **PR CK** when user approves. PR CJ stops the Create Spokesperson
 modal from silently swallowing Runway portrait failures —
 when generation fails, the modal now stays open in a
 `portrait-failed` phase with a clear error message + Retry
