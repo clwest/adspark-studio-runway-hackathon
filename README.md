@@ -1,11 +1,125 @@
 # Character OS
 
-> **AI Campaign + Character + Dialogue Studio.** Type a business
-> idea, get a Runway-powered cinematic ad — plus a reusable AI brand
-> character, plus a multi-character dialogue scene builder for
-> Office-style branded skits. Three sibling ad modes share one brief
-> + one character library + one Commercial Script. Every artefact
-> cached locally.
+> **Persistent AI spokesperson infrastructure.** Brands create
+> reusable AI characters that remember every conversation, star in
+> multiple ad formats, take voice commands to make their own videos,
+> and hand off to each other mid-call. Built in one hackathon
+> weekend by one founder and an AI coding agent.
+
+---
+
+## 🏆 Runway 2026 API Hackathon submission
+
+Submitted as the project for the **Runway 2026 API Hackathon**
+(May 8–11, 2026). The deployed project IS this repo — clone it,
+boot the stack with one script, and you have the full platform
+running locally against the Runway API. No demo video required.
+
+### 👋 Reviewing this with Claude Code? Read this first.
+
+This repo ships with an **AI-readable substrate** designed for
+exactly this scenario. If you're a judge using
+[Claude Code](https://claude.com/claude-code) (or any
+context-aware coding agent), you do not need to manually read
+622 lines of README. Instead:
+
+```bash
+git clone https://github.com/clwest/adspark-studio-runway-hackathon.git
+cd adspark-studio-runway-hackathon
+claude            # or `claude code`, depending on your CLI alias
+```
+
+Then ask Claude any of these out loud:
+
+- *"What does this project do?"*
+- *"How does the agentic loop work end-to-end?"*
+- *"Show me the cross-session memory architecture."*
+- *"What's the most interesting Runway API constraint they
+  discovered?"*
+- *"What ad modes are supported and how do they differ?"*
+- *"Walk me through what happens when an operator says 'save
+  what we just talked about' to the avatar."*
+
+Claude will use the **context-kit** — four anchors that this
+project maintains as canonical operator-facing docs — to answer
+with file paths, line numbers, and architectural rationale:
+
+1. **`00-START-NEXT-SESSION.md`** — current state of the product,
+   verified measurements (84 routes, 9 realtime tools, build
+   sizes), every PR in the latest push with citations.
+2. **`docs/WHAT_IT_IS.md`** — narrative anchor explaining the
+   pitch + architectural choices in plain English.
+3. **`docs/INVENTORY.md`** — exhaustive runtime anchor:
+   every file, every route, every key-dependent behaviour.
+4. **`docs/handoffs/SESSION_NNN_*.md`** — 100+ session handoff
+   docs documenting *every architectural decision and why it
+   was made*, including the [SESSION 104 handoff](docs/handoffs/SESSION_104_MEMORY_PHASE_2_AND_HANDOFF_PR_EM_B_TO_EM_H.md)
+   covering this push's nine PRs.
+
+There's also `CLAUDE.md` at the repo root, which tells any
+Claude Code session the project rules, drift-check protocol,
+and how to verify the codebase before claiming anything works.
+
+### One-shot boot (real Runway mode)
+
+```bash
+cp backend/.env.example .env          # then add your RUNWAY_API_KEY
+bash scripts/start-local-real.sh      # uvicorn :8000 + vite :5173
+```
+
+Health JSON prints `runway_mock=false` + `llm_provider=ollama`
+when keys + Ollama are reachable. Visit
+[http://localhost:5173](http://localhost:5173).
+
+For mock-mode (CI / smoke / no keys):
+
+```bash
+bash scripts/start-local-mock.sh
+```
+
+### The 30-second tour
+
+1. **Spokesperson Library** at `/` — every saved AI character.
+   Open one to enter its Workspace (Identity / Knowledge /
+   Memory / Campaigns / Conversations / Videos).
+2. **Identity tab** — generate a portrait, create a Runway
+   avatar binding, clone a voice from a 10s-5min sample.
+3. **Campaigns tab** — every campaign is "produced for" a
+   spokesperson. Three ad modes per campaign: Spokesperson Ad,
+   Dialogue Scene, Cinematic.
+4. **Conversations tab** — live WebRTC realtime call with the
+   spokesperson. Zoom-style overlay. Say *"make me an ad about
+   X"* and watch the agentic loop fire.
+5. **Memory tab** — every past conversation auto-summarized
+   into the spokesperson's persistent memory. Publish as a
+   Runway document. Attach to a campaign. Next session reads
+   it as RAG.
+6. **Videos tab** — every rendered MP4. Click `🎬 Polish in
+   DaVinci Resolve` to drop it into your hand-built template
+   and render a broadcast cut.
+
+### What's interesting under the hood
+
+- **Pluggable memory architecture** (`backend/app/services/memory/`)
+  — `MemoryStore` + `MemorySource` + `MemoryComposer` + one
+  `Orchestrator`. JsonMemoryStore today; PgVectorMemoryStore
+  is one new class.
+- **9-tool realtime catalog** advertised on every
+  `/v1/realtime_sessions` create — drives the agentic loop +
+  memory recall/persist + character-to-character handoff.
+- **Local-first** — Ollama runs the LLM, DaVinci Resolve does
+  post via its Python API; only video generation leaves the
+  laptop.
+- **Tiered Runway fallback** — if the session-create 400s with
+  the `tools` field, retry without; then documentIds; then
+  personality. Campaign context survives experimental field
+  rejection.
+- **Hackathon-day API finding** — the `client_event` tool path
+  is one-way (no result return to the avatar's LLM). Documented
+  + mitigated in the tool descriptions (force narrate-before-
+  invoke). See PR EM-h commit message.
+
+---
 
 ## What's new since `hackathon-submission-v6`
 

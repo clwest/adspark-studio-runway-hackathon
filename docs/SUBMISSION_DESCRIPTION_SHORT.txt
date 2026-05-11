@@ -1,0 +1,15 @@
+Character OS is persistent AI spokesperson infrastructure — brands create reusable AI characters that remember every conversation, star in multiple ad formats, take voice commands to make their own videos, and hand off to each other mid-call. Built in one hackathon weekend by one founder and an AI coding agent.
+
+The project is the repo. Clone it, run one boot script, and the full platform is live against the Runway API.
+
+JUDGES USING CLAUDE CODE: this repo ships an AI-readable substrate. After cloning, just run `claude` in the project root and ask "what does this project do?" or "how does the agentic loop work?". The context-kit (00-START-NEXT-SESSION.md + docs/WHAT_IT_IS.md + docs/INVENTORY.md + 100+ session handoffs under docs/handoffs/) lets Claude answer with file paths and architectural rationale instead of guesses. CLAUDE.md at the root documents the project rules.
+
+THE HEADLINE: open a campaign, click Conversations, you're in a live WebRTC call with your spokesperson. Say "Make me a long ad explaining Character OS." The avatar acknowledges out loud, invokes a tool over WebRTC client_event, the local LLM (Ollama, llama3) drafts a multi-beat script grounded in the campaign brief plus attached memory, the backend chunks at sentence boundaries, fires Runway avatar_videos per chunk in parallel, stitches with ffmpeg. ~3 minutes from voice command to playable MP4 landing in the Videos tab.
+
+MEMORY IS REAL, NOT MOCKED. Pluggable architecture (Store + Source + Composer + Orchestrator) — JsonMemoryStore today, PgVector is one new class. Transcripts auto-ingest into per-character memory; saying "save this conversation" composes a Markdown body, publishes to Runway as a document, attaches to the campaign as documentIds. The next session reads it as RAG.
+
+LOCAL-FIRST: Ollama runs the LLM (no OpenAI bill), DaVinci Resolve does post via its Python API. Only video generation leaves the laptop.
+
+THREE AD MODES (Spokesperson Ad, Dialogue Scene, Cinematic) plus a 9-tool realtime catalog including character-to-character handoff — say "hand me to Riggs" and the platform navigates to his workspace and auto-starts a fresh session.
+
+The recursion: 145+ PRs, every architectural decision in a session handoff doc. Brands aren't made of one video. They're made of one identity across many videos. Character OS treats the identity as the persistent unit.
