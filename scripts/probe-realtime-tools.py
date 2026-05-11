@@ -129,9 +129,19 @@ TOOL_PARAMS_JSONSCHEMA = {
 
 
 def candidate_shapes() -> list[tuple[str, dict]]:
-    """The four candidate tool entry shapes, ordered by probability
-    Runway adopted them. Returns (label, tool_entry) — wrap in a
-    one-element list when sending."""
+    """Candidate tool entry shapes, ordered by probability.
+
+    Shape #5 (`runway-client-event`) is the verified shape — sourced
+    from `@runwayml/avatars-react/dist/api.d.ts` line 88, which
+    documents: *"At runtime this is just `{ type, name, description }`
+    (exactly what the Runway session create payload expects)."* The
+    discriminator value is the literal string `client_event` (NOT
+    `function`). No `parameters` field on the wire — the SDK keeps
+    the JSON schema client-side for arg validation only.
+
+    Shapes #1–#4 are kept for historical record (all failed in the
+    first run with "No matching discriminator" because they used
+    `type: function` or omitted the discriminator entirely)."""
     return [
         (
             "openai-chat-completions",
@@ -164,6 +174,14 @@ def candidate_shapes() -> list[tuple[str, dict]]:
         (
             "livekit-minimal",
             {
+                "name": TOOL_NAME,
+                "description": TOOL_DESCRIPTION,
+            },
+        ),
+        (
+            "runway-client-event",
+            {
+                "type": "client_event",
                 "name": TOOL_NAME,
                 "description": TOOL_DESCRIPTION,
             },
