@@ -528,6 +528,77 @@ export default function CampaignLanes({
         </div>
       )}
 
+      {/* PR EG-3-fix — Inline mode picker. PR EG-3 cleared activeMode
+          on every campaign switch, which left the workspace empty
+          below the campaign list with no lane mounted and no obvious
+          next step (the operator could only switch between making
+          campaigns active — Chris's exact phrasing). This renders the
+          three mode cards inline whenever a campaign is focused but
+          no mode is active, so the operator can pick afresh without
+          a modal popping up on every click. */}
+      {!activeMode && focusedCampaign && (
+        <div
+          data-testid="campaign-lanes-inline-mode-picker"
+          className="rounded-lg ring-1 ring-pink-400/20 bg-pink-500/5 p-3 space-y-2"
+        >
+          <div className="space-y-0.5">
+            <h4 className="text-sm font-semibold text-zinc-100">
+              Pick a mode for{' '}
+              <span className="text-pink-300">
+                {focusedCampaign.business || 'this campaign'}
+              </span>
+            </h4>
+            <p className="text-[11px] text-zinc-400 leading-snug">
+              Each campaign can host multiple ad modes. Pick the one
+              you want to work on now — you can switch later via the
+              "dismiss" link.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            {[
+              {
+                id: CAMPAIGN_MODES.SPOKESPERSON,
+                emoji: '🎙️',
+                label: 'Spokesperson Ad',
+                detail: 'Lip-synced talking-avatar render. Most common.',
+              },
+              {
+                id: CAMPAIGN_MODES.CINEMATIC,
+                emoji: '🎬',
+                label: 'Cinematic Ad',
+                detail: 'Silent visual cut + voiced commercial mux.',
+              },
+              {
+                id: CAMPAIGN_MODES.DIALOGUE,
+                emoji: '🎭',
+                label: 'Dialogue Scene',
+                detail: 'Multi-character stitched skit.',
+              },
+            ].map((card) => (
+              <button
+                key={card.id}
+                type="button"
+                onClick={() => handleSelectMode(card.id)}
+                data-testid={`campaign-lanes-inline-mode-${card.id}`}
+                className="text-left rounded-lg ring-1 ring-zinc-800 hover:ring-pink-400/50 hover:bg-pink-500/5 bg-zinc-950/40 p-2.5 space-y-1 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-base" aria-hidden="true">
+                    {card.emoji}
+                  </span>
+                  <span className="text-[12px] font-semibold text-zinc-100">
+                    {card.label}
+                  </span>
+                </div>
+                <p className="text-[10px] text-zinc-400 leading-snug">
+                  {card.detail}
+                </p>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {activeMode === CAMPAIGN_MODES.SPOKESPERSON && (
         <SpokespersonLane
           activeSpokesperson={activeSpokesperson}
