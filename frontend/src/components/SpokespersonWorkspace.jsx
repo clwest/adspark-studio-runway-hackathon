@@ -13,7 +13,7 @@ import KnowledgePanel from './KnowledgePanel.jsx'
 import VideosTab from './VideosTab.jsx'
 import RealtimeSpokesperson from './RealtimeSpokesperson.jsx'
 import { ToastProvider } from './Toast.jsx'
-import { SHOW_VIDEOS_EVENT } from '../realtimeTools'
+import { SHOW_VIDEOS_EVENT, REFRESH_CAMPAIGNS_EVENT } from '../realtimeTools'
 
 const TABS = [
   { id: 'identity', label: 'Identity' },
@@ -72,6 +72,24 @@ export default function SpokespersonWorkspace() {
     const handler = () => setActiveTab('outputs')
     window.addEventListener(SHOW_VIDEOS_EVENT, handler)
     return () => window.removeEventListener(SHOW_VIDEOS_EVENT, handler)
+  }, [])
+
+  // PR EE follow-up — when the tool path lands a new output
+  // server-side, re-fetch campaigns so the Videos tab actually
+  // surfaces it. Without this the new OutputRecord exists in
+  // campaigns.json but the local state stays at initial-mount values.
+  useEffect(() => {
+    const handler = async () => {
+      try {
+        const resp = await api.listCampaigns()
+        setCampaigns(resp.campaigns || [])
+      } catch {
+        // Non-fatal — if the refetch fails the operator can
+        // manually reload; not worth surfacing a toast for.
+      }
+    }
+    window.addEventListener(REFRESH_CAMPAIGNS_EVENT, handler)
+    return () => window.removeEventListener(REFRESH_CAMPAIGNS_EVENT, handler)
   }, [])
   const [busyAction, setBusyAction] = useState(null)
   const [modeModalOpen, setModeModalOpen] = useState(false)

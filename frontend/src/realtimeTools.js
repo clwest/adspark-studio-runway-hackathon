@@ -28,10 +28,16 @@ export const REALTIME_TOOL_NAMES = Object.freeze({
   SHOW_VIDEOS_TAB: 'show_videos_tab',
 })
 
-// Custom window-event name SpokespersonWorkspace listens for to
-// switch its active tab to "Videos" without prop-drilling through
+// Custom window-event names SpokespersonWorkspace listens for to
+// react to avatar tool invocations without prop-drilling through
 // CampaignGallery → RealtimeSpokesperson. Loose coupling.
+//   - SHOW_VIDEOS_EVENT: flip activeTab → 'outputs'
+//   - REFRESH_CAMPAIGNS_EVENT: re-fetch campaigns so a newly-rendered
+//     output (appended server-side via the tool path) actually
+//     surfaces in the Videos tab. UI-button renders refresh local
+//     state inline; tool-path renders don't, hence this event.
 export const SHOW_VIDEOS_EVENT = 'character-os:show-videos'
+export const REFRESH_CAMPAIGNS_EVENT = 'character-os:refresh-campaigns'
 
 /**
  * Dispatch a `client_event` to the correct handler.
@@ -106,6 +112,10 @@ export async function dispatchRealtimeToolEvent(event, deps) {
           '✅ Spokesperson Ad rendered — see Videos tab.',
           'success',
         )
+        // Refresh the workspace's local campaigns state so the new
+        // OutputRecord shows up — without this the Videos tab keeps
+        // rendering the stale list from initial mount.
+        window.dispatchEvent(new CustomEvent(REFRESH_CAMPAIGNS_EVENT))
         // Auto-navigate so the operator can see the new output land.
         window.dispatchEvent(new CustomEvent(SHOW_VIDEOS_EVENT))
       } catch (err) {
