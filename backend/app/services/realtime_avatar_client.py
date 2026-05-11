@@ -45,7 +45,14 @@ _REALTIME_MODEL = "gwm1_avatars"
 # Empirical: NOT_READY → READY in ~1.5 s. Allow generous slack for
 # upstream variability without blocking the request indefinitely.
 _READY_POLL_INTERVAL_S = 0.5
-_READY_POLL_TIMEOUT_S = 30.0
+# PR EM-e3 — bumped from 30→60s. The Runway dev API occasionally
+# takes 30-50s to flip a session NOT_READY → READY when documentIds
+# is set + the document is large or the API is under load. The old
+# 30s cap caused spurious "did not reach READY" errors during the
+# submission push. 60s gives Runway breathing room without
+# pretending realtime is a slow endpoint — true hangs still surface
+# at the cap with a status hint.
+_READY_POLL_TIMEOUT_S = 60.0
 
 # PR AE — Runway documents personality up to 10,000 chars.
 # Cap below that on a sentence boundary so we never bump the wire.
@@ -581,16 +588,21 @@ def create_session(
         )
 
     # Poll until READY (typically <2 s). Don't poll forever — if Runway
-    # can't get to READY in 30 s something is wrong upstream.
+    # can't get to READY in the configured cap, something is wrong
+    # upstream and we surface a diagnostic error.
     detail_url = f"{settings.runway_api_base}/v1/realtime_sessions/{session_id}"
     payload: dict = created
     deadline = time.time() + _READY_POLL_TIMEOUT_S
+    last_seen_status = "(unknown)"
+    poll_count = 0
     with httpx.Client(timeout=10.0) as client:
         while time.time() < deadline:
             r = client.get(detail_url, headers=_runway_headers(settings))
             r.raise_for_status()
             payload = r.json()
             status = (payload.get("status") or "").upper()
+            last_seen_status = status
+            poll_count += 1
             if status == "READY":
                 break
             if status in {"FAILED", "CANCELLED"}:
@@ -602,10 +614,22 @@ def create_session(
                 )
             time.sleep(_READY_POLL_INTERVAL_S)
         else:
+            # PR EM-e3 — include the last-seen status + poll count in
+            # the error so the operator can tell "Runway is slow"
+            # (stuck on NOT_READY for 60s) from "Runway is broken"
+            # (no status info at all).
             _safe_delete(session_id, settings)
+            logger.warning(
+                "realtime session timeout campaign=%s session=%s "
+                "last_status=%s polls=%d",
+                campaign.id, session_id, last_seen_status, poll_count,
+            )
             raise RealtimeUnavailableError(
-                "realtime session did not reach READY within "
-                f"{int(_READY_POLL_TIMEOUT_S)}s"
+                f"realtime session did not reach READY within "
+                f"{int(_READY_POLL_TIMEOUT_S)}s "
+                f"(last status: {last_seen_status}; {poll_count} polls). "
+                "Runway's dev API is occasionally slow under load — "
+                "try Start Conversation again in a few seconds."
             )
 
     session_key = payload.get("sessionKey")
