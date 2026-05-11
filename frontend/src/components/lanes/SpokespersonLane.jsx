@@ -487,35 +487,34 @@ export default function SpokespersonLane({
                 renders are preserved in the Videos tab.
               </p>
             )}
-            {/* PR DO — Long Spokesperson Ad. Standalone button +
-                collapsible textarea below. Backend chunks the
-                script at sentence boundaries, fires one
-                avatar_videos per chunk, and ffmpeg-concats into
-                one Videos card. Targets 30-60s ad runs. */}
+            {/* PR DO + PR DR — Long Spokesperson Ad. Outer button
+                is pure toggle (expand/collapse the textarea). The
+                expanded form below has its own explicit Render +
+                Clear buttons so a failed/interrupted render leaves
+                a clear retry path. Backend chunks the script at
+                sentence boundaries, fires one avatar_videos per
+                chunk, and ffmpeg-concats into one Videos card. */}
             <button
               type="button"
-              onClick={longAdCanFire ? handleGenerateLongAd : () => setLongAdExpanded((v) => !v)}
+              onClick={() => setLongAdExpanded((v) => !v)}
               disabled={longAdBusy}
               data-testid="spokesperson-lane-long-ad"
               data-render-target="long-ad"
-              data-burns-credits="true"
               data-expanded={longAdExpanded ? 'true' : 'false'}
               data-busy={longAdBusy ? 'true' : 'false'}
-              title={
-                longAdCanFire
-                  ? `⚠️ POST /v1/avatar_videos × ${longChunkEstimate} — burns ${longChunkEstimate} credits. Stitched into one MP4 via ffmpeg.`
-                  : longAdDisabledReason || 'Toggle the long-form script editor below.'
-              }
+              title="Toggle the long-form script editor. Render fires from inside the form."
               className={
                 'w-full flex items-center justify-between gap-2 text-[11px] rounded px-2 py-1 font-mono transition-colors ' +
-                (longAdCanFire
-                  ? 'ring-1 ring-rose-400/50 bg-rose-500/30 hover:bg-rose-500/45 text-rose-100'
-                  : longAdBusy
+                (longAdBusy
                   ? 'ring-1 ring-rose-400/30 bg-rose-500/20 text-rose-200 cursor-wait'
+                  : longAdExpanded
+                  ? 'ring-1 ring-rose-400/40 bg-rose-500/10 text-rose-100 hover:bg-rose-500/20'
                   : 'ring-1 ring-zinc-700 bg-zinc-800/40 text-zinc-300 cursor-pointer hover:ring-rose-400/30')
               }
             >
-              <span className="truncate">{longAdLabel}</span>
+              <span className="truncate">
+                {longAdBusy ? longAdLabel : longAdExpanded ? 'Hide Long Ad editor' : 'Render Long Ad'}
+              </span>
               <span className="text-[9px] text-zinc-200/70">
                 {longAdBusy
                   ? `rendering ${longChunkEstimate} chunks…`
@@ -562,13 +561,81 @@ export default function SpokespersonLane({
                       : 'type a script to see the chunk + runtime estimate'}
                   </span>
                 </div>
+                {/* PR DR — explicit Render + Clear buttons inside
+                    the form. Outer toggle button never auto-fires
+                    a render, so this is the only way to start
+                    rendering. After a failed/interrupted render
+                    the form stays open + the operator can Clear
+                    and retype or just hit Render again. */}
+                <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                  <button
+                    type="button"
+                    onClick={handleGenerateLongAd}
+                    disabled={!longAdCanFire}
+                    data-testid="spokesperson-lane-long-ad-render"
+                    data-burns-credits="true"
+                    title={
+                      longAdCanFire
+                        ? `⚠️ POST /v1/avatar_videos × ${longChunkEstimate} — burns ${longChunkEstimate} credits.`
+                        : longAdDisabledReason || 'Type a script first.'
+                    }
+                    className={
+                      'text-[10px] rounded px-2 py-1 font-mono transition-colors ' +
+                      (longAdCanFire
+                        ? 'ring-1 ring-rose-400/50 bg-rose-500/30 hover:bg-rose-500/45 text-rose-100'
+                        : 'ring-1 ring-zinc-700 bg-zinc-800/40 text-zinc-400 cursor-not-allowed disabled:opacity-80')
+                    }
+                  >
+                    {longAdBusy
+                      ? `Rendering (${longChunkEstimate} chunks)…`
+                      : longChunkEstimate > 0
+                      ? `Render Long Ad · ${longChunkEstimate} clips`
+                      : 'Render Long Ad'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLongAdScript('')
+                      setLongAdError('')
+                    }}
+                    disabled={longAdBusy || longCharCount === 0}
+                    data-testid="spokesperson-lane-long-ad-clear"
+                    title="Wipe the textarea so you can type a fresh script."
+                    className={
+                      'text-[10px] rounded px-2 py-1 font-mono transition-colors ' +
+                      (longAdBusy || longCharCount === 0
+                        ? 'ring-1 ring-zinc-700 bg-zinc-800/40 text-zinc-500 cursor-not-allowed disabled:opacity-60'
+                        : 'ring-1 ring-zinc-700 bg-zinc-800/60 hover:bg-zinc-700/70 hover:ring-zinc-500 text-zinc-200')
+                    }
+                  >
+                    Clear
+                  </button>
+                  {selectedVariant?.long_script
+                    && longAdScript !== selectedVariant.long_script
+                    && !longAdBusy
+                    && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLongAdScript(selectedVariant.long_script || '')
+                          setLongAdError('')
+                        }}
+                        data-testid="spokesperson-lane-long-ad-restore"
+                        title="Reset the textarea to the saved long_script on this variant."
+                        className="text-[10px] text-zinc-500 hover:text-zinc-200 font-mono"
+                      >
+                        ↺ restore saved
+                      </button>
+                    )
+                  }
+                </div>
                 {longAdError && (
                   <p
                     data-testid="spokesperson-lane-long-ad-error"
                     className="text-[10px] text-rose-300 leading-snug"
                     title={longAdError}
                   >
-                    {longAdError}
+                    ⚠ {longAdError}
                   </p>
                 )}
                 {selectedVariant && (
@@ -577,8 +644,9 @@ export default function SpokespersonLane({
                     <span className="text-pink-300 font-mono">
                       {selectedVariant.title}
                     </span>{' '}
-                    — on render the script is saved as the variant's
-                    long_script so a future re-render pre-populates.
+                    — on successful render the script is saved as
+                    the variant's long_script so re-rendering
+                    pre-populates here.
                   </p>
                 )}
               </div>

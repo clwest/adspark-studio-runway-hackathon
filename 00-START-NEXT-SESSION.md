@@ -1,7 +1,54 @@
 # START NEXT SESSION — AdSpark Studio
 
-**Last touched:** 2026-05-10 (PR DQ — Toast surface +
-form clear on render complete. Frontend-only UX
+**Last touched:** 2026-05-10 (PR DR — Long Ad form
+clear + error toasts, layered on PR DQ. Operator hit
+a real failure mode after PR DQ landed: rendered
+Donny's long ad successfully (toast fired, panel
+collapsed), then started Riggs's — the render got
+interrupted mid-pipeline, the video came out broken,
+and the operator's hard refresh didn't surface a way
+to retry. The outer "Render Long Ad" button in PR DO
+dual-purposed as toggle + fire: when `longAdScript`
+was non-empty (which it is for seeded variants),
+clicking the button fired the render directly without
+showing the textarea first. Combined with the PR DQ
+no-error-toast gap, an interrupted/failed render
+felt "frozen" — operator couldn't see the textarea
+to clear or edit it. PR DR fixes both surfaces. Outer
+button now **pure toggle** (expand/collapse the
+textarea) — never auto-fires. Inside the expanded
+form, three explicit buttons: (1) **Render Long Ad
+· N clips** (rose, primary, with chunk count in the
+label); (2) **Clear** (zinc, secondary — wipes the
+textarea so the operator can retype after an
+interrupted render); (3) **↺ restore saved** (zinc,
+conditional — only when `longAdScript !==
+variant.long_script` and not busy). Error toasts now
+fire from all eight render handlers via a new
+`withRenderToast(successMsg, errorPrefix, work)`
+helper in `CampaignLanes.jsx` — wraps each async
+call, fires success toast on resolve, fires error
+toast on reject with the operation as prefix ("Long
+Ad render failed: ...", "Line 3 render failed:
+..."), re-throws so the lane's inline error renders
+too. Operator gets TWO signals on failure: the
+top-right toast + the inline error in the lane.
+Error toasts get the 6s TTL from PR DQ vs 4s for
+success. `withRenderToast` covers: Spokesperson Ad,
+Long Ad, Spokesperson Reels, Voiced Cinematic,
+Storyboard Stitch, Dialogue Stitch, Dialogue Reels,
+Per-line Render. Vite build **554.02 KB / 148.73 KB
+gzip** (+1.84 KB / +0.40 KB vs PR DQ). Mock smoke 3/3
+in ~51s. Backend untouched. Pytest 53/53 unchanged.
+Backend route count still **77**. Zero Runway calls
+fired. Failure-mode recovery flow: operator clicks
+Render Long Ad button → textarea expands → operator
+clicks the explicit Render button inside the form →
+render runs → if it fails, error toast flashes red
+top-right, form stays open with the textarea
+populated, operator can click Clear and retype or
+just hit Render again to retry. Earlier: PR DQ —
+Toast surface + form clear on render complete. Frontend-only UX
 polish. Render-completion events
 (Spokesperson Ad / Long Ad / per-line dialogue /
 dialogue stitch / dialogue reels / spokesperson reels

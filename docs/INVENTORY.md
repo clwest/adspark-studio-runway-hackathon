@@ -1,7 +1,29 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after **PR DQ — Toast Surface + Form Clear**.
+context-kit refresh after **PR DR — Long Ad Form Clear + Error
+Toasts** (layered on PR DQ). Operator hit a real failure mode
+after PR DQ landed: rendered Donny's long ad successfully, then
+started Riggs's — render got interrupted mid-pipeline, video came
+out broken, operator couldn't retry because the outer button
+auto-fired on click instead of showing the textarea first. PR DR
+fixes both surfaces. Outer button now **pure toggle** (expand/
+collapse the textarea). Inside the expanded form, three explicit
+buttons: Render Long Ad (rose, with chunk count in label), Clear
+(zinc, wipes textarea), ↺ restore saved (zinc, conditional — only
+when textarea differs from variant.long_script). Error toasts
+fire from all eight render handlers via a new `withRenderToast`
+helper in CampaignLanes.jsx — wraps each async call, fires success
+toast on resolve, error toast on reject with operation prefix
+("Long Ad render failed: ..."), re-throws so lane inline error
+still shows. Coverage: Spokesperson Ad, Long Ad, Spokesperson
+Reels, Voiced Cinematic, Storyboard Stitch, Dialogue Stitch,
+Dialogue Reels, Per-line Render. Error toasts get a 6s TTL (vs 4s
+success). Vite build 554.02 KB / 148.73 KB gzip (+1.84 KB / +0.40
+KB vs PR DQ). Mock smoke 3/3. Backend untouched. Pytest 53/53
+unchanged. Backend route count still **77**. Zero Runway calls
+fired.
+Earlier: PR DQ — Toast Surface + Form Clear.
 Frontend-only UX polish. Render-completion events used to land
 silently — operator got no feedback when an ad/scene/reel
 finished. New `frontend/src/components/Toast.jsx` ships a Context-
