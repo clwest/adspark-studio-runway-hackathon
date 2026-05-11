@@ -1,7 +1,59 @@
-# START NEXT SESSION — AdSpark Studio
+# START NEXT SESSION — Character OS
 
-**Last touched:** 2026-05-10 (PR DR — Long Ad form
-clear + error toasts, layered on PR DQ. Operator hit
+**Last touched:** 2026-05-10 (PRs DS → DX, in order:
+**PR DS** — Regenerate Portrait button on the Identity
+card (`CharacterCard.jsx`) so the operator can reroll
+a spokesperson's still without recreating the whole
+character; `portraitUrl` now appends `?v=${updated_at}`
+so the browser cache doesn't serve the stale image
+after the backend overwrites it on disk.
+**PR DT** — singular framing in the portrait composer.
+Riggs's first regenerate returned **two raccoons** —
+gen4_image is stochastic and our composed prompts had
+no "single character" cue. Both `_compose_clean_prompt`
+(backend) and `characterPromptBuilder.js` (frontend
+mirror) now emit "Single solitary figure, one
+character only, centered solo subject." as the second
+sentence; all four `_SAFE_RETRY_TEMPLATES` carry the
+same line.
+**PR DU** — Rebuild Avatar button. Regenerate Portrait
+alone leaves the **Runway avatar** (the actual
+lip-sync identity) bound to the OLD portrait —
+videos kept showing the old face. Rebuild Avatar fires
+the existing `create_avatar` flow against the current
+portrait; the backend's POST `/v1/avatars` returns a
+fresh avatar id and `runway_avatar_id` is overwritten.
+**PR DV** — Runway voice block schema fix.
+`PATCH /v1/avatars/{id}` now returns 400 with
+`path:["voice",".id"]` when we send the old
+`{type:"custom", voiceId:…}` shape — Runway tightened
+the discriminated-union to require `id` under
+`{type:"custom"}`. Fixed in
+`voice_clone_client.apply_voice_to_avatar` AND
+`character_studio_client._create_avatar_real`.
+**PR DW** — Product rename **AdSpark Studio → Character
+OS**. 27 files; user-visible strings (browser title,
+top-bar brand, legacy hero / footer, generated-copy
+hashtag `#CharacterOS`, Campaign Gallery help text,
+transcript export filename) plus operator-visible
+defaults (FastAPI `/docs` title, default voice/avatar
+name templates `Character OS — <X>` that show up in
+Runway dashboards, startup script banners, JSDoc /
+docstring sweep).
+**PR DX (this commit)** — Docs sweep. README,
+SUBMISSION, DEMO_SCRIPT, CLAUDE, WHAT_IT_IS, INVENTORY,
+OPERATOR_USAGE_MAP, DEMO_CHECKLIST all rebranded.
+Historical session records (`docs/handoffs/*`),
+research notes (`docs/research/*`), and seed-fixture
+references where "AdSpark Studio" is the *campaign
+business name* of Clara Vale's seeded brand are
+deliberately left untouched — they describe content
+in `campaigns.json`, not product branding.
+
+---
+
+**Pre-DX head-pointer narrative (PR DR — Long Ad form
+clear + error toasts):** Layered on PR DQ. Operator hit
 a real failure mode after PR DQ landed: rendered
 Donny's long ad successfully (toast fired, panel
 collapsed), then started Riggs's — the render got

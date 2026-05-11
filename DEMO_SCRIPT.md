@@ -1,4 +1,4 @@
-# AdSpark Studio — Screen-Recording Script
+# Character OS — Screen-Recording Script
 
 This file is the operator's run-of-show for the hackathon screen
 capture. It assumes a clean machine, both servers stopped, and the
@@ -191,7 +191,7 @@ mode adds ~12 s.
 - **Don't run the Playwright smoke during a demo session** — it'll
   pollute the gallery with `Local coffee shop` test entries.
 - **Don't push generated media** — `git status` is the truth-source.
-- **Don't explain WebRTC or Runway realtime sessions.** AdSpark uses
+- **Don't explain WebRTC or Runway realtime sessions.** Character OS uses
   the *async* `avatar_videos` endpoint by design — it's the reliable
   primitive that fits the existing campaign flow. Bringing up
   realtime / WebRTC mid-demo invites questions about a feature we
@@ -216,7 +216,7 @@ saved card.
 | t | Action | What the audience sees |
 |---|---|---|
 | 0:00 | Scroll to a saved campaign in the gallery | Concept title, cached video, Campaign Pack pills |
-| 0:05 | Narrate: "AdSpark turns this campaign image into a reusable AI brand spokesperson via Runway's Avatars endpoint." | Mode banner + saved card |
+| 0:05 | Narrate: "Character OS turns this campaign image into a reusable AI brand spokesperson via Runway's Avatars endpoint." | Mode banner + saved card |
 | 0:15 | Click **Create Brand Spokesperson** | Button shows `Creating Brand Spokesperson…`; ~30–45 s wait |
 | 0:50 | (likely path) status flips to **failed** with "Runway rejected the reference image — typically because it does not contain a recognisable face." | Honest fallback messaging on screen |
 | 0:55 | Narrate: "The campaign hero shot doesn't have a face, so we'll use our brand stock portrait instead." | Stay calm — this is the demo story |
@@ -295,7 +295,7 @@ will show your account's real avatars in real mode.
 | t (s) | Action | What the audience sees |
 |---|---|---|
 | 0:00 | Page load | Mode banner emerald readiness chip + cap chip |
-| 0:08 | Narrate: "AdSpark turns one campaign brief into platform-ready creative AND a reusable Runway Avatar spokesperson." | Mode banner |
+| 0:08 | Narrate: "Character OS turns one campaign brief into platform-ready creative AND a reusable Runway Avatar spokesperson." | Mode banner |
 | 0:18 | Scroll to a saved campaign with a Campaign Pack already built | Pack pill `3/3 formats ready` |
 | 0:25 | In the Brand Spokesperson section, narrate the picker: "Runway lets us reuse any avatar we've already created. We pick one from the grid." | 4-up avatar picker grid |
 | 0:35 | Click an existing avatar card | Card highlights sky-blue; "Selected Runway Avatar" pill appears |
@@ -346,7 +346,7 @@ Conversation, *don't troubleshoot live*:
   realtime broker request includes `session_key` in the *response*;
   it never carries the API key in the *request* but the response
   field is sensitive (one-shot JWT). Avoid screen-real-estate it.
-- **Don't over-explain WebRTC.** AdSpark uses async `avatar_videos`
+- **Don't over-explain WebRTC.** Character OS uses async `avatar_videos`
   as the production primitive; realtime is one optional surface.
   Bringing up signalling, ICE, STUN, or peer connections invites
   questions about a feature that's intentionally minimal.
@@ -380,7 +380,7 @@ Conversation, *don't troubleshoot live*:
 ## Path F — Character Studio Full Demo (~4–5 min, real credits)
 
 **The headline demo for `hackathon-submission-v5`.** Phase K turns
-AdSpark from "AI ad generator" into "AI Campaign + Character Studio."
+Character OS from "AI ad generator" into "AI Campaign + Character Studio."
 Path F shows one generated brand character driving the entire
 downstream stack: ad clip, host clip, brand voice + dub, and live
 realtime conversation. **One Runway Avatar identity, used everywhere.**
@@ -424,7 +424,7 @@ credits — well under 0.05% of the 50k pool.
 | t (s) | Action | What the audience sees |
 |---|---|---|
 | 0:00 | Page load | Mode banner emerald readiness chip + cap chip; Stage progress trail "Spokesperson · Brief · Visual Ad · Saved" with the Spokesperson chip already showing the spark check (active spokesperson restored from localStorage) |
-| 0:08 | Narrate: "AdSpark is AI Campaign + Character Studio. Step one is the spokesperson — Brewster, our coffee mascot, generated and bound to a Runway Avatar. The whole campaign is built around him." | Stage 1 = Spokesperson; Brewster's tile lit spark with `active` pill |
+| 0:08 | Narrate: "Character OS is AI Campaign + Character Studio. Step one is the spokesperson — Brewster, our coffee mascot, generated and bound to a Runway Avatar. The whole campaign is built around him." | Stage 1 = Spokesperson; Brewster's tile lit spark with `active` pill |
 | 0:20 | Scroll past Stage 1; brief stops on Stage 2 = Campaign Brief | Pink-bordered active-spokesperson chip at top of the brief: "Brewster the Bear · mascot · max · avatar ready · This spokesperson will guide the visual prompt + auto-attach to the saved campaign." |
 | 0:30 | Form: `Donkey Betz Coffee` / `Reels-ready cold brew` / `warm cinematic` / `morning commuters` | Form fills |
 | 0:45 | **Generate Ad Concepts** → pick `Daily Ritual` | Three concept cards, recommended pill; structured prompt + "Best results: one character, one location, one action, one camera move." hint visible |
@@ -441,7 +441,7 @@ credits — well under 0.05% of the 50k pool.
 | 4:55 | Switch to Realtime tab. Click **Start Conversation**. | "Connecting…" → live avatar feed appears with Brewster's processed thumbnail; "live · 4:59" countdown |
 | 5:05 | Speak (one of the chip suggestions): *"Pitch Donkey Betz Coffee in one sentence."* | Brewster responds in `max` voice |
 | 5:40 | Click **End Conversation** | Section returns to idle |
-| 5:50 | Narrate the closing: "One spokesperson, one brief — driving the ad, the host clip, the voiced commercial, the brand voice + dub, and a live conversation. Brewster is the durable IP. AdSpark made everything else around him." | Closing summary |
+| 5:50 | Narrate the closing: "One spokesperson, one brief — driving the ad, the host clip, the voiced commercial, the brand voice + dub, and a live conversation. Brewster is the durable IP. Character OS made everything else around him." | Closing summary |
 
 ### Pass criteria (run silently mid-recording)
 
@@ -529,7 +529,7 @@ is still `pending` when you reach the Attach step:
   automatically replaces the per-campaign spokesperson everywhere
   downstream — host clip, audio pack delivery, realtime session.
 - **The portrait → avatar pipeline is automated.** No manual
-  upload, no Runway dashboard step. AdSpark generates the portrait
+  upload, no Runway dashboard step. Character OS generates the portrait
   via `gen4_image_turbo` from a locked template prompt and binds
   it via `/v1/avatars` from the cached PNG (data URI, ≤5 MB).
 - **Mock-mode parity is preserved.** The same UI works without keys

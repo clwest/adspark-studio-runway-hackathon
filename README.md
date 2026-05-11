@@ -1,4 +1,4 @@
-# AdSpark Studio
+# Character OS
 
 > **AI Campaign + Character + Dialogue Studio.** Type a business
 > idea, get a Runway-powered cinematic ad — plus a reusable AI brand
@@ -41,8 +41,8 @@ demo paths with timings + credit estimates.
 
 The original v6-era pitch (still accurate as a product overview):
 
-A RunwayML hackathon entry. AdSpark Studio is no longer just an AI ad
-generator. Phase K turns AdSpark into a **brand-character studio**:
+A RunwayML hackathon entry. Character OS is no longer just an AI ad
+generator. Phase K turns Character OS into a **brand-character studio**:
 the user generates a reusable **Character** (mascot, founder, coach,
 or local guide) from a portrait template, binds that portrait to a
 Runway Avatar, and attaches the character to any campaign. The same
@@ -340,7 +340,7 @@ portrait + JSON entry but **does not** call Runway DELETE; the
 account-side avatar persists for reuse from the Avatar Picker.
 
 > **Why this matters commercially.** A business that runs through
-> AdSpark doesn't just leave with one ad. It leaves with a reusable
+> Character OS doesn't just leave with one ad. It leaves with a reusable
 > brand mascot or founder spokesperson it can keep using across every
 > campaign, host clip, and live conversation that follows. Characters
 > are durable IP — they outlive any single campaign.

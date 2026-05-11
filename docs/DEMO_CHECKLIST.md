@@ -1,4 +1,4 @@
-# AdSpark Studio — Submission-Day Demo Checklist
+# Character OS — Submission-Day Demo Checklist
 
 Final-day operator checklist for recording the submission video.
 Run through this in order; each item is testable from the v2 UI.
@@ -29,7 +29,7 @@ shows `avatar · ready` (or `mock`) in the header pill.
 
 Open each demo spokesperson → **Knowledge** tab.
 
-- [ ] Donny has at least one saved knowledge source (e.g. "AdSpark
+- [ ] Donny has at least one saved knowledge source (e.g. "Character OS
       brand voice notes" — punchy, fast-talking, hype copy).
 - [ ] Riggs has at least one source (e.g. "Build-process notes" —
       a Character OS knowledge source describing how the team
@@ -107,7 +107,7 @@ Stay in Donny's workspace → Campaigns tab → `+ New Campaign` →
 pick **🎭 Dialogue Scene**.
 
 - [ ] Fill a minimal brief (`Business: Hackathon Demo`,
-      `Product: AdSpark Studio`) → **Save brief**.
+      `Product: Character OS`) → **Save brief**.
 - [ ] Step 3 → click **Plan Dialogue Lines** → 3 lines appear.
 - [ ] Click **Load hackathon demo lines** in the amber preset
       box. Status flips to `Loaded. Now click Generate line on

@@ -1,6 +1,6 @@
-# AdSpark Studio — What It Is
+# Character OS — What It Is
 
-A RunwayML hackathon build. AdSpark is **persistent AI spokesperson
+A RunwayML hackathon build. Character OS is **persistent AI spokesperson
 infrastructure** — brands create reusable AI characters that can
 star in cinematic ads, deliver lip-synced talking-head pitches,
 hold real-time conversations, and headline multi-character
@@ -36,7 +36,7 @@ Storyboard Commercial Builder (Visuals tab) is a fourth output that
 sits inside the Cinematic family — three image-to-video shots
 stitched into a longer (~15 s) silent or voiced cut.
 
-## What AdSpark generates per campaign
+## What Character OS generates per campaign
 
 1. **3 ad concepts** — title, hook, visual direction, caption, CTA.
 2. **Recommended Runway video prompt** — the structured
@@ -135,7 +135,7 @@ stitched into a longer (~15 s) silent or voiced cut.
 
 ## Audio model
 
-The spoken voice track in every voiced AdSpark output is the
+The spoken voice track in every voiced Character OS output is the
 **Avatar Host Clip** primitive (`/v1/avatar_videos`):
 
 - **Spokesperson Ad** = the host clip itself.

@@ -1,7 +1,7 @@
 # CLAUDE.md — runway-hackathon project notes
 
 Project-scoped instructions for Claude Code sessions on
-`runway-hackathon` / AdSpark Studio.
+`runway-hackathon` / Character OS.
 
 ## Read-first
 

@@ -1,4 +1,4 @@
-# AdSpark Studio — Operator Usage Map
+# Character OS — Operator Usage Map
 
 **Last updated:** 2026-05-10 (post `hackathon-submission-v13`,
 PR CP Restore Delete Spokesperson + Endpoint Audit —
@@ -117,7 +117,7 @@ every campaign and every ad mode.
 
 #### Bind the Runway Avatar
 After the portrait lands, the character tile shows a **`Create
-Runway Avatar`** button. Click it. AdSpark reads the cached
+Runway Avatar`** button. Click it. Character OS reads the cached
 portrait, embeds it as a data URI (≤ 5 MB), and posts to
 `POST /v1/avatars`. Polls READY in ~30–45 s (real). The status
 chip flips from `pending` → `ready` (or `failed` if Runway
@@ -152,7 +152,7 @@ campaign auto-attaches them via `/api/campaigns/{id}/attach-character`.
 - Once an Avatar is bound, the **Spokesperson Ad** itself is the
   fastest way to hear the voice in context.
 - ~~Custom voice cloning via `POST /v1/voices` `from.type=audio`
-  is documented but not yet wired in AdSpark.~~ **Resolved by
+  is documented but not yet wired in Character OS.~~ **Resolved by
   PR AN — see "Cloning a custom voice" below.**
 
 ### Cloning a custom voice (PR AN)
@@ -179,7 +179,7 @@ Backend:
 POST /api/characters/{id}/clone-voice
   multipart/form-data
     audio: <file>      # required, ≤ 15 MB, audio/* mime
-    name:  "..."       # optional voice label (defaults to "AdSpark — <character>")
+    name:  "..."       # optional voice label (defaults to "Character OS — <character>")
 ```
 
 In mock mode the route returns a deterministic
@@ -272,7 +272,7 @@ shows what Runway returned *after* the clone landed.
 PR AQ trusts a 2xx `PATCH /v1/avatars/{id}` response as proof
 the bind landed. PR AS adds a verification step: after every
 successful PATCH (auto from `clone-voice` + manual from
-`apply-voice`), AdSpark runs `GET /v1/avatars/{id}` and pulls
+`apply-voice`), Character OS runs `GET /v1/avatars/{id}` and pulls
 the resolved voice block out of the response. Result is
 persisted on the character and surfaced as a third pill in the
 voice section:
@@ -939,7 +939,7 @@ atmospheric scenes, scenic b-roll.
 3. Either click **"Build Cinematic Ad ↗"** on the Overview Ad Mode
    picker (jumps to Visuals) or directly hit **"Build Voiced
    Commercial"** in the Visuals tab's Voiced Commercial section.
-4. AdSpark auto-creates the Avatar Host Clip first if it's
+4. Character OS auto-creates the Avatar Host Clip first if it's
    missing (only requires that **some** spokesperson is ready).
 5. ffmpeg `-stream_loop -1 -shortest` produces the final MP4.
 
@@ -1016,7 +1016,7 @@ and Campaign Pack).
 ### What you can do
 
 #### Plan storyboard
-Click **Plan Storyboard**. AdSpark calls
+Click **Plan Storyboard**. Character OS calls
 `POST /api/campaigns/{id}/storyboard/plan` and persists three
 default shots (Hook / Action / Payoff) on the campaign record.
 Default prompts use the structured builder + the saved
@@ -1037,9 +1037,9 @@ when the draft diverges from the persisted text.
   currently-saved text.
 
 #### Generate shots
-Click **Generate Shot N** per shot. AdSpark fires
+Click **Generate Shot N** per shot. Character OS fires
 `POST /api/campaigns/{id}/storyboard/generate-shot/{shot_id}` —
-the same `image_to_video` primitive AdSpark uses for the main
+the same `image_to_video` primitive Character OS uses for the main
 campaign video, just targeted at one shot's prompt + the active
 character's portrait.
 
@@ -1191,7 +1191,7 @@ POST /api/campaigns/{id}/realtime-transcript
 
 Where the conversation id comes from: Runway's `sessionId`
 returned by `POST /v1/realtime_sessions` doubles as the
-`conversationId`. AdSpark captures it server-side immediately
+`conversationId`. Character OS captures it server-side immediately
 after the broker succeeds (see
 `POST /api/campaigns/{id}/spokesperson-session` in PR AJ).
 
@@ -1343,7 +1343,7 @@ once the session is live.
   surfaces Runway's `expiresAt`.
 - **One-shot consume.** If the browser drops, restart the session.
 - **Custom-voice avatars cannot use webcam or screen share**
-  (Runway constraint). AdSpark stays mic-only for V1.
+  (Runway constraint). Character OS stays mic-only for V1.
 - **Mock mode** returns 503 with the friendly *"available in real
   mode only"* copy.
 
@@ -1384,7 +1384,7 @@ your ad mode" picker.
 ### What you can do
 
 #### Plan dialogue scene
-Click **Plan Dialogue Scene**. AdSpark calls
+Click **Plan Dialogue Scene**. Character OS calls
 `POST /api/campaigns/{id}/dialogue/plan` with these defaults:
 
 - **3 lines** with labels Hook / Beat / Closer.
@@ -1410,7 +1410,7 @@ Each line has an **editable textarea** with a 300-char counter
 `{text?, character_id?}`; the line resets to `idle`.
 
 #### Generate each line
-Click **Generate Line Clip** per line. AdSpark calls
+Click **Generate Line Clip** per line. Character OS calls
 `POST /api/campaigns/{id}/dialogue/generate-line/{line_id}`. Same
 `avatar_videos` primitive as Spokesperson Ad, just per-line.
 
@@ -1777,7 +1777,7 @@ Pre-warm the browser mic permission (visit the page once + Allow).
 5. Avatar answers in tone using the brand context.
 6. End Conversation cleanly within the 5-min cap.
 7. (PR AJ) Click **`Fetch transcript`** in the Conversation
-   transcript card. AdSpark hits
+   transcript card. Character OS hits
    `GET /v1/avatar_conversations/{sessionId}` and renders the
    recorded turns inline. **`Refresh transcript`** repulls
    in case the recording is still processing.

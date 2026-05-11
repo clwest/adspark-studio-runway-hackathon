@@ -1,7 +1,7 @@
-# AdSpark Studio — Hackathon Submission
+# Character OS — Hackathon Submission
 
 ## Project name
-**AdSpark Studio**
+**Character OS**
 
 ## One-line pitch (current — `hackathon-submission-v13`)
 **AI Campaign + Character + Dialogue Studio.** Type a business
@@ -48,7 +48,7 @@ Brands don't just need ads — they need **a reusable identity,
 campaign assets, multilingual voice delivery, and an interactive
 presence**. Production teams normally cobble these together from
 four or five tools and a Premiere session, and the *identity* — the
-mascot or spokesperson — gets re-shot every time. AdSpark Studio
+mascot or spokesperson — gets re-shot every time. Character OS
 collapses everything into a single click-driven flow built on top of
 Runway's API: a generated brand character that becomes a Runway
 Avatar, platform-tuned ad creative, a custom Brand Voice with
@@ -58,7 +58,7 @@ durable character record.
 
 The shift in PR K is the headline:
 
-> **A business that runs through AdSpark doesn't just leave with one
+> **A business that runs through Character OS doesn't just leave with one
 > ad. It leaves with a reusable AI mascot or founder spokesperson it
 > can keep using across every campaign that follows.**
 
@@ -78,14 +78,14 @@ the AI-velocity story for the user.
 
 ## Solution
 
-AdSpark Studio collapses the entire campaign loop — concept →
+Character OS collapses the entire campaign loop — concept →
 reference image → video → cache → platform pack → brand spokesperson
 → host clip → custom brand voice → multilingual dubs → live realtime
 conversation — into a single click-driven flow. Every artefact lives
 on the same campaign record. Every asset is cached locally so saved
 campaigns survive Runway's URL expiry.
 
-## What AdSpark generates per campaign
+## What Character OS generates per campaign
 
 - ✅ **Ad concepts** — three options with hook, caption, CTA, visual direction
 - ✅ **Reference image** — Runway `gen4_image_turbo` from the recommended concept
@@ -138,13 +138,13 @@ Runway. The realtime client connects directly to Runway via the
 ## Key differentiators
 
 1. **Reusable brand characters as first-class resources.** The
-   headline PR K capability. AdSpark generates a brand mascot or
+   headline PR K capability. Character OS generates a brand mascot or
    founder portrait via `gen4_image_turbo`, binds it to a Runway
    Avatar, and lets the same character drive every campaign's host
    clip, audio pack, and realtime conversation. Characters outlive
    any single campaign — the same Brewster the Bear can show up in
    every cold-brew campaign for the next year.
-2. **End-to-end Runway pipeline.** AdSpark generates the reference
+2. **End-to-end Runway pipeline.** Character OS generates the reference
    image, animates it, generates a brand-character portrait, turns
    that portrait into a reusable spokesperson, designs a custom
    brand voice, dubs it into 29 languages, and offers a live
@@ -171,7 +171,7 @@ Runway. The realtime client connects directly to Runway via the
    thumbnail, and image source label persisted), and *Present
    Campaign* records the Avatar Host Clip using that identity.
 7. **Honest fallbacks.** Runway rejects the campaign reference image
-   for avatar use when it has no recognisable face. AdSpark surfaces
+   for avatar use when it has no recognisable face. Character OS surfaces
    the failure honestly and offers a one-click "Retry with stock
    portrait" instead of silently swapping sources. Character
    portraits use a locked template prompt that consistently produces
