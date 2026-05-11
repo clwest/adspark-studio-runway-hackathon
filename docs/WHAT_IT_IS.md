@@ -1,12 +1,53 @@
 # Character OS — What It Is
 
-A RunwayML hackathon build. Character OS is **persistent AI spokesperson
-infrastructure** — brands create reusable AI characters that can
-star in cinematic ads, deliver lip-synced talking-head pitches,
-hold real-time conversations, and headline multi-character
-dialogue scenes. Each spokesperson lives across campaigns and ad
-modes; campaigns are produced *for* a spokesperson, not as
-one-off generations. Everything is powered by Runway's API.
+A RunwayML hackathon build. Character OS is **persistent AI
+spokesperson infrastructure** — brands create reusable AI
+characters that can star in cinematic ads, deliver lip-synced
+talking-head pitches, hold real-time conversations, headline
+multi-character dialogue scenes, **and now: take spoken commands
+from the operator and produce the ad themselves**. Each
+spokesperson lives across campaigns and ad modes; campaigns are
+produced *for* a spokesperson, not as one-off generations.
+
+## The agentic loop (PR EE + EJ + EK, 2026-05-11)
+
+The headline capability. An operator opens a realtime session
+with their spokesperson and says *"make me a long ad explaining
+Character OS to the Runway API judges, walk me through what's
+happening as you do it."* The avatar acknowledges verbally,
+invokes a tool over the WebRTC data channel, the local LLM
+(Ollama / `llama3:latest` by default) writes a multi-beat spoken
+script from the campaign brief + the operator's prompt, the
+script is chunked and rendered through Runway's `avatar_videos`,
+the stitched MP4 lands in the Videos tab — and the Videos tab
+auto-opens so the operator watches it arrive. ~3 minutes wall
+clock from voice command to playable video.
+
+Six tools live in the realtime catalog (`recall_knowledge`,
+`render_spokesperson_ad`, `auto_write_and_render_ad`,
+`render_long_spokesperson_ad`, `auto_write_and_render_long_ad`,
+`show_videos_tab`). The avatar's LLM picks based on operator
+intent — verbatim script vs. high-level brief, short vs. long.
+Stage-specific toasts narrate every wait.
+
+## Local-first infrastructure
+
+Two of the three creative engines run **on the operator's
+laptop**:
+
+- **LLM**: Ollama via the OpenAI-compatible endpoint. No cloud
+  API key required. Top-bar 🦙 chip shows the active model.
+- **Post-production polish**: DaVinci Resolve Studio via its
+  Python scripting API. Operator builds a Resolve template once
+  (color grade, transitions, Fusion title placeholders, music
+  bed); the `🎬 Polish in DaVinci Resolve` button drops the
+  cached Spokesperson Ad MP4 into the template, swaps the
+  placeholder clip + title text via the API, renders via the
+  H.264 Master preset, lands the polished cut alongside the
+  other outputs.
+
+Only video generation actually leaves the laptop — Runway's
+`avatar_videos` / `realtime_sessions` / `voices` / `documents`.
 
 ## The frontend reset (PR CA)
 

@@ -1,16 +1,59 @@
 # START NEXT SESSION — Character OS
 
-**Parked work — pick up when ready:**
-PR EA "single-pass Long Ad via `speech.type=audio`" is
-**plumbed but not wired**. Background: `build_avatar_video_body`
-in `long_ad_service.py` accepts an `audio_source` kwarg (PR DZ-b);
-Runway accepts `speech.type=audio` cleanly at 42s with no
-truncation (PR DY probe); `/v1/voices/preview` is NOT a TTS
-endpoint — it's an ElevenLabs voice-design audition shim
-(PR DZ-a probe, decisive 400). What remains: pick an external
-TTS source (recommend OpenAI `tts-1-hd`), add a `tts_voice`
-field per Character, wire the v2 orchestrator with a feature
-flag. Full plan + risks + rationale: **`docs/research/SPEECH_TYPE_AUDIO_FINDINGS.md`**.
+**Submission push complete (2026-05-11).** Operator's words:
+*"We are about to attempt something never tried by one man and an
+AI coding agent."* 18 PRs landed in one marathon session (DS → EK-2)
+to close the demo loop. **Talk to your spokesperson → LLM writes the
+script → real video lands in Videos tab. All on local infrastructure
+except Runway video generation.**
+
+📘 **Full handoff for this submission push:**
+[`docs/handoffs/SESSION_102_LOCAL_LLM_REALTIME_AGENT_PR_DS_TO_EK.md`](docs/handoffs/SESSION_102_LOCAL_LLM_REALTIME_AGENT_PR_DS_TO_EK.md)
+
+**Headline capabilities now live:**
+
+1. **Agentic realtime avatar** (PR EE + EK + EK-2) — operator
+   speaks a brief into a live WebRTC session; the avatar's LLM
+   invokes the right tool from a 6-tool catalog and renders the
+   ad live. Four ad-rendering tools cover short/long × verbatim/
+   auto-write. The wait is narrated by stage-specific toasts so
+   it never feels frozen.
+2. **Local LLM** (PR EH) — `LLM_PROVIDER=ollama` flips the
+   concept service to a locally-running Ollama server. No cloud
+   API key required. TopBar shows a 🦙 chip with the model name.
+   Verified end-to-end with `llama3:latest` (short script: ~7s,
+   long script: ~8s).
+3. **LLM-driven ad scripts** (PR EJ) — `/auto-write-script` route
+   produces a spoken ad from the campaign brief. `✨ Auto-write`
+   buttons live on the variant editor, the Long Ad form, and the
+   empty-state CTA.
+4. **DaVinci Resolve template polish** (PR EF) — `🎬 Polish in
+   DaVinci Resolve` button drops the cached Spokesperson Ad MP4
+   into the operator's hand-built Resolve timeline, swaps the
+   placeholder clip via the Resolve scripting API, renders via
+   H.264 Master preset, lands the polished cut alongside the
+   other outputs.
+5. **Product rename** (PR DW + DX) — AdSpark Studio → Character OS
+   across every operator-visible string + every narrative doc.
+6. **Portrait + avatar reliability fixes** (PR DS, DT, DU) —
+   Regenerate Portrait button, "Single solitary figure" anti-
+   duplicate framing in the composer, Rebuild Avatar button so
+   regenerated portraits actually reach video.
+7. **Campaign management UX** (PR EG × 4) — Delete per row,
+   Dialogue + Cinematic lanes honour the selected campaign,
+   active mode clears on campaign switch, inline mode picker
+   when no mode is active.
+
+**Parked for after submission** (plan + rationale in
+[`docs/research/SPEECH_TYPE_AUDIO_FINDINGS.md`](docs/research/SPEECH_TYPE_AUDIO_FINDINGS.md)):
+
+PR EA "single-pass Long Ad via `speech.type=audio`" is plumbed but
+not wired. `build_avatar_video_body`'s audio branch is ready;
+needs an external TTS source (OpenAI tts-1-hd or ElevenLabs) +
+per-Character `tts_voice` field. PR DY probe confirmed Runway
+accepts 42s+ audio with -0.04s drift. PR DZ-a confirmed
+`/v1/voices/preview` is an ElevenLabs voice-DESIGN audition shim,
+not arbitrary-text TTS.
 
 ---
 
