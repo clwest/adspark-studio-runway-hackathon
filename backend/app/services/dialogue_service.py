@@ -291,6 +291,102 @@ def plan_lines(
     return lines, None
 
 
+def extend_lines(
+    campaign: Campaign, settings: Settings,
+) -> tuple[list[DialogueLine], Optional[str]]:
+    """PR DM — top up an existing dialogue scene to
+    ``_DEFAULT_LINE_COUNT`` lines **without disturbing existing
+    entries**. Preserves each existing line's text, character_id,
+    avatar_id, status, task_id, video_url, cache_filename, error,
+    mock_mode — so rendered MP4s + operator edits survive.
+
+    Returns ``(full_list, error_message)``. ``error_message`` is non-
+    None when no usable characters exist to fill the new slots.
+
+    Cast for the new lines is built from the existing lines'
+    character_ids first (preserves operator choices + speaker
+    continuity), supplemented with the campaign-attached character +
+    other ready characters up to a 3-member cap. If the existing
+    scene already has ≥ ``_DEFAULT_LINE_COUNT`` lines, this is a
+    no-op (returns the existing list unchanged).
+    """
+    existing: list[DialogueLine] = list(campaign.dialogue_lines or [])
+    if len(existing) >= _DEFAULT_LINE_COUNT:
+        return existing, None
+    if len(existing) == 0:
+        # Empty scene — extend devolves to a fresh plan so the
+        # caller never has to special-case "first plan".
+        return plan_lines(campaign, settings)
+
+    ready = _ready_characters(settings)
+    # Build cast preserving operator's existing choices first.
+    cast: list[dict] = []
+    seen_ids: set[str] = set()
+    for line in existing:
+        cid = line.character_id
+        if not cid or cid in seen_ids:
+            continue
+        match = next((c for c in ready if c["id"] == cid), None)
+        if match:
+            cast.append(match)
+            seen_ids.add(cid)
+        elif line.character_name and line.avatar_id:
+            # Tolerate a character that was once ready but isn't in
+            # the live ready set anymore (e.g., avatar PATCH failed
+            # since). Use the saved line's data as the cast entry so
+            # the rotation stays continuous.
+            cast.append({
+                "id": cid,
+                "name": line.character_name,
+                "avatar_id": line.avatar_id,
+            })
+            seen_ids.add(cid)
+        if len(cast) >= 3:
+            break
+
+    # Top up cast from the live ready pool until we have at least one
+    # entry. Cap at 3 distinct characters.
+    if len(cast) < 3:
+        attached = _attached_character(campaign, settings)
+        if attached and attached.get("id") and attached["id"] not in seen_ids:
+            cast.append(attached)
+            seen_ids.add(attached["id"])
+        for c in ready:
+            if c["id"] in seen_ids:
+                continue
+            cast.append(c)
+            seen_ids.add(c["id"])
+            if len(cast) >= 3:
+                break
+
+    if not cast:
+        return existing, (
+            "No characters with a ready Runway avatar are available "
+            "to fill the new lines. Create or restore at least one "
+            "character with a ready avatar, then extend the scene."
+        )
+
+    # Append new idle lines using labels[len(existing):]. Speaker
+    # rotation continues the cycle from where the existing lines
+    # left off so the A/B/C pattern stays consistent.
+    new_lines: list[DialogueLine] = []
+    for idx in range(len(existing), _DEFAULT_LINE_COUNT):
+        label = _DEFAULT_LINE_LABELS[idx]
+        speaker = cast[idx % len(cast)]
+        text = _default_line_text(campaign, label, "")
+        new_lines.append(
+            DialogueLine(
+                id=f"line-{idx + 1}",
+                character_id=speaker["id"],
+                character_name=speaker["name"],
+                avatar_id=speaker["avatar_id"],
+                text=text,
+                status="idle",
+            )
+        )
+    return existing + new_lines, None
+
+
 # ---- generation -----------------------------------------------------
 
 def _download_line(url: str, target: Path, timeout: float = 90.0) -> int:

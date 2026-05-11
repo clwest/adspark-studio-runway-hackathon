@@ -90,22 +90,37 @@ export default function DialogueLane({
     )
   }
 
-  // PR BP — three-button gating + state.
-  //
-  // Plan: backend returns the same plan for repeat calls when
-  // dialogue_lines already exist; "Planned" pill flips on once
-  // a campaign has any lines. Cheap to call.
+  // PR DL — backend default scene length. Hardcoded here to keep
+  // the lane self-contained; must stay in sync with
+  // `dialogue_service._DEFAULT_LINE_COUNT` (currently 6). If the
+  // backend bumps, update this and re-run the smoke.
+  const DEFAULT_LINE_COUNT = 6
+
+  // PR BP — plan button gating + state. PR DM adds a sibling
+  // "extend" button (top-up to default count without disturbing
+  // existing lines) when an existing scene is shorter than the
+  // current default. The "reset" button stays destructive.
   const planAlready = lineCount > 0
   const [planBusy, setPlanBusy] = useState(false)
   const [planError, setPlanError] = useState('')
+  const [extendBusy, setExtendBusy] = useState(false)
+  const [extendError, setExtendError] = useState('')
   const planCanFire = Boolean(
-    onPlanDialogue && hasCampaign && !planBusy,
+    onPlanDialogue && hasCampaign && !planBusy && !extendBusy,
   )
   const planLabel = planBusy
     ? 'Creating scene lines…'
     : planAlready
     ? 'Reset scene lines'
     : 'Create Scene Lines'
+  // PR DM — extend visibility + state.
+  const linesToAdd = Math.max(0, DEFAULT_LINE_COUNT - lineCount)
+  const canExtend = Boolean(
+    onPlanDialogue && hasCampaign && lineCount > 0 && linesToAdd > 0 && !planBusy && !extendBusy,
+  )
+  const extendLabel = extendBusy
+    ? `Adding ${linesToAdd} line${linesToAdd === 1 ? '' : 's'}…`
+    : `Add ${linesToAdd} more line${linesToAdd === 1 ? '' : 's'}`
   const planDisabledReason = !hasCampaign
     ? 'Pick a linked campaign first.'
     : !onPlanDialogue
@@ -116,11 +131,26 @@ export default function DialogueLane({
     setPlanError('')
     setPlanBusy(true)
     try {
-      await onPlanDialogue(focused.id)
+      // PR DM — explicitly request the destructive reset mode.
+      // Default in the API helper is already "reset" but pass it
+      // for clarity.
+      await onPlanDialogue(focused.id, 'reset')
     } catch (e) {
       setPlanError(`${e?.message || e}`)
     } finally {
       setPlanBusy(false)
+    }
+  }
+  const handleExtendLines = async () => {
+    if (!canExtend) return
+    setExtendError('')
+    setExtendBusy(true)
+    try {
+      await onPlanDialogue(focused.id, 'extend')
+    } catch (e) {
+      setExtendError(`${e?.message || e}`)
+    } finally {
+      setExtendBusy(false)
     }
   }
 
@@ -314,7 +344,7 @@ export default function DialogueLane({
               data-busy={planBusy ? 'true' : 'false'}
               title={
                 planCanFire
-                  ? 'Seed a 3-line Hook / Beat / Closer plan from the saved campaign brief. No Runway credits. Per-line rendering still happens in the legacy wizard.'
+                  ? `Seed a fresh ${DEFAULT_LINE_COUNT}-line scene from the saved brief. No Runway credits. Destructive — replaces any existing lines + their rendered MP4 references.`
                   : planDisabledReason
               }
               className={
@@ -335,6 +365,29 @@ export default function DialogueLane({
                   : 'no campaign'}
               </span>
             </button>
+
+            {/* PR DM — Extend an existing short scene to the current
+                default length. Preserves all existing lines + their
+                rendered MP4s; only adds idle lines for the new
+                slots. Only renders when the existing scene has
+                between 1 and (DEFAULT_LINE_COUNT - 1) lines. */}
+            {canExtend && (
+              <button
+                type="button"
+                onClick={handleExtendLines}
+                disabled={!canExtend}
+                data-testid="dialogue-lane-extend"
+                data-target-count={DEFAULT_LINE_COUNT}
+                data-busy={extendBusy ? 'true' : 'false'}
+                title={`Top up to ${DEFAULT_LINE_COUNT} lines without disturbing the ${lineCount} existing line${lineCount === 1 ? '' : 's'} (text, speaker, rendered MP4s all preserved). No Runway credits.`}
+                className="w-full flex items-center justify-between gap-2 text-[11px] rounded px-2 py-1 font-mono transition-colors ring-1 ring-amber-400/40 bg-amber-500/20 hover:bg-amber-500/35 text-amber-100"
+              >
+                <span className="truncate">{extendLabel}</span>
+                <span className="text-[9px] text-amber-200/80">
+                  {extendBusy ? 'adding…' : `→ ${DEFAULT_LINE_COUNT} total`}
+                </span>
+              </button>
+            )}
 
             {/* PR DA (Demo Pillars) — per-line editor list. Renders
                 between Plan and Stitch when at least one line exists.
@@ -461,6 +514,15 @@ export default function DialogueLane({
               Plan: {planError}
             </p>
           )}
+          {extendError && (
+            <p
+              data-testid="dialogue-lane-status"
+              className="text-[10px] text-rose-300 leading-snug"
+              title={extendError}
+            >
+              Extend: {extendError}
+            </p>
+          )}
           {stitchError && (
             <p
               data-testid="dialogue-lane-status"
@@ -479,12 +541,13 @@ export default function DialogueLane({
               Reels: {reelsError}
             </p>
           )}
-          {!planError && !stitchError && !reelsError && (planBusy || stitchBusy || reelsBusy) && (
+          {!planError && !extendError && !stitchError && !reelsError && (planBusy || extendBusy || stitchBusy || reelsBusy) && (
             <p
               data-testid="dialogue-lane-status"
               className="text-[10px] text-zinc-500 leading-snug"
             >
               {planBusy && 'creating scene lines…'}
+              {extendBusy && `adding ${linesToAdd} more line${linesToAdd === 1 ? '' : 's'}…`}
               {stitchBusy && 'stitching final scene…'}
               {reelsBusy && 'exporting captioned reel…'}
             </p>

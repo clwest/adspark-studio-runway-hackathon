@@ -3,7 +3,7 @@ import shutil
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -1052,21 +1052,48 @@ def _line_video_url(campaign_id: str, line_id: str) -> str:
 _DIALOGUE_LINE_MAX = 300
 
 
+class DialoguePlanBody(BaseModel):
+    """PR DM — opt-in mode for the dialogue plan route.
+
+    - ``"reset"`` (default): destructive — discards any existing
+      ``dialogue_lines`` and seeds a fresh
+      ``_DEFAULT_LINE_COUNT``-line scene. Backward-compatible with
+      pre-PR-DM callers that POST no body.
+    - ``"extend"``: additive — preserves every existing line (text,
+      speaker, status, rendered MP4 references) and tops up to
+      ``_DEFAULT_LINE_COUNT`` with new idle lines. No-op when the
+      scene is already at or above the cap.
+    """
+
+    mode: Literal["reset", "extend"] = "reset"
+
+
 @router.post("/{campaign_id}/dialogue/plan", response_model=Campaign)
 def post_dialogue_plan(
     campaign_id: str,
+    body: Optional[DialoguePlanBody] = None,
     settings: Settings = Depends(get_settings),
     store: CampaignStore = Depends(_store),
 ) -> Campaign:
-    """Generate a deterministic 3-line dialogue scene from the saved
-    campaign + attached character + a second ready character (when
-    available). Pure local computation — no Runway calls.
+    """Generate a deterministic dialogue scene from the saved
+    campaign + attached character + up to two more ready characters.
+    Pure local computation — no Runway calls.
+
+    PR DM — accepts an optional ``DialoguePlanBody`` to switch
+    between **reset** (default, destructive) and **extend** (top up
+    existing lines without disturbing them). When the body is
+    omitted entirely, behaves as ``mode="reset"`` for backward
+    compatibility with PR AF / PR DL callers.
     """
     record = store.get(campaign_id)
     if not record:
         raise HTTPException(status_code=404, detail="campaign not found")
 
-    lines, err = dialogue_service.plan_lines(record, settings)
+    mode = body.mode if body else "reset"
+    if mode == "extend":
+        lines, err = dialogue_service.extend_lines(record, settings)
+    else:
+        lines, err = dialogue_service.plan_lines(record, settings)
     if err:
         raise HTTPException(status_code=409, detail=err)
 
@@ -1080,8 +1107,8 @@ def post_dialogue_plan(
     if not updated:
         raise HTTPException(status_code=404, detail="campaign not found")
     logger.info(
-        "dialogue plan campaign=%s lines=%d",
-        campaign_id, len(lines),
+        "dialogue plan campaign=%s mode=%s lines=%d",
+        campaign_id, mode, len(lines),
     )
     return updated
 

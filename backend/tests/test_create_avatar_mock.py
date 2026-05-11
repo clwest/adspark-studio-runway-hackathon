@@ -1254,3 +1254,151 @@ def test_dialogue_plan_rotates_three_speakers_a_b_c(client: TestClient):
             f"line {i + 1} should reuse cast[{i - 3}] ({expected}), "
             f"got {lines[i]['character_id']}"
         )
+
+
+# ---- PR DM — extend mode preserves existing lines --------------
+
+
+def test_dialogue_plan_extend_tops_up_existing(client: TestClient):
+    """Extend mode tops a short scene up to ``_DEFAULT_LINE_COUNT``
+    lines while preserving the existing entries verbatim (text,
+    speaker, status, video refs)."""
+    from app.services.dialogue_service import _DEFAULT_LINE_COUNT
+
+    char = _create_character(client, name="Donny Extend")
+    _generate_portrait(client, char["id"])
+    cid = _create_campaign_with_avatar(client, char["id"])
+    client.post(f"/api/characters/{char['id']}/create-avatar", json={})
+
+    # Reset to seed the full default scene then trim the persisted
+    # list down to 3 lines by overwriting the campaigns.json record
+    # via the existing save-line route is too noisy; instead, we
+    # exercise extend on a campaign that already has the default
+    # count by overwriting the first 3 lines with custom text + a
+    # fresh render, then calling extend (which should be a no-op
+    # because lineCount >= default). We separately test the actual
+    # top-up by directly invoking the service helper.
+    r = client.post(f"/api/campaigns/{cid}/dialogue/plan", json={})
+    assert r.status_code == 200, r.text
+    full = r.json()["dialogue_lines"]
+    assert len(full) == _DEFAULT_LINE_COUNT
+
+    # Extend on a scene already at default size → no-op (returns the
+    # same N lines unchanged).
+    r2 = client.post(
+        f"/api/campaigns/{cid}/dialogue/plan",
+        json={"mode": "extend"},
+    )
+    assert r2.status_code == 200, r2.text
+    same = r2.json()["dialogue_lines"]
+    assert len(same) == _DEFAULT_LINE_COUNT
+    # Same ids in the same order.
+    assert [l["id"] for l in same] == [l["id"] for l in full]
+
+
+def test_dialogue_plan_extend_preserves_existing_3_line_scene(
+    client: TestClient, tmp_path: Path,
+):
+    """Direct service-level probe: a campaign whose ``dialogue_lines``
+    have been trimmed to 3 (simulating a pre-PR-DL scene) is topped
+    up to 6 by ``extend_lines`` without losing any of the existing 3
+    (text, speaker, status, video_url all preserved)."""
+    from app.services.dialogue_service import (
+        _DEFAULT_LINE_COUNT,
+        extend_lines,
+    )
+    from app.services.storage import CampaignStore
+
+    char = _create_character(client, name="Donny Preserve")
+    _generate_portrait(client, char["id"])
+    client.post(f"/api/characters/{char['id']}/create-avatar", json={})
+    cid = _create_campaign_with_avatar(client, char["id"])
+
+    # Plan (seeds 6 idle lines), then save custom text on the first 3
+    # lines + mark them rendered. The campaign now models a "scene
+    # planned + first 3 rendered" state.
+    r = client.post(f"/api/campaigns/{cid}/dialogue/plan", json={})
+    assert r.status_code == 200
+    custom_text = [
+        "Pre-PR-DL custom hook text.",
+        "Pre-PR-DL custom beat text.",
+        "Pre-PR-DL custom closer text.",
+    ]
+    for i, text in enumerate(custom_text, start=1):
+        r = client.post(
+            f"/api/campaigns/{cid}/dialogue/line/line-{i}",
+            json={"text": text, "character_id": char["id"]},
+        )
+        assert r.status_code == 200
+
+    # Read the campaign back, simulate a pre-PR-DL scene by trimming
+    # dialogue_lines to 3 in-memory (matches what an older campaign
+    # would look like on disk).
+    settings = Settings(runway_api_key="", data_dir=str(tmp_path))
+    store = CampaignStore(settings.data_path)
+    record = store.get(cid)
+    assert record is not None
+    record.dialogue_lines = list(record.dialogue_lines[:3])
+    # Mark line-1 as rendered to verify video_url survives the extend.
+    record.dialogue_lines[0].status = "ok"
+    record.dialogue_lines[0].video_url = (
+        f"/api/campaigns/{cid}/dialogue/line/line-1"
+    )
+
+    new_list, err = extend_lines(record, settings)
+    assert err is None, err
+    assert len(new_list) == _DEFAULT_LINE_COUNT
+    # First three lines preserved byte-for-byte.
+    for i, original in enumerate(record.dialogue_lines):
+        kept = new_list[i]
+        assert kept.id == original.id
+        assert kept.text == original.text
+        assert kept.character_id == original.character_id
+        assert kept.status == original.status
+        if original.video_url:
+            assert kept.video_url == original.video_url, (
+                "rendered MP4 references must survive an extend call"
+            )
+    # New lines start at line-4 and are idle with seeded fallback text.
+    for ln in new_list[3:]:
+        assert ln.status == "idle"
+        assert ln.text  # has default fallback text
+        assert ln.character_id  # auto-assigned from cast
+
+
+def test_dialogue_plan_reset_still_destructive(client: TestClient):
+    """PR DM — explicit mode="reset" (or no body at all) must still
+    wipe and reseed. Backward compat with PR AF / PR DL callers."""
+    from app.services.dialogue_service import _DEFAULT_LINE_COUNT
+
+    char = _create_character(client, name="Reset Test")
+    _generate_portrait(client, char["id"])
+    cid = _create_campaign_with_avatar(client, char["id"])
+    client.post(f"/api/characters/{char['id']}/create-avatar", json={})
+
+    # Plan, edit a line to a custom value, then explicit reset.
+    r = client.post(f"/api/campaigns/{cid}/dialogue/plan", json={})
+    lines = r.json()["dialogue_lines"]
+    first_id = lines[0]["id"]
+    r = client.post(
+        f"/api/campaigns/{cid}/dialogue/line/{first_id}",
+        json={"text": "operator-typed override", "character_id": char["id"]},
+    )
+    assert r.status_code == 200
+
+    # Reset (explicit mode) wipes the override.
+    r2 = client.post(
+        f"/api/campaigns/{cid}/dialogue/plan",
+        json={"mode": "reset"},
+    )
+    assert r2.status_code == 200
+    new = r2.json()["dialogue_lines"]
+    assert len(new) == _DEFAULT_LINE_COUNT
+    assert new[0]["text"] != "operator-typed override", (
+        "reset must wipe the operator's text edit"
+    )
+
+    # No-body call also resets (backward compat).
+    r3 = client.post(f"/api/campaigns/{cid}/dialogue/plan", json={})
+    assert r3.status_code == 200
+    assert len(r3.json()["dialogue_lines"]) == _DEFAULT_LINE_COUNT

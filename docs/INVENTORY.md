@@ -1,8 +1,33 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after **PR DL — Dialogue Scene Default Bumped
-to 6 Lines**. `dialogue_service._DEFAULT_LINE_COUNT` was 3 with
+context-kit refresh after **PR DM — Extend Dialogue Scene Without
+Losing Existing Lines**. PR DL bumped the default to 6 but the
+plan route was still destructive (wipe + reseed), so campaigns
+that had a 3-line scene planned before PR DL couldn't grow without
+losing existing work. PR DM adds an opt-in **extend** mode: new
+`dialogue_service.extend_lines` walks existing lines, preserves
+each byte-for-byte (text, speaker, status, video_url etc.) and
+appends idle lines to reach `_DEFAULT_LINE_COUNT`. Cast for the
+new lines reuses operator's existing character choices first then
+supplements from the ready pool up to 3-member cap; speaker
+rotation continues from where existing lines left off. Idempotent
+when already at default. New `DialoguePlanBody` Pydantic with
+`mode: Literal["reset", "extend"] = "reset"` — no body /
+`mode="reset"` keeps the destructive behaviour for backward
+compat, `mode="extend"` routes to the new helper. Frontend
+`DialogueLane.jsx` adds a hardcoded `DEFAULT_LINE_COUNT = 6` +
+`canExtend` gating + a sibling amber "Add N more lines" button
+that renders next to "Reset scene lines" when `0 < lineCount < 6`.
+Reset button tooltip rewrote to call out destructive semantics.
+`api.js` `planDialogue(campaignId, mode='reset')` extended;
+`CampaignLanes.handlePlanDialogue` threads mode through. Three
+new pytests pin the contract: extend-at-default is no-op, extend-
+from-3 preserves all 3 originals + video_url, reset stays
+destructive. Pytest **44/44**. Mock smoke 3/3. Vite build 544.70
+KB initial / 146.37 KB gzip. Backend route count still **76**.
+Zero Runway calls fired.
+Earlier: PR DL — Dialogue Scene Default Bumped to 6 Lines. `dialogue_service._DEFAULT_LINE_COUNT` was 3 with
 labels `Hook / Beat / Closer` and an A/B/A speaker rotation. PR DL
 bumps to **6** with labels `Hook / Setup / Beat 1 / Beat 2 / Twist
 / Closer` and a cast-of-up-to-3 rotation that cycles

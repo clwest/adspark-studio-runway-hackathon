@@ -209,10 +209,17 @@ export const api = {
   // scene, edit each line's text/character, render each line via
   // avatar_videos, stitch into one MP4. Mirrors the storyboard
   // helper shape.
-  planDialogue: (campaignId) =>
+  // PR DM — optional `mode` param. Default "reset" preserves the
+  // pre-PR-DM behaviour (overwrites existing dialogue_lines).
+  // "extend" tops up to the backend default count without
+  // disturbing existing lines / their rendered MP4s.
+  planDialogue: (campaignId, mode = 'reset') =>
     jsonFetch(
       `/api/campaigns/${encodeURIComponent(campaignId)}/dialogue/plan`,
-      { method: 'POST' },
+      {
+        method: 'POST',
+        body: JSON.stringify({ mode }),
+      },
     ),
   saveDialogueLine: (campaignId, lineId, body = {}) =>
     jsonFetch(

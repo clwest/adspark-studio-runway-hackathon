@@ -146,9 +146,9 @@ export default function CampaignLanes({
     if (!campaignId) throw new Error('campaign id required')
     return propagate(await api.stitchStoryboard(campaignId))
   }
-  const handlePlanDialogue = async (campaignId) => {
+  const handlePlanDialogue = async (campaignId, mode = 'reset') => {
     if (!campaignId) throw new Error('campaign id required')
-    return propagate(await api.planDialogue(campaignId))
+    return propagate(await api.planDialogue(campaignId, mode))
   }
   const handleStitchDialogue = async (campaignId) => {
     if (!campaignId) throw new Error('campaign id required')

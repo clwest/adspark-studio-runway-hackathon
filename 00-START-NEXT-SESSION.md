@@ -1,6 +1,64 @@
 # START NEXT SESSION — AdSpark Studio
 
-**Last touched:** 2026-05-10 (PR DL — Bump Dialogue
+**Last touched:** 2026-05-10 (PR DM — Extend dialogue
+scene without losing existing lines. Operator
+complaint after PR DL shipped: campaigns that had a
+3-line scene planned **before** PR DL bumped the
+default to 6 had no way to grow to 6 without
+destroying the existing 3 lines (the only plan path
+was destructive — wipe + reseed). PR DM closes that
+gap with an opt-in extend mode that's purely
+additive. New `dialogue_service.extend_lines(campaign,
+settings)` walks the existing `dialogue_lines`,
+preserves every entry byte-for-byte (text, speaker,
+status, video_url, cache_filename, task_id, error,
+mock_mode), and appends idle lines with the
+appropriate labels + speakers until the scene
+reaches `_DEFAULT_LINE_COUNT`. Cast for the new
+lines reuses operator's existing character choices
+first (preserves speaker continuity), then
+supplements with the campaign-attached character +
+other ready characters up to the 3-member cap.
+Speaker rotation continues from where the existing
+lines left off so A/B/C stays consistent. Idempotent
+when the scene is already at default — returns
+unchanged. New `DialoguePlanBody` Pydantic with
+`mode: Literal["reset", "extend"] = "reset"` so the
+route accepts both. No body / `mode="reset"` keeps
+the original destructive behaviour (full backward
+compat with PR AF / PR DL callers); `mode="extend"`
+routes to the new service helper. Frontend adds a
+hardcoded `DEFAULT_LINE_COUNT = 6` constant in
+`DialogueLane.jsx` (comment pinning to backend
+const) + `canExtend` gating + a sibling amber "Add N
+more lines" button that renders next to the existing
+"Reset scene lines" button when `0 < lineCount < 6`.
+Button label dynamic: "Add 3 more lines" /
+"Add 2 more lines" / "Add 1 more line". Status row
+gains `Extend: <error>` slot. Reset button title +
+tooltip rewrote to call out the destructive
+semantics ("Destructive — replaces any existing
+lines + their rendered MP4 references"). `api.js`
+`planDialogue(campaignId, mode='reset')` signature
+extended; `CampaignLanes.handlePlanDialogue` threads
+the mode through. Three new pytests:
+`test_dialogue_plan_extend_tops_up_existing`
+verifies extend on a scene already at default is a
+no-op;
+`test_dialogue_plan_extend_preserves_existing_3_line_scene`
+trims a 6-line scene to 3 via direct store access,
+marks line-1 as rendered, calls `extend_lines`,
+asserts all 3 originals preserved byte-for-byte
+including the video_url + the 3 new lines are idle
+with default text;
+`test_dialogue_plan_reset_still_destructive` verifies
+explicit mode="reset" + no-body both wipe operator
+overrides. Pytest **44/44** (41 prior + 3 new PR DM).
+Mock smoke **3/3** in ~31s. Vite build **544.70 KB
+initial / 146.37 KB gzip** (+1.24 KB / +0.39 KB from
+the extend button + state). Drift OK, hygiene clean.
+Backend route count still **76**. No real Runway
+calls fired. Earlier: PR DL — Bump Dialogue
 Scene default from 3 lines to 6. Tight, targeted slice
 following the audit at the end of PR DK: the 3-line
 default lived as a single backend constant
