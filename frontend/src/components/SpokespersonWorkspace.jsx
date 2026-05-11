@@ -18,7 +18,7 @@ const TABS = [
   { id: 'knowledge', label: 'Knowledge' },
   { id: 'campaigns', label: 'Campaigns' },
   { id: 'conversations', label: 'Conversations' },
-  { id: 'outputs', label: 'Outputs' },
+  { id: 'outputs', label: 'Videos' },
 ]
 
 const TEMPLATE_LABELS = {
@@ -727,14 +727,22 @@ export default function SpokespersonWorkspace() {
                   // campaign the lane below is editing.
                   const isActive =
                     !creatingNewCampaign && c.id === selectedCampaignId
-                  const adOutputCount = Array.isArray(c.outputs)
-                    ? c.outputs.filter((o) => o.kind === 'spokesperson_ad').length
+                  // PR DJ — count every primary video render (not just
+                  // spokesperson_ad). Reels are derived and excluded
+                  // so the count reads as "billable renders" rather
+                  // than "every file in the campaign".
+                  const primaryOutputCount = Array.isArray(c.outputs)
+                    ? c.outputs.filter((o) =>
+                        ['spokesperson_ad', 'dialogue_scene', 'cinematic_video'].includes(
+                          o.kind,
+                        ),
+                      ).length
                     : 0
                   const isRendered = Boolean(
                     c.host_video_url ||
                       c.cached_video_url ||
                       c.dialogue_scene_video_url ||
-                      adOutputCount > 0,
+                      primaryOutputCount > 0,
                   )
                   return (
                     <li
@@ -768,12 +776,12 @@ export default function SpokespersonWorkspace() {
                           <span className="text-zinc-500"> · {c.product}</span>
                         ) : null}
                       </span>
-                      {adOutputCount > 0 && (
+                      {primaryOutputCount > 0 && (
                         <span
                           className="font-mono text-[9px] text-emerald-300 shrink-0"
-                          title={`${adOutputCount} saved Spokesperson Ad render${adOutputCount === 1 ? '' : 's'}`}
+                          title={`${primaryOutputCount} saved video render${primaryOutputCount === 1 ? '' : 's'} (Spokesperson Ad / Dialogue Scene / Cinematic — reels not counted)`}
                         >
-                          {adOutputCount}× saved
+                          {primaryOutputCount}× saved
                         </span>
                       )}
                       <span

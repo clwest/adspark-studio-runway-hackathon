@@ -1,8 +1,36 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after **PR DI — Campaign Context One-Time
-Setup**. UX-only slice across all three v2 campaign lanes
+context-kit refresh after **PR DJ — Persistent Creative
+Workspaces**. Three-part slice: (1) dialogue stitch + dialogue-
+scene reels routes now mirror PR CY's append-only pattern —
+generate per-output id, copy canonical file to per-output
+historical filename in `data/finished/`, append `OutputRecord`
+with `kind="dialogue_scene"` / `"dialogue_scene_reels"`. Reels
+record carries `parent_output_id` linking back to the most-recent
+dialogue_scene. New `OutputRecord.cast_names: list[str]` +
+`OutputRecord.line_count: int` (both Optional, default None)
+capture scene metadata; dedup helper
+`_dialogue_metadata_for_campaign` keeps cast in line-appearance
+order. (2) OutputsGallery renders a new `cast: Donny, Riggs, Miles
+· 3 lines` sub-line on each dialogue card (sky-300 mono, new
+testid `output-card-dialogue-meta`). KIND_META already covered
+both dialogue kinds; PR DJ just plumbs through the metadata
+fields. (3) "Outputs" → "Videos" rename in the
+SpokespersonWorkspace tab label + OutputsGallery two `<h2>`s +
+empty-state copy + 2 SpokespersonLane "Outputs tab" prose refs.
+Tab `id` (`outputs`) and all testids unchanged. SpokespersonWorkspace
+campaigns-list `N× saved` chip count widened from spokesperson_ad-
+only to all primary video kinds (spokesperson_ad + dialogue_scene
++ cinematic_video; reels excluded as derived). Three new pytests
+pin the dialogue-output contract end-to-end in mock mode (plan →
+save lines → render each → stitch → assert OutputRecord with cast
++ line count + parent linkage). PART 2 (persistent campaigns
+list) was already shipped by PR DA + PR DI; PR DJ just sharpened
+the count chip. Pytest **39/39**. Vite build 534.93 KB initial /
+144.22 KB gzip. Mock smoke 3/3. Backend route count still **76**.
+Zero Runway calls fired.
+Earlier: PR DI — Campaign Context One-Time Setup. UX-only slice across all three v2 campaign lanes
 (Spokesperson Ad / Cinematic / Dialogue). Step 1 was always an
 editable 4-field brief form that kept inviting re-edits even after
 save — made every campaign feel mutable and the lane feel like a

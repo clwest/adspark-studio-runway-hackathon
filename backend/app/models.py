@@ -157,6 +157,15 @@ class OutputRecord(BaseModel):
     # leave it null.
     variant_id: Optional[str] = None
     variant_title: Optional[str] = None
+    # PR DJ — dialogue-scene linkage. When a Dialogue Scene stitch or
+    # reels render lands as an output, the cast (line speakers) and
+    # line count are captured here so the Videos gallery can surface
+    # "cast: Donny, Riggs, Miles · 3 lines" without re-walking the
+    # campaign's dialogue_lines (which can be re-planned later).
+    # Optional — pre-PR-DJ outputs and non-dialogue kinds leave both
+    # null.
+    cast_names: Optional[list[str]] = None
+    line_count: Optional[int] = None
     created_at: datetime
 
 

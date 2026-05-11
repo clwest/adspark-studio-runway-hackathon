@@ -969,3 +969,181 @@ def test_grounding_document_carries_pr_dg_approved_phrasings():
         f"PR DG approved phrasings under-represented in document. "
         f"Landed: {landed}. Required at least 2 of {approved_pr_dg}."
     )
+
+
+# ---- PR DJ — dialogue outputs append to campaign.outputs[] ----
+#
+# PR CY shipped append-only output history for spokesperson_ad +
+# spokesperson_reels; dialogue stitch + reels were silently
+# overwriting the canonical file with no OutputRecord, so the Videos
+# gallery only ever surfaced one dialogue scene per campaign and
+# operators had no append trail. PR DJ closes that gap by mirroring
+# the PR CY pattern in `post_dialogue_stitch` +
+# `post_dialogue_scene_reels`. These tests pin the contract end-to-end
+# in mock mode (ffmpeg lavfi placeholders, no Runway calls).
+
+
+def _plan_and_render_dialogue(client: TestClient, campaign_id: str, char_id: str):
+    """Helper: plan three dialogue lines, save each with the same
+    character + a unique text, render each, return the resulting
+    Campaign dict.
+
+    Requires the character to have a ready Runway avatar at the
+    LIBRARY level (not just a campaign-level host avatar) — the plan
+    route filters speaker candidates via the CharacterStore. Force
+    the character-level avatar before planning so the route accepts
+    the character as a valid speaker.
+    """
+    r = client.post(f"/api/characters/{char_id}/create-avatar", json={})
+    assert r.status_code == 200, r.text
+    # Plan — backend seeds three idle lines, auto-assigns the
+    # character now that it has a ready avatar.
+    r = client.post(f"/api/campaigns/{campaign_id}/dialogue/plan", json={})
+    assert r.status_code == 200, r.text
+    lines = r.json()["dialogue_lines"]
+    assert len(lines) == 3
+    # Save each line with character + text; resets status to idle.
+    line_texts = ["Hook line text.", "Beat line text.", "Closer line text."]
+    for line, text in zip(lines, line_texts):
+        r = client.post(
+            f"/api/campaigns/{campaign_id}/dialogue/line/{line['id']}",
+            json={"text": text, "character_id": char_id},
+        )
+        assert r.status_code == 200, r.text
+    # Generate each line (mock mode renders ffmpeg-lavfi placeholders).
+    for line in lines:
+        r = client.post(
+            f"/api/campaigns/{campaign_id}/dialogue/generate-line/{line['id']}",
+            json={},
+        )
+        assert r.status_code == 200, r.text
+        # generate-line returns the updated Campaign; the line should
+        # be ok now.
+        body = r.json()
+        gen_line = next(
+            (l for l in body["dialogue_lines"] if l["id"] == line["id"]),
+            None,
+        )
+        assert gen_line is not None
+        assert gen_line["status"] == "ok", (
+            f"expected line {line['id']} to be ok, got {gen_line}"
+        )
+    return r.json()  # latest Campaign
+
+
+def test_dialogue_stitch_appends_output_record(client: TestClient, tmp_path: Path):
+    """Stitching three dialogue lines must append an OutputRecord
+    with kind="dialogue_scene", cast_names, line_count. Re-stitching
+    must append a second record (append-only, no overwrite)."""
+    char = _create_character(client, name="Donny Test")
+    _generate_portrait(client, char["id"])
+    cid = _create_campaign_with_avatar(client, char["id"])
+    _plan_and_render_dialogue(client, cid, char["id"])
+
+    # First stitch
+    r = client.post(f"/api/campaigns/{cid}/dialogue/stitch", json={})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["dialogue_scene_status"] == "ok"
+    assert len(body["outputs"]) == 1
+    out = body["outputs"][0]
+    assert out["kind"] == "dialogue_scene"
+    assert out["video_url"] == f"/api/campaigns/{cid}/output/{out['id']}"
+    assert out["cache_filename"]
+    # Cast metadata captured (all three lines used the same character,
+    # so cast_names contains one unique entry).
+    assert out["cast_names"] == ["Donny Test"]
+    assert out["line_count"] == 3
+    assert out["parent_output_id"] is None
+
+    # File served via /output/{id}
+    s = client.get(f"/api/campaigns/{cid}/output/{out['id']}")
+    assert s.status_code == 200, s.text
+    assert s.headers["content-type"].startswith("video/")
+
+    # Re-stitch — appends a second record, doesn't overwrite the first.
+    r2 = client.post(f"/api/campaigns/{cid}/dialogue/stitch", json={})
+    assert r2.status_code == 200, r2.text
+    body2 = r2.json()
+    assert len(body2["outputs"]) == 2
+    o2 = body2["outputs"][0]  # newest-first
+    assert o2["kind"] == "dialogue_scene"
+    assert o2["id"] != out["id"]
+    # Both historical files exist on disk under finished/.
+    f1 = tmp_path / "finished" / out["cache_filename"]
+    f2 = tmp_path / "finished" / o2["cache_filename"]
+    assert f1.exists() and f1.stat().st_size > 0, f"missing or empty: {f1}"
+    assert f2.exists() and f2.stat().st_size > 0, f"missing or empty: {f2}"
+
+
+def test_dialogue_reels_appends_output_record_with_parent(client: TestClient):
+    """Captioned reel export must append an OutputRecord with
+    kind="dialogue_scene_reels" + parent_output_id pointing at the
+    most-recent dialogue_scene record. Mirrors PR CY's
+    spokesperson_reels → spokesperson_ad linkage shape.
+    """
+    char = _create_character(client, name="Riggs Test")
+    _generate_portrait(client, char["id"])
+    cid = _create_campaign_with_avatar(client, char["id"])
+    _plan_and_render_dialogue(client, cid, char["id"])
+
+    # Stitch first — sets up the source MP4 the reels route needs.
+    r = client.post(f"/api/campaigns/{cid}/dialogue/stitch", json={})
+    assert r.status_code == 200, r.text
+    stitch_out = r.json()["outputs"][0]
+    assert stitch_out["kind"] == "dialogue_scene"
+
+    # Reels export
+    r2 = client.post(f"/api/campaigns/{cid}/dialogue-scene/reels", json={})
+    assert r2.status_code == 200, r2.text
+    body = r2.json()
+    assert body["dialogue_scene_reels_status"] == "ok"
+    assert len(body["outputs"]) == 2  # scene + reels
+    reels_out = body["outputs"][0]  # newest-first
+    assert reels_out["kind"] == "dialogue_scene_reels"
+    assert reels_out["parent_output_id"] == stitch_out["id"]
+    assert reels_out["cast_names"] == ["Riggs Test"]
+    assert reels_out["line_count"] == 3
+
+
+def test_dialogue_metadata_dedup_cast_in_order(client: TestClient):
+    """Cast names dedup in line-appearance order. A Donny→Riggs→Donny
+    pattern surfaces as ["Donny", "Riggs"] (not ["Donny", "Riggs",
+    "Donny"] and not alphabetised)."""
+    donny = _create_character(client, name="Donny Multi")
+    _generate_portrait(client, donny["id"])
+    riggs = _create_character(client, name="Riggs Multi")
+    _generate_portrait(client, riggs["id"])
+    cid = _create_campaign_with_avatar(client, donny["id"])
+
+    # Both characters need a library-level avatar so the plan route
+    # accepts them as speaker candidates.
+    client.post(f"/api/characters/{donny['id']}/create-avatar", json={})
+    client.post(f"/api/characters/{riggs['id']}/create-avatar", json={})
+
+    # Plan three lines, then save with Donny / Riggs / Donny pattern.
+    r = client.post(f"/api/campaigns/{cid}/dialogue/plan", json={})
+    assert r.status_code == 200, r.text
+    lines = r.json()["dialogue_lines"]
+    speakers = [donny["id"], riggs["id"], donny["id"]]
+    for line, speaker_id in zip(lines, speakers):
+        r = client.post(
+            f"/api/campaigns/{cid}/dialogue/line/{line['id']}",
+            json={"text": f"Line for {speaker_id}", "character_id": speaker_id},
+        )
+        assert r.status_code == 200, r.text
+    # Generate each line so stitch can proceed.
+    for line in lines:
+        r = client.post(
+            f"/api/campaigns/{cid}/dialogue/generate-line/{line['id']}",
+            json={},
+        )
+        assert r.status_code == 200, r.text
+
+    r = client.post(f"/api/campaigns/{cid}/dialogue/stitch", json={})
+    assert r.status_code == 200, r.text
+    out = r.json()["outputs"][0]
+    # Donny appears first, then Riggs. Dedup keeps the first
+    # appearance only — the trailing Donny does NOT re-enter.
+    assert out["cast_names"] == ["Donny Multi", "Riggs Multi"]
+    assert out["line_count"] == 3

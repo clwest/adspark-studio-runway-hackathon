@@ -116,6 +116,12 @@ function buildCardsForCampaign(campaign) {
         // PR DC — variant linkage so the card surface groups
         // multiple takes under their producing Ad Variant.
         variantTitle: o.variant_title || null,
+        // PR DJ — dialogue-scene metadata so the gallery surfaces
+        // "cast: Donny, Riggs, Miles · 3 lines" on the card.
+        castNames: Array.isArray(o.cast_names) && o.cast_names.length > 0
+          ? o.cast_names
+          : null,
+        lineCount: Number.isFinite(o.line_count) ? o.line_count : null,
       }
     })
   }
@@ -182,7 +188,7 @@ export default function OutputsGallery({ linkedCampaigns = [] }) {
       >
         <header className="space-y-1">
           <h2 className="text-sm font-semibold text-zinc-100">
-            Outputs
+            Videos
           </h2>
           <p className="text-[11px] text-zinc-400 leading-relaxed max-w-prose mx-auto">
             Cinematic visuals, spokesperson ads, dialogue scenes,
@@ -196,7 +202,7 @@ export default function OutputsGallery({ linkedCampaigns = [] }) {
           data-testid="outputs-empty"
           className="text-[10px] rounded-full bg-pink-500/15 text-pink-200 ring-1 ring-pink-400/30 px-2 py-0.5 font-mono inline-block"
         >
-          No outputs yet. Create a campaign or generate from the
+          No videos yet. Create a campaign or generate from the
           Campaigns tab.
         </p>
       </section>
@@ -210,7 +216,7 @@ export default function OutputsGallery({ linkedCampaigns = [] }) {
       className="space-y-3"
     >
       <header className="rounded-2xl ring-1 ring-zinc-800 bg-zinc-950/40 p-3">
-        <h2 className="text-sm font-semibold text-zinc-100">Outputs</h2>
+        <h2 className="text-sm font-semibold text-zinc-100">Videos</h2>
         <p className="text-[11px] text-zinc-400 leading-snug">
           {total} render{total === 1 ? '' : 's'} across{' '}
           {linkedCampaigns.length} linked campaign
@@ -293,6 +299,29 @@ function OutputCard({ card }) {
             title={`Ad Variant: ${card.variantTitle}`}
           >
             {card.variantTitle}
+          </p>
+        )}
+        {(card.castNames || card.lineCount) && (
+          <p
+            data-testid="output-card-dialogue-meta"
+            className="text-[10px] text-sky-300 font-mono leading-snug"
+            title={
+              card.castNames
+                ? `Cast: ${card.castNames.join(', ')}`
+                : ''
+            }
+          >
+            {card.castNames && (
+              <>
+                cast: <span className="text-sky-200">{card.castNames.join(', ')}</span>
+              </>
+            )}
+            {card.castNames && card.lineCount != null && ' · '}
+            {card.lineCount != null && (
+              <span>
+                {card.lineCount} line{card.lineCount === 1 ? '' : 's'}
+              </span>
+            )}
           </p>
         )}
         {scriptPreview && (

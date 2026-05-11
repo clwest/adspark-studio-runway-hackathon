@@ -1319,6 +1319,26 @@ def post_dialogue_stitch(
             dialogue_scene_status="ok",
             dialogue_scene_error=None,
         )
+        # PR DJ — append an OutputRecord so the Videos gallery surfaces
+        # this dialogue scene alongside spokesperson_ad outputs. Mirrors
+        # the PR CY pattern: copy the canonical stitched MP4 to a per-
+        # output historical filename so re-stitching never overwrites
+        # the prior take from the gallery's perspective.
+        canonical_path = finisher.dialogue_scene_path(campaign_id)
+        output_id = _new_output_id()
+        cache_filename = _persist_output_copy(canonical_path, output_id)
+        if cache_filename:
+            cast_names, line_count = _dialogue_metadata_for_campaign(record)
+            _append_output_record(
+                store,
+                campaign_id,
+                output_id=output_id,
+                kind="dialogue_scene",
+                cache_filename=cache_filename,
+                cast_names=cast_names,
+                line_count=line_count,
+            )
+            updated = store.get(campaign_id) or updated
     else:
         logger.warning(
             "dialogue stitch %s campaign=%s err=%s",
@@ -1879,6 +1899,10 @@ def _append_output_record(
     parent_output_id: Optional[str] = None,
     variant_id: Optional[str] = None,
     variant_title: Optional[str] = None,
+    # PR DJ — dialogue-scene metadata; populated only for
+    # `dialogue_scene` / `dialogue_scene_reels` kinds.
+    cast_names: Optional[list[str]] = None,
+    line_count: Optional[int] = None,
 ) -> None:
     entry = {
         "id": output_id,
@@ -1892,6 +1916,9 @@ def _append_output_record(
         # PR DC — variant linkage for Spokesperson Ad outputs.
         "variant_id": variant_id,
         "variant_title": variant_title,
+        # PR DJ — dialogue-scene linkage.
+        "cast_names": cast_names,
+        "line_count": line_count,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     try:
@@ -1901,6 +1928,25 @@ def _append_output_record(
             "output history append failed campaign=%s kind=%s: %s",
             campaign_id, kind, exc,
         )
+
+
+def _dialogue_metadata_for_campaign(
+    record: "Campaign",
+) -> tuple[list[str], int]:
+    """PR DJ — derive cast names + line count from the campaign's
+    current dialogue_lines for OutputRecord enrichment. Deduplicates
+    cast in line order so the Videos gallery reads "Donny, Riggs,
+    Miles" without repeats from a Donny→Riggs→Donny pattern.
+    """
+    lines = list(record.dialogue_lines or [])
+    seen: set[str] = set()
+    cast_names: list[str] = []
+    for ln in lines:
+        name = (ln.character_name or "").strip()
+        if name and name not in seen:
+            seen.add(name)
+            cast_names.append(name)
+    return cast_names, len(lines)
 
 
 @router.get("/{campaign_id}/output/{output_id}")
@@ -2386,6 +2432,35 @@ def post_dialogue_scene_reels(
             status="ok",
             error=None,
         )
+        # PR DJ — append an OutputRecord (kind=dialogue_scene_reels)
+        # so the Videos gallery surfaces this reel as a distinct
+        # card. Links back to the most-recent dialogue_scene output
+        # via parent_output_id so the gallery can render "derived
+        # from Dialogue Scene". Mirrors the PR CY pattern used for
+        # spokesperson_reels.
+        output_id = _new_output_id()
+        cache_filename = _persist_output_copy(target, output_id)
+        if cache_filename:
+            parent = next(
+                (
+                    o.id
+                    for o in (record.outputs or [])
+                    if o.kind == "dialogue_scene"
+                ),
+                None,
+            )
+            cast_names, line_count = _dialogue_metadata_for_campaign(record)
+            _append_output_record(
+                store,
+                campaign_id,
+                output_id=output_id,
+                kind="dialogue_scene_reels",
+                cache_filename=cache_filename,
+                parent_output_id=parent,
+                cast_names=cast_names,
+                line_count=line_count,
+            )
+            updated = store.get(campaign_id) or updated
     else:
         logger.warning(
             "dialogue scene reels %s campaign=%s err=%s",

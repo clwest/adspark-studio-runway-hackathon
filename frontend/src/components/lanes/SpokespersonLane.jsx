@@ -408,7 +408,7 @@ export default function SpokespersonLane({
                 className="text-[9px] text-rose-300 leading-snug"
               >
                 ⚠️ Re-rendering creates a new billable video. Prior
-                renders are preserved in the Outputs tab.
+                renders are preserved in the Videos tab.
               </p>
             )}
             {/* PR BN — Reels button is now wired. Enabled only
@@ -583,7 +583,7 @@ export default function SpokespersonLane({
                   ))}
                   {adOutputs.length > 5 && (
                     <li className="text-[9px] text-zinc-500 font-mono px-2">
-                      + {adOutputs.length - 5} more — see Outputs tab for the full history
+                      + {adOutputs.length - 5} more — see Videos tab for the full history
                     </li>
                   )}
                 </ul>

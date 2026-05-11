@@ -1,6 +1,75 @@
 # START NEXT SESSION — AdSpark Studio
 
-**Last touched:** 2026-05-10 (PR DI — Make Campaign
+**Last touched:** 2026-05-10 (PR DJ — Convert
+Campaigns Into Persistent Creative Workspaces. Three-
+part slice: (1) Dialogue Outputs Persistence — PR CY
+shipped append-only OutputRecord history for
+`spokesperson_ad` + `spokesperson_reels` but dialogue
+stitch + reels were silently overwriting their
+canonical MP4s with no OutputRecord append, so the
+Videos gallery only ever surfaced one dialogue scene
+per campaign and operators had no append trail. PR DJ
+mirrors PR CY in `post_dialogue_stitch` (campaigns.py:
+1311 success branch) and `post_dialogue_scene_reels`
+(campaigns.py:2382 success branch): generate
+`output_id`, `_persist_output_copy` of the canonical
+file to a per-output historical filename, append an
+`OutputRecord` with `kind="dialogue_scene"` or
+`"dialogue_scene_reels"`. Reels records carry
+`parent_output_id` pointing at the most-recent
+`dialogue_scene` record so the gallery can render
+"derived from Dialogue Scene". New optional
+`OutputRecord.cast_names: list[str]` +
+`OutputRecord.line_count: int` fields capture scene
+metadata (cast in line-appearance order, deduped via
+new `_dialogue_metadata_for_campaign` helper at
+campaigns.py:1907). `_append_output_record` extended
+to pass them through. Backward-compat: both fields
+default to `None`, so pre-PR-DJ records and non-
+dialogue kinds stay clean. `get_campaign_output`
+already supported both kinds (cache_dir = finished/);
+no new file-server changes. Three new pytests
+(test_dialogue_stitch_appends_output_record,
+test_dialogue_reels_appends_output_record_with_parent,
+test_dialogue_metadata_dedup_cast_in_order) cover the
+contract end-to-end in mock mode — plan → save 3
+lines → render each → stitch → assert OutputRecord
+with kind + cast + count + parent linkage. Pytest
+**39/39** (36 prior + 3 new PR DJ). (2) OutputsGallery
+now surfaces dialogue scene cast + line count — new
+sub-line on each card reads `cast: Donny, Riggs, Miles
+· 3 lines` (sky-300 mono). PR DA's KIND_META already
+covered the dialogue kinds; PR DJ just plumbs through
+the new metadata. New testid
+`output-card-dialogue-meta`. (3) Outputs → Videos
+rename — `SpokespersonWorkspace.jsx:21` tab label
+flipped from "Outputs" to "Videos"; OutputsGallery
+two `<h2>` headers + empty-state copy + the
+SpokespersonLane "Outputs tab" copy refs (2 places)
+all renamed. Tab `id` and all testids preserved
+(`outputs-gallery`, `outputs-empty`,
+`spokesperson-workspace-tab-outputs`, etc.) so no
+existing test breaks. The SpokespersonWorkspace
+campaigns-list `N× saved` chip now counts every
+*primary* video render (`spokesperson_ad +
+dialogue_scene + cinematic_video`, reels excluded as
+derived) and the tooltip flips from "N saved
+Spokesperson Ad render" to "N saved video render(s)
+(Spokesperson Ad / Dialogue Scene / Cinematic — reels
+not counted)". (4) PART 2 audit: the persistent
+campaigns-list UX requested by the brief was already
+shipped by PR DA — `spokesperson-workspace-campaigns-
+list` ul with click-to-select rows, active pink ring,
+N× saved chip, rendered/draft pill, edit → affordance,
+Enter/Space keyboard support, sorted newest-first.
+Plus PR DI's three-state Step 1 already collapses the
+campaign-setup form into a Summary card. So PART 2 is
+de facto already in place; PR DJ just sharpened the
+count chip accuracy. Vite build **534.93 KB initial /
+144.22 KB gzip** (+0.70 KB / +0.19 KB vs PR DI). Mock
+smoke **3/3** in ~60s. Drift OK, hygiene clean.
+Backend route count still **76**. No real Runway calls
+fired. Earlier: PR DI — Make Campaign
 Context One-Time Setup, Then Work From Scripts/Scenes.
 UX slice across all three v2 campaign lanes
 (Spokesperson Ad / Cinematic / Dialogue). Step 1 was
