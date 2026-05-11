@@ -135,6 +135,12 @@ OutputKind = Literal[
     # per Runway's `speech.text` cap), surfaced as ONE OutputRecord
     # so the Videos gallery shows one card per long-form ad.
     "long_spokesperson_ad",
+    # PR EF — DaVinci Resolve template-driven render. Avatar MP4
+    # is fed into a pre-built Resolve project template (color
+    # grade + transitions + Fusion titles + music bed), output is
+    # the polished final cut. Local-only feature; requires Resolve
+    # Studio running on the same machine.
+    "spokesperson_ad_resolve",
 ]
 
 

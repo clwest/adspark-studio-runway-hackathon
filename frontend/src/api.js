@@ -196,6 +196,17 @@ export const api = {
       `/api/campaigns/${encodeURIComponent(campaignId)}/spokesperson-ad`,
       { method: 'POST', body: JSON.stringify(body) },
     ),
+  // PR EF — DaVinci Resolve template-driven polish. Takes the
+  // campaign's existing Spokesperson Ad MP4 and routes it through
+  // the operator's Resolve template (color grade + transitions +
+  // optional Fusion titles), returning a new OutputRecord of kind
+  // `spokesperson_ad_resolve`. Local-only — 503 when Resolve isn't
+  // running on the same machine as the backend.
+  renderViaResolve: (campaignId) =>
+    jsonFetch(
+      `/api/campaigns/${encodeURIComponent(campaignId)}/resolve-render`,
+      { method: 'POST', body: JSON.stringify({}) },
+    ),
   // PR AC — editable storyboard shot prompt. Persists the user-edited
   // prompt + resets that shot's status so the next Generate Shot call
   // uses the new text. Invalidates the stitched / voiced storyboard

@@ -4,6 +4,60 @@ import { formatHistoryTimestamp } from '../../uiHelpers.js'
 import Step1CampaignPanel from './Step1CampaignPanel.jsx'
 
 /**
+ * PR EF — "Polish in DaVinci Resolve" button. Tracks its own busy
+ * state so the operator can fire it without seeing the Reels button
+ * become permanently labelled "Rendering…". When clicked it calls
+ * the parent's onRenderViaResolve handler (which wraps the API call
+ * in withRenderToast). Gated by sourceReady (a cached Spokesperson
+ * Ad must exist) — backend additionally returns 503 when Resolve
+ * isn't running, which the toast surfaces as a friendly error.
+ */
+function ResolveRenderButton({ disabled, onClick, sourceReady }) {
+  const [busy, setBusy] = useState(false)
+  const handleClick = async () => {
+    if (busy || disabled) return
+    setBusy(true)
+    try {
+      await onClick()
+    } finally {
+      setBusy(false)
+    }
+  }
+  const label = busy
+    ? 'Rendering in DaVinci…'
+    : '🎬 Polish in DaVinci Resolve'
+  const chip = busy
+    ? 'Resolve render queue'
+    : !sourceReady
+    ? 'render Spokesperson Ad first'
+    : 'local · color grade + template'
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      disabled={busy || disabled}
+      data-testid="spokesperson-lane-resolve"
+      data-render-target="resolve"
+      data-busy={busy ? 'true' : 'false'}
+      title={
+        disabled
+          ? 'Render a Spokesperson Ad first — Resolve polishes that cached MP4.'
+          : 'POST /api/campaigns/{id}/resolve-render — uses your locally-running Resolve Studio + the character-os-template-v1 timeline. Backend returns 503 if Resolve isn\u2019t reachable.'
+      }
+      className={
+        'w-full mt-1 flex items-center justify-between gap-2 text-[11px] rounded px-2 py-1 font-mono transition-colors ' +
+        (busy || disabled
+          ? 'ring-1 ring-zinc-700 bg-zinc-800/40 text-zinc-300 cursor-not-allowed disabled:opacity-80'
+          : 'ring-1 ring-amber-400/40 bg-amber-500/20 hover:bg-amber-500/35 text-amber-100')
+      }
+    >
+      <span className="truncate">{label}</span>
+      <span className="text-[9px] text-zinc-200/70">{chip}</span>
+    </button>
+  )
+}
+
+/**
  * PR BI — Spokesperson Ad lane scaffold (gated v2).
  *
  * Mounted by SpokespersonStudio when
@@ -38,6 +92,12 @@ export default function SpokespersonLane({
   // warning copy on the button.
   onGenerateSpokesperson = null,
   onGenerateLongSpokesperson = null,
+  // PR EF — DaVinci Resolve template polish. Takes the campaign's
+  // existing Spokesperson Ad MP4 and routes it through the operator's
+  // hand-built Resolve template. Gated by: a spokesperson_ad output
+  // must exist + Resolve must be running locally (backend gate
+  // returns 503 if not).
+  onRenderViaResolve = null,
   // PR BQ — Inline brief editor save handler. POSTs to the new
   // /brief route; no Runway calls. Step 1 mounts <LaneBriefEditor>
   // when the focused campaign exists.
@@ -685,6 +745,28 @@ export default function SpokespersonLane({
                 {reelsChip}
               </span>
             </button>
+            {/* PR EF — DaVinci Resolve polish. Takes the cached
+                Spokesperson Ad MP4, drops it into the operator's
+                Resolve template (project: "Runway Hackathon",
+                timeline: "character-os-template-v1"), and returns
+                the polished cut. Local-only — backend returns 503
+                when Resolve isn't running on the same machine, so
+                a deployed instance silently surfaces the disabled
+                state. Same gating as Reels (needs a cached source). */}
+            {onRenderViaResolve && (
+              <ResolveRenderButton
+                disabled={!reelsSourceReady || reelsBusy}
+                onClick={async () => {
+                  if (!focused?.id) return
+                  try {
+                    await onRenderViaResolve(focused.id)
+                  } catch {
+                    /* withRenderToast surfaces error UI */
+                  }
+                }}
+                sourceReady={reelsSourceReady}
+              />
+            )}
           </div>
           {/* PR BP — Horizontal status row. Renders one of:
               - rose error from the click handler

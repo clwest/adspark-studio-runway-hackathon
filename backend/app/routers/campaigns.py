@@ -2224,6 +2224,130 @@ def post_spokesperson_ad(
     )
 
 
+# ---- PR EF — DaVinci Resolve template-driven render ----------------
+#
+# Takes the campaign's existing Spokesperson Ad MP4 (output of the
+# host video pipeline) and feeds it into the operator's hand-built
+# Resolve template — color grade, transitions, intro/outro titles,
+# music bed — producing a polished final cut. Local-only feature
+# (Resolve API requires the app running on the same machine);
+# returns 503 when Resolve isn't reachable.
+
+@router.post("/{campaign_id}/resolve-render", response_model=Campaign)
+def post_resolve_render(
+    campaign_id: str,
+    settings: Settings = Depends(get_settings),
+    store: CampaignStore = Depends(_store),
+) -> Campaign:
+    """PR EF — drop the latest Spokesperson Ad render into the
+    operator's Resolve template, swap the placeholder clip, render
+    via the ``H.264 Master`` preset, append the polished output to
+    the campaign's history.
+
+    Gates:
+      404 — campaign not found
+      409 — no Spokesperson Ad MP4 to feed in (render one first)
+      503 — Resolve Studio not running on this machine
+      502 — Resolve accepted the work but the render failed
+    """
+    from ..services import resolve_client as _resolve
+
+    record = store.get(campaign_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="campaign not found")
+
+    host_path = settings.data_path / "host" / f"{campaign_id}.mp4"
+    if not host_path.exists():
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "No Spokesperson Ad MP4 found for this campaign. "
+                "Render one first via the Spokesperson lane, then "
+                "click 'Polish in Resolve'."
+            ),
+        )
+
+    if not _resolve.is_available(settings):
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "DaVinci Resolve Studio isn't reachable. Make sure "
+                "the app is running locally and "
+                "Preferences → System → General → External scripting "
+                "is set to 'Local'."
+            ),
+        )
+
+    output_id = _new_output_id()
+    output_name = f"{campaign_id}-resolve-{output_id}"
+    output_dir = settings.data_path / "finished"
+
+    # Build title-replacement map from campaign fields so any Fusion
+    # titles the operator wired (with text nodes named 'Template',
+    # 'Text', 'Title', etc.) get auto-filled. Empty dict means no
+    # titles to swap — render still succeeds; titles just keep
+    # their template defaults.
+    title_replacements: dict[str, str] = {}
+    if record.product:
+        title_replacements["PRODUCT_NAME_INTRO"] = record.product[:80]
+    if record.selected_concept and record.selected_concept.cta:
+        cta_text = record.selected_concept.cta.strip()
+        if cta_text:
+            title_replacements["CTA_TEXT_OUTRO"] = cta_text[:80]
+
+    logger.info(
+        "resolve-render campaign=%s host_path=%s output=%s/%s "
+        "titles=%s",
+        campaign_id, host_path, output_dir, output_name,
+        list(title_replacements.keys()),
+    )
+
+    result = _resolve.render_via_template(
+        project_name=_resolve.RESOLVE_PROJECT_NAME,
+        timeline_name=_resolve.RESOLVE_TIMELINE_NAME,
+        placeholder_clip_name=_resolve.RESOLVE_PLACEHOLDER_CLIP,
+        avatar_mp4=host_path,
+        title_replacements=title_replacements,
+        preset_name=_resolve.RESOLVE_RENDER_PRESET,
+        output_dir=output_dir,
+        output_name=output_name,
+    )
+
+    if result.status == "unavailable":
+        raise HTTPException(
+            status_code=503,
+            detail=result.error or "Resolve unavailable",
+        )
+    if result.status != "ok" or not result.output_path:
+        raise HTTPException(
+            status_code=502,
+            detail=result.error or "Resolve render failed",
+        )
+
+    # Append the output. cache_filename is relative to data_path so
+    # the GET /output/{id} route can resolve it consistently with
+    # other render kinds.
+    cache_filename = str(
+        result.output_path.relative_to(settings.data_path)
+    )
+    _append_output_record(
+        store, campaign_id,
+        output_id=output_id,
+        kind="spokesperson_ad_resolve",
+        cache_filename=cache_filename,
+        task_id=result.job_id,
+        mock_mode=False,
+    )
+
+    updated = store.get(campaign_id) or record
+    logger.info(
+        "resolve-render ok campaign=%s output=%s elapsed=%.1fs",
+        campaign_id, result.output_path.name,
+        result.elapsed_seconds or 0.0,
+    )
+    return updated
+
+
 # ---- PR DO — Long Spokesperson Ad (multi-chunk stitched) ---------
 #
 # Operator authors up to ~1500 chars of script. Runway's `avatar_videos`

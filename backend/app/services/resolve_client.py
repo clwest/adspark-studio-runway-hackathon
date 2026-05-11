@@ -64,6 +64,19 @@ _DEFAULT_RESOLVE_SCRIPT_LIB = (
 )
 
 
+# ---- template config (PR EF, verified by probe-resolve-template) --
+#
+# These match the template Chris built in his Resolve install
+# (Runway Hackathon project / character-os-template-v1 timeline /
+# test_this_file.mp4 placeholder). If the operator restructures
+# their template, change these constants — they're intentionally
+# centralised here rather than scattered through the router.
+RESOLVE_PROJECT_NAME = "Runway Hackathon"
+RESOLVE_TIMELINE_NAME = "character-os-template-v1"
+RESOLVE_PLACEHOLDER_CLIP = "test_this_file.mp4"
+RESOLVE_RENDER_PRESET = "H.264 Master"
+
+
 def _configure_env() -> bool:
     """Idempotent env-setup so we can `import DaVinciResolveScript`.
     Returns True if the modules path exists on disk."""

@@ -189,6 +189,20 @@ export default function CampaignLanes({
       async () => propagate(await api.generateSpokespersonAd(campaignId, body)),
     )
   }
+  // PR EF — DaVinci Resolve polish. Routes the campaign's existing
+  // Spokesperson Ad MP4 through the operator's hand-built Resolve
+  // template (color grade + transitions + Fusion titles + music
+  // bed). Local-only — 503 surfaces as an "is Resolve running?"
+  // error in the toast. Render time is bounded by Resolve's render
+  // queue speed (~30-90s for a short ad on a modern Mac).
+  const handleRenderViaResolve = async (campaignId) => {
+    if (!campaignId) throw new Error('campaign id required')
+    return withRenderToast(
+      '🎬 Resolve polish rendered — see Videos tab.',
+      'Resolve render failed:',
+      async () => propagate(await api.renderViaResolve(campaignId)),
+    )
+  }
   // PR DO — Long Spokesperson Ad. Backend chunks the script,
   // renders each chunk via avatar_videos, and stitches into one
   // MP4. One OutputRecord (kind=long_spokesperson_ad) appended.
@@ -498,6 +512,7 @@ export default function CampaignLanes({
           onBuildReels={handleBuildSpokespersonReels}
           onGenerateSpokesperson={handleGenerateSpokespersonAd}
           onGenerateLongSpokesperson={handleGenerateLongSpokespersonAd}
+          onRenderViaResolve={handleRenderViaResolve}
           onUpdateBrief={handleUpdateBrief}
           onCreateCampaign={handleCreateCampaign}
           onSaveScript={handleSaveScript}
