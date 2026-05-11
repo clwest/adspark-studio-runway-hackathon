@@ -229,6 +229,17 @@ export const api = {
         }),
       },
     ),
+  attachCharacterMemory: (characterId, { campaignId, documentId }) =>
+    jsonFetch(
+      `/api/characters/${encodeURIComponent(characterId)}/memory/attach`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          campaign_id: campaignId,
+          document_id: documentId,
+        }),
+      },
+    ),
   // PR EJ — LLM-driven ad script auto-write. Reads the campaign
   // brief server-side + asks the configured LLM (Ollama or OpenAI
   // per backend settings) to spit out a spoken script. `mode` is

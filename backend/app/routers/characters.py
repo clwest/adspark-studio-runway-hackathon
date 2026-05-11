@@ -1174,6 +1174,87 @@ def delete_character_memory_entry(
     return {"deleted": deleted, "entry_id": entry_id}
 
 
+class MemoryAttachBody(BaseModel):
+    """Body for `POST /memory/attach`. Operator picks an existing
+    memory-published document_id + a campaign owned by this
+    character; the route updates the campaign's
+    `runway_document_id` so the next realtime session attaches the
+    memory document as RAG.
+
+    Lives on the characters router (next to the other memory routes)
+    for cohesion, even though the mutation lands on a Campaign row.
+    """
+
+    campaign_id: str = Field(..., min_length=8, max_length=64)
+    document_id: str = Field(..., min_length=1, max_length=200)
+
+
+class MemoryAttachResponse(BaseModel):
+    character_id: str
+    campaign_id: str
+    document_id: str
+    attached: bool
+    campaign_business: Optional[str] = None
+
+
+@router.post(
+    "/{character_id}/memory/attach", response_model=MemoryAttachResponse,
+)
+def post_character_memory_attach(
+    character_id: str,
+    body: MemoryAttachBody,
+    settings: Settings = Depends(get_settings),
+    store: CharacterStore = Depends(_store),
+) -> MemoryAttachResponse:
+    """PR EM-d — attach a memory-published document to one of this
+    character's campaigns. Sets `Campaign.runway_document_id` so the
+    next realtime session attaches the memory as RAG via
+    `documentIds`.
+
+    Validates:
+      - character exists
+      - campaign exists AND is bound to this character (no cross-
+        character contamination)
+
+    Idempotent — re-attaching the same document_id is a no-op write.
+    """
+    if not store.get(character_id):
+        raise HTTPException(status_code=404, detail="character not found")
+
+    from ..services.storage import CampaignStore
+    cs = CampaignStore(settings.data_path)
+    camp = cs.get(body.campaign_id)
+    if not camp:
+        raise HTTPException(status_code=404, detail="campaign not found")
+    if camp.character_id != character_id:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                f"campaign {body.campaign_id!r} is not bound to "
+                f"character {character_id!r}; attach refused"
+            ),
+        )
+
+    updated = cs.update_realtime_document_fields(
+        body.campaign_id,
+        runway_document_id=body.document_id,
+        runway_document_status="ready",
+        runway_document_error=None,
+        runway_document_mock_mode=False,
+    )
+    logger.info(
+        "memory document attached character=%s campaign=%s doc_id=%s",
+        character_id, body.campaign_id, body.document_id,
+    )
+    return MemoryAttachResponse(
+        character_id=character_id,
+        campaign_id=body.campaign_id,
+        document_id=body.document_id,
+        attached=bool(updated),
+        campaign_business=(updated.business if updated else camp.business),
+    )
+
+
 @router.post(
     "/{character_id}/memory/compose", response_model=MemoryComposeResponse,
 )

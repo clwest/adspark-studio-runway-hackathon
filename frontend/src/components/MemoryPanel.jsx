@@ -51,6 +51,12 @@ export default function MemoryPanel({ character }) {
   const [publishBusy, setPublishBusy] = useState(false)
   const [publishResult, setPublishResult] = useState(null)
 
+  // PR EM-d — attach published memory document to a campaign
+  const [linkedCampaigns, setLinkedCampaigns] = useState([])
+  const [attachTarget, setAttachTarget] = useState('')
+  const [attachBusy, setAttachBusy] = useState(false)
+  const [attachResult, setAttachResult] = useState(null)
+
   const characterId = character?.id
 
   const refresh = async () => {
@@ -74,6 +80,37 @@ export default function MemoryPanel({ character }) {
     refresh()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [characterId, filterSource])
+
+  // Fetch linked campaigns once on mount so the attach dropdown can
+  // populate. Same shape as CampaignGallery — filter campaigns to
+  // the ones bound to this character so we don't accidentally
+  // attach to a different spokesperson's record.
+  useEffect(() => {
+    if (!characterId) {
+      setLinkedCampaigns([])
+      return
+    }
+    let cancelled = false
+    api
+      .listCampaigns()
+      .then((resp) => {
+        if (cancelled) return
+        const linked = (resp.campaigns || []).filter(
+          (c) => c.character_id === characterId,
+        )
+        setLinkedCampaigns(linked)
+        if (linked.length > 0 && !attachTarget) {
+          setAttachTarget(linked[0].id)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setLinkedCampaigns([])
+      })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [characterId])
 
   const handleIngest = async () => {
     if (!characterId || ingestBusy) return
@@ -120,6 +157,26 @@ export default function MemoryPanel({ character }) {
       setErrMsg(`Compose failed: ${e?.message || e}`)
     } finally {
       setComposeBusy(false)
+    }
+  }
+
+  const handleAttach = async () => {
+    if (!characterId || attachBusy || !attachTarget || !publishResult?.document_id) {
+      return
+    }
+    setAttachBusy(true)
+    setAttachResult(null)
+    setErrMsg('')
+    try {
+      const result = await api.attachCharacterMemory(characterId, {
+        campaignId: attachTarget,
+        documentId: publishResult.document_id,
+      })
+      setAttachResult(result)
+    } catch (e) {
+      setErrMsg(`Attach failed: ${e?.message || e}`)
+    } finally {
+      setAttachBusy(false)
     }
   }
 
@@ -311,6 +368,63 @@ export default function MemoryPanel({ character }) {
                 ? `✓ Published — document_id: ${publishResult.document_id}`
                 : `⚠️ Publish issue: ${publishResult.error || 'unknown'}`}
             </p>
+          )}
+
+          {/* PR EM-d — Attach the freshly-published document to one of
+              the character's linked campaigns. Sets the campaign's
+              runway_document_id so the next realtime session attaches
+              the memory as RAG. Only renders after a successful
+              publish (document_id present). */}
+          {publishResult?.document_id && linkedCampaigns.length > 0 && (
+            <div
+              data-testid="memory-attach"
+              className="rounded-md ring-1 ring-violet-400/30 bg-violet-500/[0.05] p-2 space-y-1.5"
+            >
+              <p className="text-[10px] text-zinc-200 font-medium leading-snug">
+                Attach memory to a campaign?
+              </p>
+              <p className="text-[10px] text-zinc-400 leading-snug">
+                The next realtime session on the selected campaign will
+                attach this memory document as RAG, so the avatar can
+                recall prior conversations.
+              </p>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <select
+                  value={attachTarget}
+                  onChange={(e) => setAttachTarget(e.target.value)}
+                  disabled={attachBusy}
+                  data-testid="memory-attach-target"
+                  className="text-[10px] rounded bg-zinc-950 ring-1 ring-zinc-800 px-1.5 py-1 font-mono disabled:opacity-60"
+                >
+                  {linkedCampaigns.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {(c.business || '(untitled)').slice(0, 36)}
+                      {c.product ? ` · ${c.product.slice(0, 30)}` : ''}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={handleAttach}
+                  disabled={attachBusy || !attachTarget}
+                  data-testid="memory-attach-confirm"
+                  className="text-[10px] rounded-md px-2 py-1 font-mono bg-violet-500/40 hover:bg-violet-500/60 text-violet-100 ring-1 ring-violet-400/50 disabled:opacity-60"
+                  title="POST /api/characters/{id}/memory/attach — sets the campaign's runway_document_id"
+                >
+                  {attachBusy ? 'Attaching…' : '📎 Attach'}
+                </button>
+              </div>
+              {attachResult && (
+                <p
+                  data-testid="memory-attach-result"
+                  className="text-[10px] text-emerald-300 font-mono leading-snug"
+                >
+                  {attachResult.attached
+                    ? `✓ Attached to "${attachResult.campaign_business || attachResult.campaign_id}". Next realtime session on that campaign uses this memory.`
+                    : `⚠️ Attach didn\u2019t take. Try again or check the backend log.`}
+                </p>
+              )}
+            </div>
           )}
         </div>
       )}
