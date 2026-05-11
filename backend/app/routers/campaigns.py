@@ -1804,6 +1804,87 @@ def post_ad_variant(
     return updated
 
 
+# ---- PR EJ — LLM-driven ad script auto-write ----------------------
+#
+# Reads the campaign brief (business / product / audience / tone) and
+# asks the configured LLM (Ollama or OpenAI per settings.llm_provider)
+# to spit out a single spoken ad script. Two modes:
+#   - mode=short  → 200-260 chars, fits one avatar_videos call
+#   - mode=long   → 1000-1400 chars, fed into the long_ad chunker
+#
+# Returns the draft script + LLM metadata (provider / model /
+# mock_mode). The route DOES NOT persist — the frontend chooses
+# whether to save it onto a variant (short → variant.script, long →
+# variant.long_script). That keeps re-roll cheap: hit the route,
+# see what came out, decide whether to commit.
+
+class AutoWriteScriptBody(BaseModel):
+    """PR EJ — body for `POST /api/campaigns/{id}/auto-write-script`.
+
+    `mode` defaults to "short". `spin` is an optional angle hint the
+    operator can pass to steer re-rolls ("more sceptical", "punchier
+    opening", "lead with a stat") without retyping the whole brief.
+    """
+
+    mode: Literal["short", "long"] = "short"
+    spin: Optional[str] = Field(default=None, max_length=200)
+
+
+class AutoWriteScriptResponse(BaseModel):
+    script: str
+    provider: str
+    model: str
+    mode: Literal["short", "long"]
+    mock_mode: bool
+
+
+@router.post(
+    "/{campaign_id}/auto-write-script", response_model=AutoWriteScriptResponse,
+)
+def post_auto_write_script(
+    campaign_id: str,
+    body: Optional[AutoWriteScriptBody] = None,
+    settings: Settings = Depends(get_settings),
+    store: CampaignStore = Depends(_store),
+) -> AutoWriteScriptResponse:
+    """PR EJ — generate a spoken ad script from the campaign brief.
+
+    The frontend persists the chosen script via the existing
+    `POST /api/campaigns/{id}/ad-variant` route — this endpoint is
+    pure read (no mutation), so re-rolls don't pollute history.
+    """
+    from ..services.concept_service import generate_ad_script
+
+    record = store.get(campaign_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="campaign not found")
+
+    payload = body or AutoWriteScriptBody()
+    result = generate_ad_script(
+        business=record.business or "",
+        product=record.product or "",
+        audience=record.audience or "",
+        tone=record.tone or "",
+        settings=settings,
+        mode=payload.mode,
+        spin=payload.spin,
+    )
+    logger.info(
+        "auto-write-script campaign=%s mode=%s provider=%s model=%s "
+        "mock_mode=%s chars=%d",
+        campaign_id, payload.mode, result.get("provider"),
+        result.get("model"), result.get("mock_mode"),
+        len(result.get("script") or ""),
+    )
+    return AutoWriteScriptResponse(
+        script=result["script"],
+        provider=result["provider"],
+        model=result["model"],
+        mode=result["mode"],
+        mock_mode=result["mock_mode"],
+    )
+
+
 @router.post("/{campaign_id}/avatar", response_model=Campaign)
 def post_create_avatar(
     campaign_id: str,

@@ -191,6 +191,21 @@ export const api = {
   // as presentCampaign / host-video; the alias exists so the API
   // vocabulary matches the user-facing "talking spokesperson ad"
   // wording. No new files are written.
+  // PR EJ — LLM-driven ad script auto-write. Reads the campaign
+  // brief server-side + asks the configured LLM (Ollama or OpenAI
+  // per backend settings) to spit out a spoken script. `mode` is
+  // 'short' (200-260 chars, fits one avatar_videos line) or 'long'
+  // (1000-1400 chars, fed into the long-ad chunker). Pure read —
+  // the route doesn't persist; the caller decides whether to save
+  // via the existing /ad-variant route.
+  autoWriteAdScript: (campaignId, { mode = 'short', spin } = {}) =>
+    jsonFetch(
+      `/api/campaigns/${encodeURIComponent(campaignId)}/auto-write-script`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ mode, spin: spin || null }),
+      },
+    ),
   generateSpokespersonAd: (campaignId, body = {}) =>
     jsonFetch(
       `/api/campaigns/${encodeURIComponent(campaignId)}/spokesperson-ad`,

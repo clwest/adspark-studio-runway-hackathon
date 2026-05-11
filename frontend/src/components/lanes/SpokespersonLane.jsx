@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 
+import { api } from '../../api'
 import { formatHistoryTimestamp } from '../../uiHelpers.js'
 import Step1CampaignPanel from './Step1CampaignPanel.jsx'
 
@@ -295,6 +296,28 @@ export default function SpokespersonLane({
   )
   const [longAdBusy, setLongAdBusy] = useState(false)
   const [longAdError, setLongAdError] = useState('')
+  // PR EJ — Long Ad auto-write. Mirrors the short-variant flow:
+  // call the LLM with mode=long, drop the result into the textarea,
+  // operator can edit/re-roll before clicking Render. Empty `id`
+  // gates the button (no campaign focused).
+  const [longAdAutoWriting, setLongAdAutoWriting] = useState(false)
+  const handleLongAdAutoWrite = async () => {
+    if (longAdAutoWriting || longAdBusy || !focused?.id) return
+    setLongAdError('')
+    setLongAdAutoWriting(true)
+    try {
+      const result = await api.autoWriteAdScript(focused.id, { mode: 'long' })
+      if (result?.script) {
+        setLongAdScript(result.script)
+      } else {
+        setLongAdError('LLM returned an empty script — try again.')
+      }
+    } catch (e) {
+      setLongAdError(`Auto-write failed: ${e?.message || e}`)
+    } finally {
+      setLongAdAutoWriting(false)
+    }
+  }
   useEffect(() => {
     // When the operator switches variants, swap the textarea
     // content to the new variant's long_script. Existing edits in
@@ -669,6 +692,31 @@ export default function SpokespersonLane({
                     }
                   >
                     Clear
+                  </button>
+                  {/* PR EJ — Long Ad auto-write. Same flow as the
+                      short variant editor's auto-write — calls the
+                      LLM with mode='long', replaces the textarea
+                      content with a ~1200-char multi-beat script.
+                      Operator can edit/re-roll before hitting
+                      Render Long Ad. */}
+                  <button
+                    type="button"
+                    onClick={handleLongAdAutoWrite}
+                    disabled={longAdAutoWriting || longAdBusy || !focused?.id}
+                    data-testid="spokesperson-lane-long-ad-autowrite"
+                    title="Generate a long-form ad script from the campaign brief using the local LLM. ~1200 chars, ~40-50s spoken."
+                    className={
+                      'text-[10px] rounded px-2 py-1 font-mono transition-colors ' +
+                      (longAdAutoWriting || longAdBusy
+                        ? 'ring-1 ring-zinc-700 bg-zinc-800/40 text-zinc-400 cursor-wait'
+                        : 'ring-1 ring-violet-400/40 bg-violet-500/30 hover:bg-violet-500/45 text-violet-100')
+                    }
+                  >
+                    {longAdAutoWriting
+                      ? '✨ Writing…'
+                      : longCharCount > 0
+                      ? '✨ Re-write with LLM'
+                      : '✨ Auto-write with LLM'}
                   </button>
                   {selectedVariant?.long_script
                     && longAdScript !== selectedVariant.long_script
@@ -1391,6 +1439,30 @@ function VariantScriptEditor({ campaignId, variant, onUpsertAdVariant }) {
   const [draftScript, setDraftScript] = useState(variant.script || '')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  // PR EJ — LLM auto-write state. Independent from `busy` (Save)
+  // so the operator can re-roll while a save is mid-flight + vice
+  // versa. The button replaces `draftScript` with whatever the
+  // LLM returned; the operator still has to click Save to commit
+  // (or Cancel to revert).
+  const [autoWriting, setAutoWriting] = useState(false)
+  const handleAutoWrite = async () => {
+    if (autoWriting || busy || !campaignId) return
+    setError('')
+    setAutoWriting(true)
+    try {
+      const result = await api.autoWriteAdScript(campaignId, { mode: 'short' })
+      if (result?.script) {
+        setDraftScript(result.script)
+        setEditing(true)
+      } else {
+        setError('LLM returned an empty script — try again.')
+      }
+    } catch (e) {
+      setError(`Auto-write failed: ${e?.message || e}`)
+    } finally {
+      setAutoWriting(false)
+    }
+  }
 
   // Re-sync on variant switch. Land back in edit mode for empty
   // variants so a chip-row click on a blank Ad always shows the
@@ -1500,7 +1572,7 @@ function VariantScriptEditor({ campaignId, variant, onUpsertAdVariant }) {
           className="rounded bg-zinc-950 ring-1 ring-zinc-800 px-1.5 py-1 text-[10px] leading-snug font-mono focus:ring-pink-400 outline-none disabled:opacity-60"
         />
       </label>
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-1.5 flex-wrap">
         <button
           type="button"
           onClick={handleSave}
@@ -1514,6 +1586,29 @@ function VariantScriptEditor({ campaignId, variant, onUpsertAdVariant }) {
           }
         >
           {busy ? 'Saving…' : 'Save variant'}
+        </button>
+        {/* PR EJ — Auto-write button. Calls the configured LLM
+            (Ollama in local mode) with the campaign brief, replaces
+            the draft script with the generated one. Operator still
+            has to hit Save to commit. Hold-shift / re-click re-rolls. */}
+        <button
+          type="button"
+          onClick={handleAutoWrite}
+          disabled={autoWriting || busy || !campaignId}
+          data-testid="spokesperson-lane-variant-autowrite"
+          title="Generate a fresh ad script from the campaign brief using the local LLM. Click again to re-roll."
+          className={
+            'text-[10px] rounded px-2 py-1 font-mono transition-colors ' +
+            (autoWriting || busy
+              ? 'bg-zinc-800/40 text-zinc-400 ring-1 ring-zinc-700 cursor-wait'
+              : 'bg-violet-500/30 hover:bg-violet-500/45 text-violet-100 ring-1 ring-violet-400/40')
+          }
+        >
+          {autoWriting
+            ? '✨ Writing…'
+            : draftScript
+            ? '✨ Re-write with LLM'
+            : '✨ Auto-write with LLM'}
         </button>
         <button
           type="button"
@@ -1564,6 +1659,34 @@ function NoVariantsState({
       if (created?.id) onSelectVariant?.(created.id)
     } catch (e) {
       setError(`${e?.message || e}`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // PR EJ — Auto-write from the empty state. Single click → LLM
+  // generates Ad 1's script from the brief → variant is created
+  // with the generated script + auto-selected → script editor
+  // mounts in view mode (since the script is non-empty). Operator
+  // can then edit / re-roll / save. Replaces 4 clicks (Save brief
+  // → New Ad → Add script → type → Save) with ONE.
+  const handleAutoWriteFromEmpty = async () => {
+    if (!onUpsertAdVariant || !campaignId || busy) return
+    setError('')
+    setBusy(true)
+    try {
+      const result = await api.autoWriteAdScript(campaignId, { mode: 'short' })
+      const script = (result?.script || '').trim()
+      const updated = await onUpsertAdVariant(campaignId, {
+        title: 'Ad 1',
+        script,
+      })
+      const created = Array.isArray(updated?.ad_variants)
+        ? updated.ad_variants[0]
+        : null
+      if (created?.id) onSelectVariant?.(created.id)
+    } catch (e) {
+      setError(`Auto-write failed: ${e?.message || e}`)
     } finally {
       setBusy(false)
     }
@@ -1629,10 +1752,11 @@ function NoVariantsState({
           </div>
         </>
       ) : (
-        // PR EI — Beefier empty state CTA. Previous tiny "+ New Ad"
-        // button got read as "nothing here" by the operator. New
-        // copy spells out what Step 2 IS for + the button is full
-        // width + has clear next-step language.
+        // PR EI / EJ — Beefier empty state CTA with TWO primary
+        // paths: (1) ✨ Auto-write — LLM-generated script in one
+        // click, (2) ✏️ Write manually — blank Ad 1 + textarea.
+        // Auto-write is the headline path because it's the
+        // demo-defining moment for the local-LLM story.
         <div
           data-testid="spokesperson-lane-variants-onboarding"
           className="rounded-lg ring-1 ring-pink-400/20 bg-pink-500/[0.04] p-3 space-y-2"
@@ -1643,19 +1767,27 @@ function NoVariantsState({
             </p>
             <p className="text-[10px] text-zinc-400 leading-snug">
               Each campaign can hold multiple ad variants (different
-              hooks, energies, audiences). Click below to start your
-              first variant — you&apos;ll get the script editor
-              immediately.
+              hooks, energies, audiences). Auto-write uses your
+              campaign brief + the local LLM to draft Ad 1 in seconds.
             </p>
           </div>
+          <button
+            type="button"
+            onClick={handleAutoWriteFromEmpty}
+            disabled={busy}
+            data-testid="spokesperson-lane-variants-autowrite"
+            className="w-full text-[12px] rounded-md px-3 py-2 font-semibold bg-violet-500/80 hover:bg-violet-500 text-zinc-100 transition-colors disabled:opacity-60"
+          >
+            {busy ? 'Working…' : '✨ Auto-write Ad 1 with LLM'}
+          </button>
           <button
             type="button"
             onClick={handleCreateBlank}
             disabled={busy}
             data-testid="spokesperson-lane-variants-new"
-            className="w-full text-[12px] rounded-md px-3 py-2 font-semibold bg-pink-500/80 hover:bg-pink-500 text-zinc-100 transition-colors disabled:opacity-60"
+            className="w-full text-[11px] rounded-md px-3 py-1.5 bg-zinc-900/60 hover:bg-zinc-800 ring-1 ring-zinc-700 text-zinc-300 transition-colors disabled:opacity-60"
           >
-            {busy ? 'Creating…' : '✏️  Start writing Ad 1'}
+            {busy ? 'Creating…' : '✏️ Start writing manually'}
           </button>
         </div>
       )}
