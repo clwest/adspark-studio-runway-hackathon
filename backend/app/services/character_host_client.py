@@ -245,7 +245,7 @@ def _create_avatar_real(
     with a structured message on any non-200 status or terminal FAILED.
     """
     body = {
-        "name": "AdSpark Brand Spokesperson",
+        "name": "Character OS Brand Spokesperson",
         "referenceImage": _resolve_image_for_runway(image_url, settings),
         "voice": {"type": "runway-live-preset", "presetId": voice_preset},
         "personality": "Concise, friendly product spokesperson.",

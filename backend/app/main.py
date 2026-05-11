@@ -11,7 +11,7 @@ from .routers.runway import router as runway_router
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 
-app = FastAPI(title="AdSpark Studio API", version="0.1.0")
+app = FastAPI(title="Character OS API", version="0.1.0")
 
 settings = get_settings()
 app.add_middleware(

@@ -3143,7 +3143,7 @@ def post_spokesperson_session(
 # ---- PR AJ — Conversation Transcript Retrieval --------------------
 #
 # Runway's realtime ``sessionId`` doubles as the conversation id (deep
-# review §7). After a session ends, AdSpark fetches the transcript via
+# review §7). After a session ends, Character OS fetches the transcript via
 # ``GET /v1/avatar_conversations/{id}`` and persists the structured
 # turns so the Realtime tab can render a replay UX. Mock mode returns
 # a deterministic 3-turn conversation derived from the saved campaign
@@ -3152,7 +3152,7 @@ def post_spokesperson_session(
 
 class TranscriptFetchBody(BaseModel):
     """Optional override so an operator can replay a conversation that
-    wasn't created from this AdSpark instance (e.g. someone shared a
+    wasn't created from this Character OS instance (e.g. someone shared a
     sessionId with them out of band).
     """
 

@@ -415,7 +415,7 @@ def post_create_avatar(
 # ---- PR AN — Custom voice cloning foundation ----------------------
 #
 # Multipart upload of a 10 s – 5 min audio sample. POST /v1/voices
-# with from.type=audio creates a Runway voice id; AdSpark persists it
+# with from.type=audio creates a Runway voice id; Character OS persists it
 # on the Character record and prefers it over the runway-live-preset
 # binding the next time an avatar is created. Mock mode short-circuits
 # with a deterministic ``mock_voice_<sha>`` id keyed off the character
@@ -473,7 +473,7 @@ async def post_clone_voice(
 
     voice_name = (
         (name or "").strip()
-        or f"AdSpark — {(record.name or 'Character')[:60]}"
+        or f"Character OS — {(record.name or 'Character')[:60]}"
     )
     result = clone_voice_from_audio(voice_name, audio_bytes, mime, settings)
 

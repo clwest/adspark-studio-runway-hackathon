@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# start-local-real.sh — boot AdSpark Studio for **real-mode manual
+# start-local-real.sh — boot Character OS for **real-mode manual
 # testing**. PR BJ (SESSION_041) — this is the canonical entry
 # point for in-browser testing because it lets the operator
 # actually exercise Runway-backed flows (avatar_videos,
@@ -112,7 +112,7 @@ pgrep -lf 'uvicorn app.main:app|vite' || true
 
 cat <<NOTE
 
-✅ AdSpark Studio booted (real-mode default).
+✅ Character OS booted (real-mode default).
    Backend:  http://localhost:8000
    Frontend: http://localhost:5173
 

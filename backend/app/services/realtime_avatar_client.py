@@ -9,7 +9,7 @@ Mock mode short-circuits with a structured "unavailable" error; the
 router maps it to HTTP 503 so the frontend can render a disabled
 button instead of attempting WebRTC.
 
-Realtime is **strictly additive** — every other AdSpark flow keeps
+Realtime is **strictly additive** — every other Character OS flow keeps
 working when this surface is unavailable. The broker assumes the
 campaign already has a READY Brand Spokesperson Avatar (PR F V2);
 the router enforces the gate.

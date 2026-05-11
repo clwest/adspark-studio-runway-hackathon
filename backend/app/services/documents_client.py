@@ -8,7 +8,7 @@ relying solely on the inline ``personality`` string.
 Per ``docs/research/RUNWAY_AVATAR_API_DEEP_REVIEW.md`` §2.6 + §5:
 - ``POST /v1/documents`` body: ``{name, content}``.
 - ``PATCH /v1/avatars/{id}`` body: ``{documentIds: [...]}`` (best-effort
-  binding; AdSpark currently prefers the per-session ``documentIds``
+  binding; Character OS currently prefers the per-session ``documentIds``
   field on ``/v1/realtime_sessions`` to keep document scope per-campaign).
 - Up to 50,000 tokens of plain text + Markdown per avatar.
 
@@ -147,7 +147,7 @@ def attach_documents_to_avatar(
 
     Returns ``True`` on a 2xx, ``False`` for mock mode, missing avatar
     id, or any HTTP / network error. Never raises — the caller logs
-    the warning and continues; AdSpark's primary grounding path is the
+    the warning and continues; Character OS's primary grounding path is the
     per-session ``documentIds`` field on the realtime session create
     body, so a PATCH failure here does not break realtime.
     """

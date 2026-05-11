@@ -6,7 +6,7 @@ import { api } from '../api'
 /**
  * PR CA — Top bar for the new app shell. Three jobs:
  *
- *   1. Brand: AdSpark Studio logo + tagline.
+ *   1. Brand: Character OS logo + tagline.
  *   2. Health pill that summarises whether real Runway / image
  *      providers are wired (the v1 ModeBanner used to surface
  *      this; we lift a smaller version into the persistent
@@ -70,7 +70,7 @@ export default function TopBar() {
           </span>
           <div className="leading-tight">
             <div className="text-sm font-semibold text-zinc-100 group-hover:text-spark transition-colors">
-              AdSpark Studio
+              Character OS
             </div>
             <div className="text-[10px] text-zinc-500 font-mono">
               persistent AI spokesperson infrastructure

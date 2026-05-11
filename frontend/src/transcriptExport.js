@@ -18,13 +18,13 @@ function speakerLabel(turn) {
 }
 
 function campaignTitle(campaign) {
-  if (!campaign) return 'AdSpark campaign'
+  if (!campaign) return 'Character OS campaign'
   const business = (campaign.business || '').trim()
   const product = (campaign.product || '').trim()
   if (business && product) return `${business} · ${product}`
   if (business) return business
   if (product) return product
-  return campaign.id || 'AdSpark campaign'
+  return campaign.id || 'Character OS campaign'
 }
 
 export function buildTranscriptMarkdown(campaign, turns) {

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # stop-local.sh — kill backend (uvicorn) + frontend (vite) for
-# AdSpark Studio. PR BJ (SESSION_041).
+# Character OS. PR BJ (SESSION_041).
 #
 # Usage:
 #   bash scripts/stop-local.sh

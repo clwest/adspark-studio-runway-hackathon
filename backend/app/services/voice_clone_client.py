@@ -2,7 +2,7 @@
 
 Wraps Runway's ``POST /v1/voices`` with ``from.type=audio`` so a brand
 can clone a founder / mascot / spokesperson voice from a 30-second
-sample. The result is a Runway voice id that AdSpark persists on the
+sample. The result is a Runway voice id that Character OS persists on the
 Character record and prefers over the runway-live-preset binding when
 new avatars are created (see ``character_studio_client._create_avatar_real``).
 

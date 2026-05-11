@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# start-local-mock.sh — boot AdSpark Studio in **mock mode** for
+# start-local-mock.sh — boot Character OS in **mock mode** for
 # Playwright smoke runs, CI, and safe dry-runs that should never
 # burn Runway / OpenAI credits.
 #
@@ -74,7 +74,7 @@ pgrep -lf 'uvicorn app.main:app|vite' || true
 
 cat <<NOTE
 
-✅ AdSpark Studio booted (mock mode — NO real API calls will fire).
+✅ Character OS booted (mock mode — NO real API calls will fire).
    Backend:  http://localhost:8000
    Frontend: http://localhost:5173
 

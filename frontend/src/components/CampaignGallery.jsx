@@ -1558,7 +1558,7 @@ function CampaignCard({
             </span>
             <span
               className="text-[10px] text-zinc-500 font-mono"
-              title="Loops the visual cut while the Avatar Host Clip audio plays. AdSpark auto-creates the host clip first when missing."
+              title="Loops the visual cut while the Avatar Host Clip audio plays. Character OS auto-creates the host clip first when missing."
             >
               cinematic visual + voiceover · not lip synced
             </span>
@@ -1656,7 +1656,7 @@ function CampaignCard({
             )}
             {isCached && hasUsableAvatar && !hostReadyForCommercial && (
               <p className="text-[10px] text-zinc-500">
-                AdSpark will auto-generate the Avatar Host Clip on the
+                Character OS will auto-generate the Avatar Host Clip on the
                 first build (~10 s in real mode).
               </p>
             )}
@@ -1956,7 +1956,7 @@ function CampaignCard({
                 </div>
                 <p className="text-[10px] text-zinc-500 leading-relaxed">
                   Loops the stitched visual under the Avatar Host Clip
-                  audio. AdSpark auto-creates the host clip first when
+                  audio. Character OS auto-creates the host clip first when
                   missing.
                 </p>
                 {storyboardVoicedReady ? (
@@ -3308,7 +3308,7 @@ function CampaignCard({
         ) : transcriptNoSession ? (
           <p className="text-[10px] text-zinc-500 leading-relaxed">
             No realtime session has been recorded for this campaign yet.
-            Start a conversation below; AdSpark captures the session id
+            Start a conversation below; Character OS captures the session id
             so this card can fetch the transcript afterwards.
           </p>
         ) : transcriptEmpty ? (
@@ -3326,8 +3326,8 @@ function CampaignCard({
         ) : (
           <p className="text-[10px] text-zinc-500 leading-relaxed">
             Click <span className="text-zinc-300">Fetch transcript</span>{' '}
-            to pull the recorded session for replay. In mock mode AdSpark
-            renders a deterministic 3-turn preview drawn from the saved
+            to pull the recorded session for replay. In mock mode Character
+            OS renders a deterministic 3-turn preview drawn from the saved
             campaign brief so the UX is demoable without a Runway key.
           </p>
         )}

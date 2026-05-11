@@ -1,6 +1,6 @@
 /**
  * PR AA — Curated descriptions for the focused subset of Runway
- * `runway-live-preset` voice ids that AdSpark surfaces in the
+ * `runway-live-preset` voice ids that Character OS surfaces in the
  * Character Studio voice picker.
  *
  * Why descriptions instead of audio previews:

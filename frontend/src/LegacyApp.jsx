@@ -300,7 +300,7 @@ export default function LegacyApp() {
         social_post: {
           caption: concept.caption,
           cta: concept.cta,
-          hashtags: [`#${form.business.replace(/\s+/g, '')}`, '#AdSparkStudio'],
+          hashtags: [`#${form.business.replace(/\s+/g, '')}`, '#CharacterOS'],
         },
         // PR AC — persist the Stage-2 script in the same atomic save so
         // downstream Spokesperson Ad / Voiced Commercial paths speak it
@@ -366,7 +366,7 @@ export default function LegacyApp() {
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div className="space-y-1">
               <h1 className="text-4xl sm:text-5xl font-bold tracking-tight">
-                AdSpark <span className="text-spark">Studio</span>
+                Character <span className="text-spark">OS</span>
               </h1>
               <p className="text-sm sm:text-base text-zinc-400">
                 AI Campaign + Character Studio — Runway-powered ads,
@@ -687,7 +687,7 @@ export default function LegacyApp() {
 
         <footer className="text-xs text-zinc-600 pt-6 border-t border-zinc-900/60 flex items-center justify-between gap-2 flex-wrap">
           <span>
-            AdSpark Studio · hackathon build · {new Date().getFullYear()}
+            Character OS · hackathon build · {new Date().getFullYear()}
           </span>
           {/* PR CA — Footer "Try preview UX / Use classic UX" toggle
               removed. The new top-bar "Legacy UI ↗" link in the

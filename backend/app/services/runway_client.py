@@ -26,7 +26,7 @@ _TEXT_ONLY_CAPABLE_MODELS = {"gen4.5"}
 
 # Per-model generation policy (PR C). Limits what the router will accept so a
 # misconfigured request never spends Runway quota on a combination Runway will
-# reject anyway. The set of values intentionally tracks what AdSpark exposes
+# reject anyway. The set of values intentionally tracks what Character OS exposes
 # in the UI — broader Runway support exists for some models but is out of
 # scope for the hackathon build.
 GENERATION_POLICY: dict[str, dict] = {
@@ -45,7 +45,7 @@ GENERATION_POLICY: dict[str, dict] = {
 
 class GenerationSettingsError(ValueError):
     """Raised when the requested model/ratio/duration/image combination is
-    rejected by AdSpark's policy. The router maps this to HTTP 400.
+    rejected by Character OS policy. The router maps this to HTTP 400.
     """
 
 

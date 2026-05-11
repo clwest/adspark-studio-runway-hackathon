@@ -1375,7 +1375,7 @@ export default function CharacterCard({
             ``onCreateAvatar`` callback — the backend route overwrites
             ``runway_avatar_id`` with the fresh binding; the old
             avatar stays on the Runway account but is no longer
-            referenced by AdSpark. Zinc/secondary styling. */}
+            referenced by Character OS. Zinc/secondary styling. */}
         {hasPortrait && avatarReady && onCreateAvatar && (
           <button
             type="button"

@@ -544,7 +544,7 @@ class Character(BaseModel):
     # when the voice exists but the URL doesn't.
     custom_voice_preview_url: Optional[str] = None
     # PR AQ — Avatar PATCH for custom voice swap. After a successful
-    # clone, AdSpark auto-PATCHes the existing Runway avatar (when
+    # clone, Character OS auto-PATCHes the existing Runway avatar (when
     # one is bound) so the cloned voice applies without an avatar
     # recreate. ``pending_avatar`` is the safe baseline when no
     # avatar exists yet — the next Create Runway Avatar will bind

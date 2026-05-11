@@ -268,7 +268,7 @@ def design_brand_voice(
         )
 
     description = build_voice_description(campaign, description_override)
-    name = f"AdSpark — {(campaign.business or 'campaign')[:40]}"
+    name = f"Character OS — {(campaign.business or 'campaign')[:40]}"
     target = _voice_preview_path(settings, campaign.id)
 
     if settings.runway_mock:

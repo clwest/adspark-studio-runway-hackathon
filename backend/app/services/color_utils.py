@@ -2,7 +2,7 @@
 
 Tiny module so the reels routes, the brand-color persistence helper,
 and any future caption / drawtext styling all agree on a single
-hex-validation surface. Kept intentionally minimal: AdSpark stores a
+hex-validation surface. Kept intentionally minimal: Character OS stores a
 single ``#RRGGBB`` per campaign — no themes, no palettes, no opacity.
 """
 from __future__ import annotations
@@ -62,7 +62,7 @@ def to_ffmpeg_color(value: Optional[str]) -> str:
 
 
 def hex_to_rgb(value: Optional[str]) -> Optional[tuple[int, int, int]]:
-    """Parse any AdSpark-supported hex shape into an ``(r, g, b)`` triple
+    """Parse any Character OS-supported hex shape into an ``(r, g, b)`` triple
     of integers in ``0..255``. Returns ``None`` for unparseable input —
     callers fall back to the dark-default styling.
     """
@@ -81,7 +81,7 @@ def relative_luminance(rgb: tuple[int, int, int]) -> float:
     """WCAG relative luminance for an sRGB colour in ``0..1``.
 
     The standard formula linearises each channel before applying the
-    photopic weights ``0.2126 R + 0.7152 G + 0.0722 B``. AdSpark uses
+    photopic weights ``0.2126 R + 0.7152 G + 0.0722 B``. Character OS uses
     the result as a single threshold (>= 0.5 -> "light") to decide
     caption contrast — full WCAG AA / AAA contrast-ratio math is
     overkill for V1 polish.

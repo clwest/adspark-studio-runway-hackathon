@@ -1,7 +1,7 @@
 """Runway avatar conversation transcript client (PR AJ).
 
 After a realtime session ends, the same id Runway returns from
-``POST /v1/realtime_sessions`` (the ``sessionId`` AdSpark already
+``POST /v1/realtime_sessions`` (the ``sessionId`` Character OS already
 captures) doubles as the ``conversationId`` for transcript /
 recording retrieval. See
 ``docs/research/RUNWAY_AVATAR_API_DEEP_REVIEW.md`` §7.
@@ -167,7 +167,7 @@ def fetch_transcript(
 ) -> TranscriptResult:
     """Fetch the transcript for the campaign's most recent realtime
     session. ``conversation_id_override`` lets an operator replay a
-    session that wasn't created from this AdSpark instance.
+    session that wasn't created from this Character OS instance.
 
     Mock mode: returns a deterministic 3-turn replay built from the
     campaign brief. The conversation id is a stable

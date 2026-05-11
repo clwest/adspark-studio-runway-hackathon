@@ -814,7 +814,7 @@ def create_avatar(
                 mock_mode=False,
             )
         avatar_id, thumb_url = _create_avatar_real(
-            name=f"AdSpark Character — {character.name[:40]}",
+            name=f"Character OS Character — {character.name[:40]}",
             portrait_data_uri=portrait_data_uri,
             voice_preset=voice,
             personality=personality_override or character.personality,

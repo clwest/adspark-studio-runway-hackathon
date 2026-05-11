@@ -294,7 +294,7 @@ export const api = {
   // 10 s – 5 min audio sample to /api/characters/{id}/clone-voice;
   // the backend POSTs Runway /v1/voices with from.type=audio (or
   // mocks deterministically). Optional ``name`` overrides the
-  // default "AdSpark — <character>" voice label.
+  // default "Character OS — <character>" voice label.
   cloneCharacterVoice: async (characterId, file, name) => {
     const fd = new FormData()
     fd.append('audio', file)

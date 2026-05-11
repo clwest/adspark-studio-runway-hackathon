@@ -12,7 +12,7 @@ const IGNORED_CONSOLE_ERRORS = [
   /net::ERR_/i,
 ]
 
-test('AdSpark Studio mock-mode end-to-end smoke @ /legacy', async ({ page }) => {
+test('Character OS mock-mode end-to-end smoke @ /legacy', async ({ page }) => {
   const consoleErrors = []
   const pageErrors = []
   page.on('console', (msg) => {
@@ -30,7 +30,7 @@ test('AdSpark Studio mock-mode end-to-end smoke @ /legacy', async ({ page }) => 
   await page.goto('/legacy')
 
   // 2. Hero / title visible
-  await expect(page.getByRole('heading', { name: /AdSpark/i })).toBeVisible()
+  await expect(page.getByRole('heading', { name: /Character OS/i })).toBeVisible()
 
   // 3. Mode banner visible — verifies ModeBanner mounted and /health resolved
   const modeHeading = page.getByRole('heading', { name: /^Mode$/, level: 3 })
@@ -890,7 +890,7 @@ test('AdSpark Studio mock-mode end-to-end smoke @ /legacy', async ({ page }) => 
 // the same as the v1 path which the primary smoke above already
 // covers. Resilient to fixture state: passes whether the library
 // has zero characters (empty state) or N (library grid).
-test('AdSpark Studio Spokesperson Library @ /', async ({ page }) => {
+test('Character OS Spokesperson Library @ /', async ({ page }) => {
   const consoleErrors = []
   const pageErrors = []
   page.on('console', (msg) => {
@@ -1530,7 +1530,7 @@ test('AdSpark Studio Spokesperson Library @ /', async ({ page }) => {
 // footer triggers a full reload + the new mode mounts on the
 // next paint. Catches a class of regression where the flag is
 // persisted but a v2-gated component fails to remount.
-test('AdSpark Studio top-bar Legacy UI round-trip', async ({ page }) => {
+test('Character OS top-bar Legacy UI round-trip', async ({ page }) => {
   const consoleErrors = []
   const pageErrors = []
   page.on('console', (msg) => {

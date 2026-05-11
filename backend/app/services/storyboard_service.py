@@ -404,7 +404,7 @@ def _generate_mock(
     target = shot_path(settings, campaign.id, shot.id)
     tmp = target.with_suffix(".mp4.tmp")
     raw_label = (shot.label or shot.id or "Shot").replace("'", "").replace(":", "\\:")
-    sub_raw = (campaign.business or "AdSpark").replace("'", "").replace(":", "\\:")[:48]
+    sub_raw = (campaign.business or "Character OS").replace("'", "").replace(":", "\\:")[:48]
     cmd = [
         "ffmpeg",
         "-y",
