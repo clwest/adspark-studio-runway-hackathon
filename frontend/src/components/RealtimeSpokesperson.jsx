@@ -1,6 +1,11 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../api'
 import { friendlyError, ERROR_HINTS } from '../errors'
+// PR EE — realtime tool dispatch. Single onClientEvent handler routes
+// `client_event` messages to per-tool logic. Toast surfaces what the
+// avatar just did so the operator can SEE the agent's actions land.
+import { dispatchRealtimeToolEvent } from '../realtimeTools'
+import { useToast } from './Toast.jsx'
 
 // Lazy-load the SDK so any package-level error stays isolated and
 // CampaignGallery keeps rendering even if @runwayml/avatars-react
@@ -66,7 +71,23 @@ function buildPromptChips(campaign) {
  * does not auto-start; user must click Start.  No realtime work is
  * triggered for normal campaign flows.
  */
-export default function RealtimeSpokesperson({ campaign, gateReason }) {
+export default function RealtimeSpokesperson({ campaign, character, gateReason }) {
+  // PR EE — useToast may be null if this component is mounted outside
+  // a ToastProvider (the CampaignGallery legacy path doesn't wrap).
+  // Soft-fall to noop so the realtime path stays operational either way.
+  const toast = useToast()
+  const announce = toast?.push || (() => {})
+
+  const handleClientEvent = useCallback(
+    (event) => {
+      // SDK has already validated shape; dispatcher silently drops
+      // unknown tool names so future avatar-side experiments don't
+      // crash the session.
+      dispatchRealtimeToolEvent(event, { campaign, character, announce })
+    },
+    [campaign, character, announce],
+  )
+
   const [phase, setPhase] = useState('idle') // 'idle' | 'creating' | 'live' | 'ending' | 'failed'
   const [session, setSession] = useState(null)
   const [errMsg, setErrMsg] = useState('')
@@ -242,6 +263,10 @@ export default function RealtimeSpokesperson({ campaign, gateReason }) {
               setErrMsg(`Realtime SDK: ${err?.message || err || 'unknown'}`)
               setPhase('failed')
             }}
+            // PR EE — receives client_event messages when the avatar
+            // invokes a tool. dispatchRealtimeToolEvent routes by
+            // name and announces the action via toast.
+            onClientEvent={handleClientEvent}
             className="w-full max-w-sm rounded-lg border border-zinc-800 bg-zinc-950/40 p-2"
           />
         </Suspense>

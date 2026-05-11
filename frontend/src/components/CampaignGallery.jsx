@@ -3434,6 +3434,11 @@ function CampaignCard({
       {avatarReady ? (
         <RealtimeSpokesperson
           campaign={c}
+          // PR EE — pass the attached character so the realtime
+          // tool dispatcher (`recall_knowledge`) can search its
+          // `knowledge_sources` array. `character` is already
+          // resolved by the per-card useEffect above.
+          character={character || null}
           gateReason={
             avatarMock
               ? 'Realtime requires a real Runway key — running in mock mode.'

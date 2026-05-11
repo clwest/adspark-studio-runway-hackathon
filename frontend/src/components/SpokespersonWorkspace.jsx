@@ -13,6 +13,7 @@ import KnowledgePanel from './KnowledgePanel.jsx'
 import VideosTab from './VideosTab.jsx'
 import RealtimeSpokesperson from './RealtimeSpokesperson.jsx'
 import { ToastProvider } from './Toast.jsx'
+import { SHOW_VIDEOS_EVENT } from '../realtimeTools'
 
 const TABS = [
   { id: 'identity', label: 'Identity' },
@@ -61,6 +62,17 @@ export default function SpokespersonWorkspace() {
   const [loading, setLoading] = useState(true)
   const [errMsg, setErrMsg] = useState('')
   const [activeTab, setActiveTab] = useState('identity')
+
+  // PR EE — when the realtime avatar invokes `show_videos_tab`
+  // (or completes a `render_spokesperson_ad` and auto-navigates),
+  // a global custom event lands here and flips the active tab.
+  // Loose coupling avoids prop-drilling through CampaignGallery →
+  // RealtimeSpokesperson just to flip a tab in the parent.
+  useEffect(() => {
+    const handler = () => setActiveTab('outputs')
+    window.addEventListener(SHOW_VIDEOS_EVENT, handler)
+    return () => window.removeEventListener(SHOW_VIDEOS_EVENT, handler)
+  }, [])
   const [busyAction, setBusyAction] = useState(null)
   const [modeModalOpen, setModeModalOpen] = useState(false)
   // PR DA — campaign selection state. The lane edits whichever
