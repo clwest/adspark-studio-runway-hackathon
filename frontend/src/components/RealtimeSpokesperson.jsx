@@ -236,18 +236,37 @@ export default function RealtimeSpokesperson({ campaign, character, gateReason }
     )
   }
 
-  // Live path — SDK mounted.
+  // PR EM-f — Live path now renders as a Zoom-style overlay. Before,
+  // the AvatarCall mounted INLINE inside the conversations tab and
+  // pushed everything below it further down the page. That broke
+  // focus during what's supposed to be a face-to-face conversation
+  // with the avatar. New behaviour:
+  //
+  //   - When phase === 'live': a fixed-position overlay covers the
+  //     viewport, dim backdrop, centered avatar tile, controls
+  //     footer, and a collapsible right-side panel with prompt
+  //     chips + campaign context.
+  //   - Body scroll locked so the overlay feels modal.
+  //   - The page beneath stays put — End Conversation closes the
+  //     overlay and returns the operator to the tab they were on.
   if (phase === 'live' && session) {
+    const campaignLabel =
+      (campaign?.business || '').trim()
+      || (campaign?.product || '').trim()
+      || 'this campaign'
     return (
-      <div className="border-t border-zinc-800/60 pt-2 space-y-2">
-        {header}
-        <p className="text-[10px] text-zinc-500">
-          Mic required. Webcam disabled. Session ends automatically at the
-          countdown above.
-        </p>
+      <RealtimeOverlay
+        spokespersonName={
+          (campaign?.attached_character_name || 'Brand Spokesperson')
+        }
+        campaignLabel={campaignLabel}
+        remaining={remaining}
+        chipRow={chipRow}
+        onEnd={handleEnd}
+      >
         <Suspense
           fallback={
-            <div className="text-[11px] text-zinc-500 italic px-2 py-3 rounded-md border border-zinc-800 bg-zinc-950/40">
+            <div className="text-[12px] text-zinc-400 italic px-4 py-8 rounded-lg border border-zinc-800 bg-zinc-950/40">
               Loading Runway Avatars SDK…
             </div>
           }
@@ -267,17 +286,10 @@ export default function RealtimeSpokesperson({ campaign, character, gateReason }
             // invokes a tool. dispatchRealtimeToolEvent routes by
             // name and announces the action via toast.
             onClientEvent={handleClientEvent}
-            className="w-full max-w-sm rounded-lg border border-zinc-800 bg-zinc-950/40 p-2"
+            className="w-full max-w-3xl rounded-xl ring-1 ring-zinc-700/60 bg-zinc-950 p-2 shadow-2xl"
           />
         </Suspense>
-        <button
-          type="button"
-          onClick={handleEnd}
-          className="rounded-md border border-zinc-700 hover:border-fuchsia-400 text-xs px-2 py-1 text-zinc-200"
-        >
-          End Conversation
-        </button>
-      </div>
+      </RealtimeOverlay>
     )
   }
 
@@ -318,6 +330,149 @@ export default function RealtimeSpokesperson({ campaign, character, gateReason }
           {errMsg}
         </p>
       )}
+    </div>
+  )
+}
+
+
+/**
+ * PR EM-f — Zoom-style overlay for the live realtime conversation.
+ *
+ * Renders as a fixed-position layer over the page with three zones:
+ *
+ *   1. Top bar: spokesperson name + 'live · countdown' pill + close
+ *      button (close acts as End Conversation).
+ *   2. Stage: large centered avatar video tile, dim backdrop, soft
+ *      vignette. Self-view hidden (webcam off by default).
+ *   3. Right side panel (collapsible): prompt chips, mic tips. Hidden
+ *      by default so the avatar dominates; click "Tips" to show.
+ *   4. Bottom controls bar: End Conversation, mic-status hint.
+ *
+ * Body scroll is locked while mounted so the page underneath doesn't
+ * peek through scroll wheels / trackpad.
+ */
+function RealtimeOverlay({
+  spokespersonName,
+  campaignLabel,
+  remaining,
+  chipRow,
+  children,
+  onEnd,
+}) {
+  const [showPanel, setShowPanel] = useState(false)
+
+  // Lock body scroll for the lifetime of the overlay; restore on
+  // unmount so the page returns to its prior state cleanly.
+  useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, [])
+
+  return (
+    <div
+      data-testid="realtime-conversation-overlay"
+      data-phase="live"
+      className="fixed inset-0 z-40 flex flex-col bg-black/85 backdrop-blur-md"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Live realtime conversation"
+    >
+      {/* Top bar */}
+      <header className="shrink-0 px-4 sm:px-6 py-3 flex items-center justify-between gap-3 border-b border-zinc-800/60 bg-zinc-950/60">
+        <div className="flex items-center gap-3 min-w-0">
+          <span aria-hidden="true" className="text-base">🎙️</span>
+          <div className="min-w-0 leading-tight">
+            <div className="text-sm font-semibold text-zinc-100 truncate">
+              {spokespersonName}
+            </div>
+            <div className="text-[10px] text-zinc-400 font-mono truncate">
+              {campaignLabel} · Realtime Runway Avatar
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <span
+            className="text-[10px] rounded-full bg-fuchsia-500/20 text-fuchsia-200 px-2 py-0.5 font-mono ring-1 ring-fuchsia-400/40"
+            title="Runway hard-caps realtime sessions at 5 minutes"
+          >
+            live · {remaining || '0:00'}
+          </span>
+          <button
+            type="button"
+            onClick={() => setShowPanel((v) => !v)}
+            data-testid="realtime-overlay-tips-toggle"
+            className="text-[11px] rounded-md px-2 py-1 ring-1 ring-zinc-700 bg-zinc-900 hover:bg-zinc-800 text-zinc-200"
+            title="Show prompt chips + mic tips"
+          >
+            {showPanel ? 'Hide tips' : 'Tips ▾'}
+          </button>
+          <button
+            type="button"
+            onClick={onEnd}
+            data-testid="realtime-overlay-close"
+            className="text-[14px] rounded-md w-8 h-8 ring-1 ring-zinc-700 bg-zinc-900 hover:bg-rose-500/30 hover:ring-rose-400/60 text-zinc-200"
+            title="End conversation (Esc-equivalent)"
+            aria-label="End conversation"
+          >
+            ×
+          </button>
+        </div>
+      </header>
+
+      {/* Stage + side panel */}
+      <div className="flex-1 min-h-0 flex flex-row">
+        <main className="flex-1 min-w-0 flex items-center justify-center p-4 sm:p-6">
+          <div className="w-full max-w-3xl">
+            {children}
+          </div>
+        </main>
+        {showPanel && (
+          <aside
+            data-testid="realtime-overlay-panel"
+            className="w-full sm:w-80 shrink-0 border-l border-zinc-800/60 bg-zinc-950/70 p-4 overflow-y-auto"
+          >
+            <h3 className="text-[11px] uppercase tracking-wide text-zinc-400 font-mono mb-2">
+              Try saying
+            </h3>
+            <div className="space-y-1">{chipRow}</div>
+            <h3 className="text-[11px] uppercase tracking-wide text-zinc-400 font-mono mt-4 mb-2">
+              Mic tips
+            </h3>
+            <ul className="text-[11px] text-zinc-300 leading-snug space-y-1 list-disc pl-4">
+              <li>Wait for the avatar to stop speaking before you reply — overlap pauses the session.</li>
+              <li>Headphones avoid the audio loop into the mic.</li>
+              <li>Close noisy apps (Slack, fans, browser tabs with autoplay).</li>
+              <li>Session auto-ends at the 5-min countdown above.</li>
+            </ul>
+            <h3 className="text-[11px] uppercase tracking-wide text-zinc-400 font-mono mt-4 mb-2">
+              Memory-aware commands
+            </h3>
+            <ul className="text-[11px] text-zinc-300 leading-snug space-y-1 list-disc pl-4">
+              <li><span className="text-zinc-100">"What have we talked about?"</span> — recalls past sessions.</li>
+              <li><span className="text-zinc-100">"Save what we just discussed."</span> — persists this conversation as memory on the active campaign.</li>
+              <li><span className="text-zinc-100">"Render an ad about X."</span> — agentic loop: LLM drafts, Runway renders.</li>
+            </ul>
+          </aside>
+        )}
+      </div>
+
+      {/* Bottom controls */}
+      <footer className="shrink-0 px-4 sm:px-6 py-3 flex items-center justify-center gap-2 border-t border-zinc-800/60 bg-zinc-950/60">
+        <button
+          type="button"
+          onClick={onEnd}
+          data-testid="realtime-overlay-end"
+          className="rounded-md bg-rose-500/80 hover:bg-rose-500 text-zinc-100 text-sm font-semibold px-4 py-2 transition-colors"
+        >
+          End Conversation
+        </button>
+        <span className="text-[10px] text-zinc-500 font-mono ml-2">
+          mic on · webcam off · session auto-ends at 5:00
+        </span>
+      </footer>
     </div>
   )
 }

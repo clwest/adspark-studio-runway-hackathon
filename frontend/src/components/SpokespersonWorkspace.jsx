@@ -1009,19 +1009,25 @@ function ConversationsTab({
       data-conversation-mode={focused ? 'live-ready' : 'gated'}
       className="space-y-3"
     >
-      <header className="rounded-2xl ring-1 ring-zinc-800 bg-zinc-950/40 p-3 space-y-1">
-        <h2 className="text-sm font-semibold text-zinc-100">Conversations</h2>
-        <p className="text-[11px] text-zinc-400 leading-snug">
-          Talk to {activeSpokesperson?.name || 'this spokesperson'} live
-          via Runway's realtime avatar. The avatar is briefed on the
-          selected campaign — ask it about the product, audience, or
-          pitch and hear it respond in character.{' '}
-          <span className="text-zinc-500">
-            Real WebRTC when{' '}
-            <span className="font-mono">RUNWAY_API_KEY</span> is set;
-            mock-mode shows the gated state.
-          </span>
-        </p>
+      <header className="rounded-2xl ring-1 ring-zinc-800 bg-zinc-950/40 p-3 flex items-center justify-between gap-3 flex-wrap">
+        <div className="space-y-0.5 min-w-0">
+          <h2 className="text-sm font-semibold text-zinc-100">
+            Conversations
+          </h2>
+          <p className="text-[11px] text-zinc-400 leading-snug">
+            Live realtime call with{' '}
+            <span className="text-zinc-200 font-medium">
+              {activeSpokesperson?.name || 'this spokesperson'}
+            </span>
+            . Briefed on the selected campaign.
+          </p>
+        </div>
+        <span
+          className="text-[10px] rounded-full px-2 py-0.5 font-mono bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/40 shrink-0"
+          title="WebRTC + Runway avatar_videos realtime endpoint"
+        >
+          🎙️ Runway realtime
+        </span>
       </header>
 
       {!focused && !gateReason.startsWith('No Runway avatar') && !gateReason.startsWith('Runway avatar status') && (
@@ -1198,7 +1204,6 @@ function ConversationPreCallChecklist() {
     <details
       data-testid="spokesperson-workspace-conversations-precall"
       className="rounded-lg ring-1 ring-zinc-800 bg-zinc-950/60 px-3 py-1.5"
-      open
     >
       <summary className="text-[11px] text-zinc-300 cursor-pointer select-none hover:text-zinc-100 font-semibold">
         Before you click Start Conversation
