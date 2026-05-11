@@ -71,7 +71,13 @@ function buildPromptChips(campaign) {
  * does not auto-start; user must click Start.  No realtime work is
  * triggered for normal campaign flows.
  */
-export default function RealtimeSpokesperson({ campaign, character, gateReason }) {
+export default function RealtimeSpokesperson({
+  campaign,
+  character,
+  gateReason,
+  autostart,
+  onAutostartConsumed,
+}) {
   // PR EE — useToast may be null if this component is mounted outside
   // a ToastProvider (the CampaignGallery legacy path doesn't wrap).
   // Soft-fall to noop so the realtime path stays operational either way.
@@ -145,6 +151,21 @@ export default function RealtimeSpokesperson({ campaign, character, gateReason }
       setPhase('failed')
     }
   }, [campaign.id])
+
+  // PR EM-g — auto-start when the parent flips `autostart` true (e.g.
+  // after the workspace consumes `?autostart=1` from a handoff
+  // navigation). Single-shot: parent clears the flag via
+  // `onAutostartConsumed` so the effect can't loop. Gated paths and
+  // non-idle phases short-circuit so we never start over a live or
+  // already-failed session.
+  useEffect(() => {
+    if (!autostart) return
+    if (gateReason) return
+    if (phase !== 'idle') return
+    if (!campaign?.id) return
+    handleStart()
+    onAutostartConsumed?.()
+  }, [autostart, gateReason, phase, campaign?.id, handleStart, onAutostartConsumed])
 
   const remaining = phase === 'live' && session?.expires_at
     ? fmtRemaining(session.expires_at) || `${tick % 0}` // ref tick to keep effect honest

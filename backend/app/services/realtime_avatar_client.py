@@ -443,6 +443,26 @@ DEFAULT_REALTIME_TOOLS: list[dict] = [
             "seconds; the handler narrates each stage via toasts."
         ),
     },
+    {
+        "name": "handoff_to_character",
+        "description": (
+            "Hand the conversation off to a different spokesperson — "
+            "for example, you (Donny) hand off to Riggs because the "
+            "operator asked a question Riggs handles better. Call "
+            "when the operator asks for a different spokesperson by "
+            "name OR when you genuinely think another spokesperson "
+            "is better suited (and TELL the operator you're handing "
+            "off and why). Pass the target spokesperson's name as "
+            "`character_name` (case-insensitive substring match — "
+            "'Riggs' resolves Riggs Rally, 'Miles' resolves Miles "
+            "Monroe). The handler resolves the name, picks the "
+            "target's most recent campaign, and triggers a page "
+            "navigation: the workspace closes this session and opens "
+            "a new realtime session against the target. TELL THE "
+            "OPERATOR you're handing off and that the new "
+            "spokesperson will load in a few seconds."
+        ),
+    },
 ]
 
 

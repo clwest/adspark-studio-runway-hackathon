@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useCallback, useEffect, useState } from 'react'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 
 import { api } from '../api'
 import { friendlyError } from '../errors'
@@ -14,7 +14,11 @@ import MemoryPanel from './MemoryPanel.jsx'
 import VideosTab from './VideosTab.jsx'
 import RealtimeSpokesperson from './RealtimeSpokesperson.jsx'
 import { ToastProvider } from './Toast.jsx'
-import { SHOW_VIDEOS_EVENT, REFRESH_CAMPAIGNS_EVENT } from '../realtimeTools'
+import {
+  HANDOFF_EVENT,
+  REFRESH_CAMPAIGNS_EVENT,
+  SHOW_VIDEOS_EVENT,
+} from '../realtimeTools'
 
 const TABS = [
   { id: 'identity', label: 'Identity' },
@@ -59,11 +63,22 @@ const TEMPLATE_LABELS = {
 export default function SpokespersonWorkspace() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [characters, setCharacters] = useState([])
   const [campaigns, setCampaigns] = useState([])
   const [loading, setLoading] = useState(true)
   const [errMsg, setErrMsg] = useState('')
   const [activeTab, setActiveTab] = useState('identity')
+  // PR EM-g — when the avatar invokes `handoff_to_character`, the
+  // realtime dispatcher fires HANDOFF_EVENT. The workspace navigates
+  // to the target's URL with `?tab=conversations&campaign=…&autostart=1`,
+  // re-mounts (since the route param changes), reads the params on
+  // first load, and lifts this flag so <RealtimeSpokesperson> auto-
+  // starts the new session without an operator click.
+  const [pendingAutostart, setPendingAutostart] = useState(false)
+  const handleAutostartConsumed = useCallback(() => {
+    setPendingAutostart(false)
+  }, [])
 
   // PR EE — when the realtime avatar invokes `show_videos_tab`
   // (or completes a `render_spokesperson_ad` and auto-navigates),
@@ -93,6 +108,27 @@ export default function SpokespersonWorkspace() {
     window.addEventListener(REFRESH_CAMPAIGNS_EVENT, handler)
     return () => window.removeEventListener(REFRESH_CAMPAIGNS_EVENT, handler)
   }, [])
+
+  // PR EM-g — character-to-character handoff. The realtime tool
+  // dispatcher fires HANDOFF_EVENT with `{character_id, campaign_id,
+  // target_name}` after validating the target exists, has a ready
+  // avatar, and owns a campaign. We navigate to the target's route
+  // with URL params; the destination workspace consumes them on
+  // mount to switch tabs + auto-start the new session.
+  useEffect(() => {
+    const handler = (e) => {
+      const detail = e?.detail
+      if (!detail?.character_id) return
+      const params = new URLSearchParams()
+      params.set('tab', 'conversations')
+      if (detail.campaign_id) params.set('campaign', detail.campaign_id)
+      params.set('autostart', '1')
+      navigate(`/spokespeople/${detail.character_id}?${params.toString()}`)
+    }
+    window.addEventListener(HANDOFF_EVENT, handler)
+    return () => window.removeEventListener(HANDOFF_EVENT, handler)
+  }, [navigate])
+
   const [busyAction, setBusyAction] = useState(null)
   const [modeModalOpen, setModeModalOpen] = useState(false)
   // PR DA — campaign selection state. The lane edits whichever
@@ -194,6 +230,41 @@ export default function SpokespersonWorkspace() {
       setSelectedCampaignId(newest?.id || null)
     }
   }, [creatingNewCampaign, linkedCampaigns, selectedCampaignId])
+
+  // PR EM-g — consume URL params written by the handoff navigation
+  // (or any deep-link). Waits until the campaigns fetch resolves AND
+  // (when a campaign id is in the URL) until that campaign actually
+  // appears in `linkedCampaigns`, otherwise the auto-select-newest
+  // effect above would race us. Once applied, the params are stripped
+  // so a manual refresh doesn't re-auto-start the session.
+  useEffect(() => {
+    if (loading) return
+    const urlTab = searchParams.get('tab')
+    const urlCampaign = searchParams.get('campaign')
+    const urlAutostart = searchParams.get('autostart') === '1'
+    if (!urlTab && !urlCampaign && !urlAutostart) return
+    if (urlCampaign) {
+      const exists = (campaigns || []).some(
+        (c) => c.id === urlCampaign && c.character_id === id,
+      )
+      if (!exists) return // wait for the target campaign to load
+    }
+    if (urlTab && TABS.some((t) => t.id === urlTab)) {
+      setActiveTab(urlTab)
+    }
+    if (urlCampaign) {
+      setSelectedCampaignId(urlCampaign)
+      setCreatingNewCampaign(false)
+    }
+    if (urlAutostart) {
+      setPendingAutostart(true)
+    }
+    const next = new URLSearchParams(searchParams)
+    next.delete('tab')
+    next.delete('campaign')
+    next.delete('autostart')
+    setSearchParams(next, { replace: true })
+  }, [loading, campaigns, id, searchParams, setSearchParams])
 
   // PR CC — Identity tab handlers. Mirror the SpokespersonStudio
   // shape exactly so /api/characters + voice clone + portrait +
@@ -931,6 +1002,8 @@ export default function SpokespersonWorkspace() {
           linkedCampaigns={linkedCampaigns}
           selectedCampaignId={selectedCampaignId}
           onSelectCampaignsTab={() => setActiveTab('campaigns')}
+          autostart={pendingAutostart}
+          onAutostartConsumed={handleAutostartConsumed}
         />
       )}
 
@@ -982,6 +1055,8 @@ function ConversationsTab({
   linkedCampaigns,
   selectedCampaignId,
   onSelectCampaignsTab,
+  autostart,
+  onAutostartConsumed,
 }) {
   const focused = selectedCampaignId
     ? linkedCampaigns.find((c) => c.id === selectedCampaignId) || null
@@ -1076,7 +1151,10 @@ function ConversationsTab({
           <ConversationPreCallChecklist />
           <RealtimeSpokesperson
             campaign={focused}
+            character={activeSpokesperson}
             gateReason={gateReason || null}
+            autostart={autostart}
+            onAutostartConsumed={onAutostartConsumed}
           />
         </div>
       )}

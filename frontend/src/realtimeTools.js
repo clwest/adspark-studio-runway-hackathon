@@ -32,6 +32,8 @@ export const REALTIME_TOOL_NAMES = Object.freeze({
   // PR EM-e — memory-aware tools
   RECALL_RECENT_CONVERSATIONS: 'recall_recent_conversations',
   ATTACH_MEMORY_TO_CAMPAIGN: 'attach_memory_to_campaign',
+  // PR EM-g — character-to-character handoff
+  HANDOFF_TO_CHARACTER: 'handoff_to_character',
 })
 
 // Custom window-event names SpokespersonWorkspace listens for to
@@ -44,6 +46,9 @@ export const REALTIME_TOOL_NAMES = Object.freeze({
 //     state inline; tool-path renders don't, hence this event.
 export const SHOW_VIDEOS_EVENT = 'character-os:show-videos'
 export const REFRESH_CAMPAIGNS_EVENT = 'character-os:refresh-campaigns'
+// PR EM-g — handoff payload: { character_id, campaign_id, target_name }
+// Workspace listens + navigates to /spokespeople/{id}?tab=conversations&campaign={id}&autostart=1
+export const HANDOFF_EVENT = 'character-os:handoff'
 
 /**
  * Dispatch a `client_event` to the correct handler.
@@ -313,6 +318,118 @@ export async function dispatchRealtimeToolEvent(event, deps) {
           'error',
         )
       }
+      return
+    }
+
+    case REALTIME_TOOL_NAMES.HANDOFF_TO_CHARACTER: {
+      // PR EM-g — operator asks for a different spokesperson, or
+      // current avatar decides the question is better-suited to
+      // another persona. Resolve the requested name to a character,
+      // pick their most recent campaign, and fire a navigation
+      // event the workspace catches.
+      //
+      // Pre-conditions are strict: target must exist, have a ready
+      // Runway avatar, and own at least one campaign. Every failure
+      // mode toasts a specific cause so the operator can fix it
+      // (e.g. attach a campaign to that character) and re-try.
+      const targetRaw = String((args && args.character_name) || '').trim()
+      if (!targetRaw) {
+        announce?.(
+          'Handoff failed — no character name supplied.',
+          'error',
+        )
+        return
+      }
+
+      let charsResp
+      try {
+        charsResp = await api.listCharacters()
+      } catch (e) {
+        announce?.(
+          `Handoff failed loading characters: ${e?.message || e}`,
+          'error',
+        )
+        return
+      }
+      const targetLower = targetRaw.toLowerCase()
+      const candidates = (charsResp.characters || [])
+        .filter((c) => c?.name)
+      // Exact-match first, then case-insensitive substring, then id.
+      const found =
+        candidates.find((c) => c.name.toLowerCase() === targetLower)
+        || candidates.find((c) =>
+          c.name.toLowerCase().includes(targetLower),
+        )
+        || candidates.find((c) => c.id === targetRaw)
+      if (!found) {
+        announce?.(
+          `🎤 Handoff failed — couldn\u2019t find a spokesperson matching "${targetRaw}".`,
+          'error',
+        )
+        return
+      }
+      const currentId = character?.id || campaign?.character_id
+      if (found.id === currentId) {
+        announce?.(
+          `🎤 ${found.name} is already the active spokesperson — no handoff needed.`,
+          'info',
+        )
+        return
+      }
+      if (found.runway_avatar_status !== 'ready') {
+        announce?.(
+          `🎤 ${found.name} doesn\u2019t have a ready Runway avatar yet ` +
+            `(status: ${found.runway_avatar_status || 'unknown'}).`,
+          'error',
+        )
+        return
+      }
+
+      let campsResp
+      try {
+        campsResp = await api.listCampaigns()
+      } catch (e) {
+        announce?.(
+          `Handoff failed loading campaigns: ${e?.message || e}`,
+          'error',
+        )
+        return
+      }
+      const targetCamps = (campsResp.campaigns || [])
+        .filter((c) => c.character_id === found.id)
+        .sort((a, b) =>
+          String(b.updated_at || b.created_at || '').localeCompare(
+            String(a.updated_at || a.created_at || ''),
+          ),
+        )
+      if (targetCamps.length === 0) {
+        announce?.(
+          `🎤 ${found.name} has no campaigns yet — can\u2019t hand off without a campaign brief.`,
+          'error',
+        )
+        return
+      }
+      const targetCampaign = targetCamps[0]
+
+      announce?.(
+        `🎤 Handing off to ${found.name} — opening conversation on "${
+          targetCampaign.business || targetCampaign.id
+        }"…`,
+        'info',
+      )
+
+      // Fire the navigation event. The workspace's listener resolves
+      // the URL + activates the conversations tab + auto-starts the
+      // new session.
+      window.dispatchEvent(
+        new CustomEvent(HANDOFF_EVENT, {
+          detail: {
+            character_id: found.id,
+            campaign_id: targetCampaign.id,
+            target_name: found.name,
+          },
+        }),
+      )
       return
     }
 
