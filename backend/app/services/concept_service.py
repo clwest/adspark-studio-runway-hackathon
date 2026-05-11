@@ -107,20 +107,55 @@ def _coerce_response(payload: dict, fallback: ConceptResponse) -> ConceptRespons
 
 
 def generate_concepts(req: ConceptRequest, settings: Settings) -> ConceptResponse:
+    """PR EH — provider-aware concept generation. Branches on
+    `settings.llm_provider`:
+
+      - `openai` (default) — chat.completions against the OpenAI
+        cloud API. Requires OPENAI_API_KEY; falls back to mock when
+        the key is empty (`settings.openai_mock=True`).
+      - `ollama` — chat.completions against a local Ollama server
+        via its OpenAI-compatible endpoint (default
+        http://localhost:11434/v1). No API key needed. Falls back to
+        mock when Ollama is unreachable or the model returns junk.
+
+    Both paths use the same OpenAI Python client — Ollama implements
+    the chat.completions API surface byte-for-byte. The only change
+    is the base_url + model name.
+    """
     fallback = _mock_concepts(req)
-    if settings.openai_mock:
+    provider = (settings.llm_provider or "openai").strip().lower()
+
+    # OpenAI cloud path stays gated on the API key (existing
+    # behaviour). Mock returns immediately when no key is set.
+    if provider == "openai" and settings.openai_mock:
         return fallback
 
     try:
-        from openai import OpenAI  # lazy import
+        from openai import OpenAI  # lazy import — same client for both providers
     except ImportError:
         logger.warning("openai package not installed; returning mock concepts")
         return fallback
 
-    try:
+    # Provider-specific client construction. The body shape below is
+    # identical for both providers — Ollama implements
+    # chat.completions byte-for-byte including `response_format`.
+    if provider == "ollama":
+        client = OpenAI(
+            api_key="ollama",  # any non-empty string; ignored by Ollama
+            base_url=settings.ollama_base_url,
+        )
+        model = settings.ollama_model
+        logger.info(
+            "concept generation via ollama model=%s base=%s",
+            model, settings.ollama_base_url,
+        )
+    else:
         client = OpenAI(api_key=settings.openai_api_key)
+        model = settings.openai_model
+
+    try:
         completion = client.chat.completions.create(
-            model=settings.openai_model,
+            model=model,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": _user_prompt(req)},
@@ -130,9 +165,10 @@ def generate_concepts(req: ConceptRequest, settings: Settings) -> ConceptRespons
         )
         content: Optional[str] = completion.choices[0].message.content
         if not content:
+            logger.warning("concept generation returned empty content (provider=%s)", provider)
             return fallback
         payload = json.loads(content)
         return _coerce_response(payload, fallback)
     except Exception as exc:
-        logger.exception("OpenAI concept generation failed: %s", exc)
+        logger.exception("concept generation failed (provider=%s): %s", provider, exc)
         return fallback

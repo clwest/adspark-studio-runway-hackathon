@@ -41,4 +41,13 @@ def health(s: Settings = Depends(get_settings)) -> dict:
         "runway_mock": s.runway_mock,
         "image_gen_mock": s.runway_mock,
         "any_mock": s.openai_mock or s.runway_mock,
+        # PR EH — surface which LLM the concept service is talking to
+        # so the frontend Mode banner can show "🦙 Ollama (local)"
+        # when the operator runs the demo without an OpenAI key.
+        "llm_provider": (s.llm_provider or "openai").strip().lower(),
+        "llm_model": (
+            s.ollama_model
+            if (s.llm_provider or "").strip().lower() == "ollama"
+            else s.openai_model
+        ),
     }

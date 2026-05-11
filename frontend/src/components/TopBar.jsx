@@ -79,6 +79,27 @@ export default function TopBar() {
         </Link>
 
         <div className="flex items-center gap-2">
+          {/* PR EH — LLM provider chip. When the backend is talking
+              to a local Ollama instance the chip flips to a llama
+              emoji + the model name so the operator sees at a
+              glance that no LLM API key was needed. Cloud OpenAI
+              shows just the model id. */}
+          {health?.llm_provider && (
+            <span
+              data-testid="app-shell-llm-chip"
+              data-llm-provider={health.llm_provider}
+              className={
+                'text-[10px] rounded-full px-2 py-0.5 font-mono ring-1 ' +
+                (health.llm_provider === 'ollama'
+                  ? 'bg-violet-500/15 text-violet-200 ring-violet-400/40'
+                  : 'bg-zinc-800 text-zinc-300 ring-zinc-700')
+              }
+              title={`LLM: ${health.llm_provider} · ${health.llm_model || 'unknown model'}`}
+            >
+              {health.llm_provider === 'ollama' ? '🦙 ' : ''}
+              {health.llm_model || health.llm_provider}
+            </span>
+          )}
           <span
             data-testid="app-shell-health-pill"
             data-mock={anyMock ? 'true' : 'false'}

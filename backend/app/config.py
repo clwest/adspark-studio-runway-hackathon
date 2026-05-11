@@ -31,11 +31,27 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     openai_model: str = "gpt-4o-mini"
 
+    # PR EH — local LLM via Ollama. When `llm_provider="ollama"`, the
+    # concept service points the OpenAI-API-compatible client at the
+    # local Ollama server (`/v1/chat/completions` shape, same body).
+    # No API key needed; the client's api_key field is any non-empty
+    # string. Pulling a model first is the operator's responsibility
+    # (`ollama pull llama3.1:8b`).
+    llm_provider: str = "openai"   # "openai" | "ollama"
+    ollama_base_url: str = "http://localhost:11434/v1"
+    ollama_model: str = "llama3.1:8b"
+
     allowed_origins: str = "http://localhost:5173"
     data_dir: str = "./data"
 
     @property
     def openai_mock(self) -> bool:
+        # PR EH — Ollama path bypasses the OpenAI mock gate entirely;
+        # we have a real (local) LLM whether or not OPENAI_API_KEY is
+        # set. The mock fallback still fires if Ollama is unreachable,
+        # but that's handled inside concept_service.
+        if self.llm_provider.strip().lower() == "ollama":
+            return False
         return not self.openai_api_key.strip()
 
     @property
