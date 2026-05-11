@@ -191,6 +191,44 @@ export const api = {
   // as presentCampaign / host-video; the alias exists so the API
   // vocabulary matches the user-facing "talking spokesperson ad"
   // wording. No new files are written.
+  // PR EM-b — Cross-session memory routes. The memory layer
+  // accumulates entries from every registered source (operator
+  // knowledge notes, past realtime transcript summaries, future
+  // external feeds) and composes them into a Runway document body
+  // the realtime session attaches as RAG.
+  listCharacterMemory: (characterId, { campaignId, sourceType } = {}) => {
+    const params = new URLSearchParams()
+    if (campaignId) params.set('campaign_id', campaignId)
+    if (sourceType) params.set('source_type', sourceType)
+    const qs = params.toString()
+    return jsonFetch(
+      `/api/characters/${encodeURIComponent(characterId)}/memory${qs ? '?' + qs : ''}`,
+    )
+  },
+  ingestCharacterMemory: (characterId, { campaignId } = {}) =>
+    jsonFetch(
+      `/api/characters/${encodeURIComponent(characterId)}/memory/ingest`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ campaign_id: campaignId || null }),
+      },
+    ),
+  deleteCharacterMemoryEntry: (characterId, entryId) =>
+    jsonFetch(
+      `/api/characters/${encodeURIComponent(characterId)}/memory/${encodeURIComponent(entryId)}`,
+      { method: 'DELETE' },
+    ),
+  composeCharacterMemory: (characterId, { campaignId, publish = false } = {}) =>
+    jsonFetch(
+      `/api/characters/${encodeURIComponent(characterId)}/memory/compose`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          campaign_id: campaignId || null,
+          publish,
+        }),
+      },
+    ),
   // PR EJ — LLM-driven ad script auto-write. Reads the campaign
   // brief server-side + asks the configured LLM (Ollama or OpenAI
   // per backend settings) to spit out a spoken script. `mode` is

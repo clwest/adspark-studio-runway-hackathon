@@ -21,7 +21,6 @@ implementations; production routes use the defaults.
 from __future__ import annotations
 
 import logging
-from functools import lru_cache
 from typing import Optional
 
 from ...config import Settings
@@ -339,14 +338,23 @@ def _build_default_transcript_source(settings: Settings) -> TranscriptMemorySour
     )
 
 
-@lru_cache(maxsize=1)
-def get_orchestrator(settings: Settings) -> MemoryOrchestrator:
-    """Cached singleton for FastAPI dependency injection. Routes do
-    ``orchestrator = get_orchestrator(get_settings())`` and reuse the
-    same instance across requests.
+# Per-process singleton keyed on data_path. Pydantic Settings is not
+# hashable, so we can't use @lru_cache(Settings) directly; we cache on
+# the resolved data_path string instead. Tests construct
+# orchestrators directly via `build_orchestrator(...)`.
+_ORCHESTRATOR_CACHE: dict[str, MemoryOrchestrator] = {}
 
-    Cache is keyed on the Settings object (hashable via its
-    pydantic-settings shape). Tests that need a fresh orchestrator
-    call ``get_orchestrator.cache_clear()``.
+
+def get_orchestrator(settings: Settings) -> MemoryOrchestrator:
+    """Singleton-ish accessor for FastAPI dependency injection. The
+    returned orchestrator is reused across requests for the same
+    data_path. Inexpensive to construct — fresh callers fall through
+    to ``build_orchestrator``.
     """
-    return build_orchestrator(settings)
+    key = str(settings.data_path)
+    cached = _ORCHESTRATOR_CACHE.get(key)
+    if cached is not None:
+        return cached
+    orch = build_orchestrator(settings)
+    _ORCHESTRATOR_CACHE[key] = orch
+    return orch

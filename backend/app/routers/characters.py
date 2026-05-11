@@ -987,3 +987,254 @@ def delete_knowledge_source(
         character_id, source_id,
     )
     return updated
+
+
+# ---- PR EM-b — Cross-session memory routes ----------------------------
+#
+# Three operator-facing routes on top of the PR EM-a foundation:
+#   - GET    /memory               list current entries
+#   - POST   /memory/ingest        fire every registered source
+#   - DELETE /memory/{entry_id}    operator cleanup
+#   - POST   /memory/compose       compose Markdown body, optionally
+#                                  publish to Runway as a document
+#
+# Routes here are deliberately thin — they just dispatch into
+# `MemoryOrchestrator` (PR EM-a). All the architecture lives in
+# `services/memory/`; the routes are an API skin over it.
+
+
+class MemoryEntryView(BaseModel):
+    """API projection of `MemoryEntry`. Same shape as the model but
+    excludes `embedding` (large, not useful to clients today) so the
+    JSON payloads stay light. Add back when Phase 3 wants to expose
+    embedding diagnostics."""
+
+    id: str
+    character_id: str
+    campaign_id: Optional[str]
+    source_type: str
+    source_id: Optional[str]
+    title: str
+    content: str
+    tags: list[str]
+    metadata: dict
+    created_at: str
+    updated_at: str
+
+
+class MemoryIngestBody(BaseModel):
+    """Optional body for `POST /memory/ingest`. When `campaign_id` is
+    set the orchestrator scopes campaign-only sources (e.g.
+    TranscriptMemorySource which reads the campaign's transcript
+    history) to that campaign."""
+
+    campaign_id: Optional[str] = None
+
+
+class MemoryIngestResponse(BaseModel):
+    added: int
+    per_source: dict
+    errors: list
+
+
+class MemoryListResponse(BaseModel):
+    character_id: str
+    entries: list[MemoryEntryView]
+    total_chars: int
+
+
+class MemoryComposeBody(BaseModel):
+    """Body for `POST /memory/compose`. `publish` defaults to False
+    so dry-run preview is the safe operation; the operator opts in to
+    Runway upload explicitly. `campaign_id` scopes which entries are
+    included (character-wide + campaign-scoped)."""
+
+    campaign_id: Optional[str] = None
+    publish: bool = False
+
+
+class MemoryComposeResponse(BaseModel):
+    character_id: str
+    campaign_id: Optional[str]
+    body: str
+    included_count: int
+    body_chars: int
+    document_id: Optional[str] = None
+    published: bool = False
+    error: Optional[str] = None
+
+
+def _to_view(entry) -> MemoryEntryView:
+    return MemoryEntryView(
+        id=entry.id,
+        character_id=entry.character_id,
+        campaign_id=entry.campaign_id,
+        source_type=entry.source_type,
+        source_id=entry.source_id,
+        title=entry.title,
+        content=entry.content,
+        tags=list(entry.tags or []),
+        metadata=dict(entry.metadata or {}),
+        created_at=entry.created_at,
+        updated_at=entry.updated_at,
+    )
+
+
+@router.get("/{character_id}/memory", response_model=MemoryListResponse)
+def get_character_memory(
+    character_id: str,
+    campaign_id: Optional[str] = None,
+    source_type: Optional[str] = None,
+    settings: Settings = Depends(get_settings),
+    store: CharacterStore = Depends(_store),
+) -> MemoryListResponse:
+    """List the current memory entries for a character. Supports two
+    optional query filters: `campaign_id` (scope to character-wide +
+    matching campaign), `source_type` (filter to one source).
+
+    Returns entries sorted by `updated_at` descending — most recent
+    first. Each entry's char_count contributes to `total_chars` so
+    the UI can show a budget bar against Runway's 50K-token doc cap.
+    """
+    if not store.get(character_id):
+        raise HTTPException(status_code=404, detail="character not found")
+
+    from ..services.memory import get_orchestrator
+    orch = get_orchestrator(settings)
+    entries = orch.store.list(
+        character_id=character_id,
+        campaign_id=campaign_id,
+        source_type=source_type,
+    )
+    return MemoryListResponse(
+        character_id=character_id,
+        entries=[_to_view(e) for e in entries],
+        total_chars=orch.store.total_chars(character_id),
+    )
+
+
+@router.post(
+    "/{character_id}/memory/ingest", response_model=MemoryIngestResponse,
+)
+def post_character_memory_ingest(
+    character_id: str,
+    body: Optional[MemoryIngestBody] = None,
+    settings: Settings = Depends(get_settings),
+    store: CharacterStore = Depends(_store),
+) -> MemoryIngestResponse:
+    """Fire every registered MemorySource for this character.
+
+    Phase 2 default sources (per PR EM-a):
+      - OperatorNoteSource   — mirrors Character.knowledge_sources
+      - TranscriptMemorySource — past realtime transcripts (per-campaign)
+
+    Each source dedups its own entries via `(source_type, source_id)`
+    so this route is safe to call repeatedly; re-ingest of the same
+    upstream record replaces the prior entry, doesn't duplicate.
+    """
+    if not store.get(character_id):
+        raise HTTPException(status_code=404, detail="character not found")
+    from ..services.memory import get_orchestrator
+    orch = get_orchestrator(settings)
+    result = orch.ingest_from_all_sources(
+        character_id,
+        campaign_id=(body.campaign_id if body else None),
+        settings=settings,
+    )
+    logger.info(
+        "memory ingest character=%s campaign=%s added=%d errors=%d",
+        character_id,
+        body.campaign_id if body else None,
+        result["added"],
+        len(result["errors"]),
+    )
+    return MemoryIngestResponse(**result)
+
+
+@router.delete(
+    "/{character_id}/memory/{entry_id}", response_model=dict,
+)
+def delete_character_memory_entry(
+    character_id: str,
+    entry_id: str,
+    settings: Settings = Depends(get_settings),
+    store: CharacterStore = Depends(_store),
+) -> dict:
+    """Operator cleanup. Idempotent — returns `{deleted: false}` when
+    the entry was already gone, matching the campaign delete shape."""
+    if not store.get(character_id):
+        raise HTTPException(status_code=404, detail="character not found")
+    from ..services.memory import get_orchestrator
+    orch = get_orchestrator(settings)
+    deleted = orch.store.delete(entry_id)
+    logger.info(
+        "memory entry deleted character=%s entry=%s deleted=%s",
+        character_id, entry_id, deleted,
+    )
+    return {"deleted": deleted, "entry_id": entry_id}
+
+
+@router.post(
+    "/{character_id}/memory/compose", response_model=MemoryComposeResponse,
+)
+def post_character_memory_compose(
+    character_id: str,
+    body: Optional[MemoryComposeBody] = None,
+    settings: Settings = Depends(get_settings),
+    store: CharacterStore = Depends(_store),
+) -> MemoryComposeResponse:
+    """Compose the accumulated memory into a Runway document body.
+
+    `publish=false` (default): preview-only. Returns the Markdown
+    body the composer produced + how many entries made the cut. No
+    Runway upload, no campaign mutation.
+
+    `publish=true`: also uploads the body to Runway as a document
+    via the existing `documents_client.create_document` (PR AI),
+    returns the new document id. The caller is responsible for
+    attaching that id to the campaign's `runway_document_id` field
+    via the campaigns router — the memory layer stays storage-only
+    and doesn't reach into the campaign store.
+    """
+    record = store.get(character_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="character not found")
+    body = body or MemoryComposeBody()
+    from ..services.memory import get_orchestrator
+    orch = get_orchestrator(settings)
+
+    composed_body, included = orch.compose_document_body(
+        character_id,
+        campaign_id=body.campaign_id,
+        character_label=record.name,
+    )
+    response = MemoryComposeResponse(
+        character_id=character_id,
+        campaign_id=body.campaign_id,
+        body=composed_body,
+        included_count=len(included),
+        body_chars=len(composed_body),
+    )
+
+    if body.publish:
+        from ..services.documents_client import create_document
+        result = create_document(
+            name=f"memory:{character_id}",
+            content=composed_body,
+            settings=settings,
+        )
+        if result.status in {"ready", "mock"} and result.document_id:
+            response.document_id = result.document_id
+            response.published = True
+        else:
+            response.error = result.error or "publish failed"
+        logger.info(
+            "memory compose+publish character=%s status=%s doc_id=%s",
+            character_id, result.status, result.document_id,
+        )
+    else:
+        logger.info(
+            "memory compose preview character=%s included=%d body_chars=%d",
+            character_id, len(included), len(composed_body),
+        )
+    return response

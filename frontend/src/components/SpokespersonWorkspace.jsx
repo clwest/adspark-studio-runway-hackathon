@@ -10,6 +10,7 @@ import {
 import CampaignLanes from './CampaignLanes.jsx'
 import CharacterCard from './CharacterCard.jsx'
 import KnowledgePanel from './KnowledgePanel.jsx'
+import MemoryPanel from './MemoryPanel.jsx'
 import VideosTab from './VideosTab.jsx'
 import RealtimeSpokesperson from './RealtimeSpokesperson.jsx'
 import { ToastProvider } from './Toast.jsx'
@@ -18,6 +19,7 @@ import { SHOW_VIDEOS_EVENT, REFRESH_CAMPAIGNS_EVENT } from '../realtimeTools'
 const TABS = [
   { id: 'identity', label: 'Identity' },
   { id: 'knowledge', label: 'Knowledge' },
+  { id: 'memory', label: 'Memory' },          // PR EM-b
   { id: 'campaigns', label: 'Campaigns' },
   { id: 'conversations', label: 'Conversations' },
   { id: 'outputs', label: 'Videos' },
@@ -712,6 +714,18 @@ export default function SpokespersonWorkspace() {
             )
           }}
         />
+      )}
+
+      {activeTab === 'memory' && (
+        // PR EM-b — Memory tab surfacing the cross-session memory
+        // foundation (PR EM-a). Operator can ingest from every
+        // registered source, preview the composed Markdown body the
+        // realtime session would attach, and publish to Runway as
+        // a document. Separate from Knowledge tab because Knowledge
+        // is operator-authored source data; Memory is the unified
+        // pipeline output (operator notes + transcript summaries +
+        // external feeds, composed into one RAG body).
+        <MemoryPanel character={character} />
       )}
 
       {activeTab === 'campaigns' && (
