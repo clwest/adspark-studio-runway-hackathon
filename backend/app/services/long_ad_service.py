@@ -244,20 +244,61 @@ def _download_chunk(url: str, target: Path, timeout: float = 90.0) -> int:
         raise
 
 
+def build_avatar_video_body(
+    avatar_id: str,
+    *,
+    chunk_text: Optional[str] = None,
+    audio_source: Optional[str] = None,
+) -> dict:
+    """PR DZ — pure body builder for ``POST /v1/avatar_videos``.
+
+    Exactly one of ``chunk_text`` / ``audio_source`` must be set.
+    The ``audio_source`` path is what the PR DY probe validated
+    (42s audio, no truncation) and what PR EA will wire into the
+    Long Ad orchestrator for the single-pass rewrite.
+    """
+    if (chunk_text is None) == (audio_source is None):
+        raise ValueError(
+            "build_avatar_video_body requires exactly one of "
+            "chunk_text or audio_source"
+        )
+    if audio_source is not None:
+        speech_block: dict = {"type": "audio", "audio": audio_source}
+    else:
+        speech_block = {"type": "text", "text": chunk_text}
+    return {
+        "model": _AVATAR_VIDEO_MODEL,
+        "avatar": {"type": "custom", "avatarId": avatar_id},
+        "speech": speech_block,
+    }
+
+
 def _render_chunk_real(
     avatar_id: str,
-    chunk_text: str,
     target: Path,
     settings: Settings,
+    *,
+    chunk_text: Optional[str] = None,
+    audio_source: Optional[str] = None,
 ) -> Optional[str]:
     """Real-mode single-chunk render via avatar_videos. Returns the
     task_id on success; raises RuntimeError on any failure path so
-    the orchestrator can surface a clean error per chunk."""
-    body = {
-        "model": _AVATAR_VIDEO_MODEL,
-        "avatar": {"type": "custom", "avatarId": avatar_id},
-        "speech": {"type": "text", "text": chunk_text},
-    }
+    the orchestrator can surface a clean error per chunk.
+
+    PR DZ — Accepts EITHER ``chunk_text`` (Runway TTSes the text
+    using the avatar's bound voice, 300-char cap applies) OR
+    ``audio_source`` (a ``data:audio/...;base64,…`` data URI or a
+    URL — Runway lip-syncs the avatar to the supplied audio,
+    duration-only gated). Exactly one must be provided. The
+    audio path was validated end-to-end in the PR DY probe at
+    42s/no truncation; PR EA wires it through the orchestrator
+    for the single-pass Long Ad rewrite. Today the orchestrator
+    still calls with ``chunk_text`` — the audio branch is
+    plumbing-only.
+    """
+    body = build_avatar_video_body(
+        avatar_id, chunk_text=chunk_text, audio_source=audio_source,
+    )
     create_url = f"{settings.runway_api_base}/v1/avatar_videos"
     with httpx.Client(timeout=30.0) as client:
         resp = client.post(create_url, headers=_runway_headers(settings), json=body)
@@ -414,7 +455,8 @@ def generate_long_ad(
                 _render_chunk_mock(chunk_text, target, idx)
             else:
                 tid = _render_chunk_real(
-                    avatar_id, chunk_text, target, settings,
+                    avatar_id, target, settings,
+                    chunk_text=chunk_text,
                 )
                 if tid:
                     task_ids.append(tid)

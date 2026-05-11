@@ -1339,6 +1339,48 @@ def test_estimate_runtime():
     assert estimate_runtime([]) == 0.0
 
 
+def test_build_avatar_video_body_text_branch():
+    """PR DZ — text branch produces the historical body shape that
+    avatar_videos has always accepted."""
+    from app.services.long_ad_service import build_avatar_video_body
+
+    body = build_avatar_video_body("avatar-123", chunk_text="hi there")
+    assert body == {
+        "model": "gwm1_avatars",
+        "avatar": {"type": "custom", "avatarId": "avatar-123"},
+        "speech": {"type": "text", "text": "hi there"},
+    }
+
+
+def test_build_avatar_video_body_audio_branch():
+    """PR DZ — audio branch swaps in the speech.type=audio shape the
+    PR DY probe validated end-to-end against Runway (42s audio,
+    no truncation, 200 OK)."""
+    from app.services.long_ad_service import build_avatar_video_body
+
+    data_uri = "data:audio/mpeg;base64,AAAA"
+    body = build_avatar_video_body("avatar-123", audio_source=data_uri)
+    assert body == {
+        "model": "gwm1_avatars",
+        "avatar": {"type": "custom", "avatarId": "avatar-123"},
+        "speech": {"type": "audio", "audio": data_uri},
+    }
+
+
+def test_build_avatar_video_body_rejects_both_branches():
+    """PR DZ — caller must pick exactly one. Passing both is a
+    programmer error, not a runtime fallback."""
+    import pytest
+    from app.services.long_ad_service import build_avatar_video_body
+
+    with pytest.raises(ValueError):
+        build_avatar_video_body(
+            "avatar-123", chunk_text="hi", audio_source="data:audio/mpeg;base64,AA",
+        )
+    with pytest.raises(ValueError):
+        build_avatar_video_body("avatar-123")
+
+
 def test_long_spokesperson_ad_end_to_end(client: TestClient, tmp_path: Path):
     """Mock-mode full pipeline: plan → render chunks → stitch →
     OutputRecord appended → file servable via /output/{id}."""
