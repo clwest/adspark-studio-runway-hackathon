@@ -531,6 +531,7 @@ export default function CampaignLanes({
           onGenerateCinematicVideo={handleGenerateCinematicVideo}
           onUpdateBrief={handleUpdateBrief}
           onCreateCampaign={handleCreateCampaign}
+          focusedCampaign={focusedCampaign}
         />
       )}
       {activeMode === CAMPAIGN_MODES.DIALOGUE && (
@@ -545,6 +546,7 @@ export default function CampaignLanes({
           onSaveDialogueLine={handleSaveDialogueLine}
           onGenerateDialogueLine={handleGenerateDialogueLine}
           availableCharacters={availableCharacters}
+          focusedCampaign={focusedCampaign}
         />
       )}
 

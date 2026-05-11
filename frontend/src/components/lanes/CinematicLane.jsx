@@ -53,14 +53,20 @@ export default function CinematicLane({
   // PR CU — closes the empty-state dead-end. Same handler shape as
   // the spokesperson lane.
   onCreateCampaign = null,
+  // PR EG fix — accept the operator-selected campaign from the
+  // workspace's lifted state. Same fix as DialogueLane: without
+  // this prop the lane silently picked "most recent linked",
+  // which made the workspace's "active" pill disagree with the
+  // brief shown in Step 1.
+  focusedCampaign = null,
 }) {
   const campaigns = Array.isArray(linkedCampaigns) ? linkedCampaigns : []
-  const sorted = [...campaigns].sort((a, b) => {
+  const fallback = [...campaigns].sort((a, b) => {
     const at = String(a.created_at || '')
     const bt = String(b.created_at || '')
     return bt.localeCompare(at)
-  })
-  const focused = sorted[0] || null
+  })[0] || null
+  const focused = focusedCampaign || fallback
   const hasSpokesperson = Boolean(activeSpokesperson)
   const hasCampaign = Boolean(focused)
   const focusedScript = focused?.commercial_script || ''

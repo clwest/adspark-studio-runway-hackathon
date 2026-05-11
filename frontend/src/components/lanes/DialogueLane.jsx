@@ -45,14 +45,27 @@ export default function DialogueLane({
   onSaveDialogueLine = null,
   onGenerateDialogueLine = null,
   availableCharacters = [],
+  // PR EG fix — accept the operator-selected campaign from the
+  // workspace's lifted state (PR DA pattern, already wired in
+  // SpokespersonLane). Without this prop the lane silently
+  // ignored which campaign the operator clicked in the
+  // workspace list and just defaulted to the most-recent
+  // campaign — which made the "active" pill in the list
+  // disagree with the brief shown in Step 1.
+  focusedCampaign = null,
 }) {
   const campaigns = Array.isArray(linkedCampaigns) ? linkedCampaigns : []
-  const sorted = [...campaigns].sort((a, b) => {
+  // PR EG fix — prefer the lifted `focusedCampaign` from the
+  // workspace; fall back to "most recent linked" only when the
+  // workspace hasn't selected one yet (e.g., on first mount
+  // before the auto-select-newest effect runs). Keeps backwards
+  // compatibility for any caller that doesn't pass the prop.
+  const fallback = [...campaigns].sort((a, b) => {
     const at = String(a.created_at || '')
     const bt = String(b.created_at || '')
     return bt.localeCompare(at)
-  })
-  const focused = sorted[0] || null
+  })[0] || null
+  const focused = focusedCampaign || fallback
   const hasSpokesperson = Boolean(activeSpokesperson)
   const hasCampaign = Boolean(focused)
   const lines = Array.isArray(focused?.dialogue_lines)
