@@ -343,12 +343,31 @@ DEFAULT_REALTIME_TOOLS: list[dict] = [
         "name": "render_spokesperson_ad",
         "description": (
             "Render a NEW Spokesperson Ad video using the campaign's "
-            "current avatar. Call ONLY when the operator explicitly "
-            "asks to render / make / produce / create a new ad and "
-            "provides (or has just provided) a script. Pass the "
-            "spoken script as `script`. The render is asynchronous "
-            "— after invoking, tell the operator it's rendering and "
-            "approximately how long it will take (~30-45 seconds)."
+            "current avatar when the operator HAS GIVEN YOU A SCRIPT "
+            "VERBATIM. Pass the operator's spoken script as `script`. "
+            "Do NOT call this if the operator gave you a topic or "
+            "high-level brief (use auto_write_and_render_ad instead). "
+            "The render is asynchronous — after invoking, tell the "
+            "operator it's rendering and approximately how long it "
+            "will take (~30-45 seconds)."
+        ),
+    },
+    {
+        "name": "auto_write_and_render_ad",
+        "description": (
+            "Call when the operator gives you a TOPIC, ANGLE, or HIGH-"
+            "LEVEL BRIEF for an ad — NOT a verbatim script. Examples: "
+            "'make an ad explaining Character OS to Runway judges', "
+            "'create something punchy for indie founders', 'render an "
+            "ad about our growth strategy'. Pass the operator's brief "
+            "as `prompt` (free-form text). The frontend will: "
+            "(1) ask the local LLM to write a spoken ad script from "
+            "the operator's prompt + the campaign brief, then (2) "
+            "render a Spokesperson Ad video from that script. Total "
+            "time is ~45-60 seconds — TELL THE OPERATOR THE LLM IS "
+            "DRAFTING FIRST, THEN THE AVATAR IS RENDERING, so the "
+            "wait doesn't feel frozen. Mention you'll narrate progress "
+            "as it lands."
         ),
     },
     {

@@ -25,6 +25,7 @@ import { api } from './api'
 export const REALTIME_TOOL_NAMES = Object.freeze({
   RECALL_KNOWLEDGE: 'recall_knowledge',
   RENDER_SPOKESPERSON_AD: 'render_spokesperson_ad',
+  AUTO_WRITE_AND_RENDER_AD: 'auto_write_and_render_ad',
   SHOW_VIDEOS_TAB: 'show_videos_tab',
 })
 
@@ -121,6 +122,82 @@ export async function dispatchRealtimeToolEvent(event, deps) {
       } catch (err) {
         const msg = err?.message ? String(err.message) : 'unknown error'
         announce?.(`Spokesperson Ad render failed: ${msg}`, 'error')
+      }
+      return
+    }
+
+    case REALTIME_TOOL_NAMES.AUTO_WRITE_AND_RENDER_AD: {
+      // PR EK — Demo-stopper flow: operator gives the avatar a
+      // free-form prompt; this chains the LLM + Runway calls. Two
+      // toasts narrate the progression so the ~45-60s wait doesn't
+      // feel frozen. Each stage is independently catchable so a
+      // failure surfaces *which* stage broke (Llama vs Runway).
+      const prompt = String((args && args.prompt) || '').trim()
+      if (!campaign?.id) {
+        announce?.('Could not run — no active campaign.', 'error')
+        return
+      }
+      if (!prompt) {
+        announce?.(
+          'Avatar invoked auto-write-and-render with no prompt — ignoring.',
+          'error',
+        )
+        return
+      }
+      announce?.(
+        `🤖 Llama is drafting an ad about "${prompt.slice(0, 60)}${
+          prompt.length > 60 ? '…' : ''
+        }". ~8 seconds.`,
+        'info',
+      )
+      let writtenScript = ''
+      try {
+        const result = await api.autoWriteAdScript(campaign.id, {
+          mode: 'short',
+          spin: prompt,
+        })
+        writtenScript = String((result && result.script) || '').trim()
+        if (!writtenScript) {
+          announce?.(
+            'Llama returned an empty script — try again with a clearer prompt.',
+            'error',
+          )
+          return
+        }
+        announce?.(
+          `✍️ Script ready (${writtenScript.length} chars). Sending to ` +
+            `${character?.name || 'avatar'} now…`,
+          'success',
+        )
+      } catch (err) {
+        const msg = err?.message ? String(err.message) : 'unknown error'
+        announce?.(`Llama drafting failed: ${msg}`, 'error')
+        return
+      }
+      announce?.(
+        `🎬 Rendering Spokesperson Ad with ${
+          character?.name || 'the avatar'
+        }… ~30-45 seconds.`,
+        'info',
+      )
+      try {
+        await api.generateSpokespersonAd(campaign.id, {
+          script_override: writtenScript,
+        })
+        announce?.(
+          '✅ Auto-written ad rendered — see Videos tab.',
+          'success',
+        )
+        window.dispatchEvent(new CustomEvent(REFRESH_CAMPAIGNS_EVENT))
+        window.dispatchEvent(new CustomEvent(SHOW_VIDEOS_EVENT))
+      } catch (err) {
+        const msg = err?.message ? String(err.message) : 'unknown error'
+        announce?.(
+          `Render failed (script was: "${writtenScript.slice(0, 60)}${
+            writtenScript.length > 60 ? '…' : ''
+          }"): ${msg}`,
+          'error',
+        )
       }
       return
     }
