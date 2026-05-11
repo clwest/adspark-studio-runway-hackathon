@@ -1,8 +1,30 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after **PR DM — Extend Dialogue Scene Without
-Losing Existing Lines**. PR DL bumped the default to 6 but the
+context-kit refresh after **PR DN — Submission Demo Content
+Seeder**. Brief landed labeled "PR DM" but DM was already taken;
+shipped under DN to keep the PR ledger clean. Pure content-seeding
+slice. New `scripts/seed-submission-demo-content.py` (~430 LoC)
+locates Donny / Riggs / Miles by name + idempotently writes one
+knowledge source, one campaign, and one ad variant per
+spokesperson via the existing local-only routes (`/knowledge`,
+`/campaigns`, `/attach-character`, `/ad-variant`). Idempotency
+keys: knowledge by `title`, campaign by `business`, variant by
+`title` — re-runs print `skipped · id=...` for every slot.
+`--dry-run` flag prints would-create decisions without writing.
+All three variant scripts fit under the 300-char `avatar_videos`
+cap (guard raises if a future edit overflows). New
+`docs/SUBMISSION_VIDEO_PLAN.md` codifies the 7-step submission
+recording flow + a known-risks table + camera/audio sanity
+checklist. First run created 9 items (3 knowledge + 3 campaigns +
+3 variants) on the live backend; second run reported 9/9 skipped
+with stable ids. Captured campaign + variant ids: Donny
+`0a52aef38809` / `c46edda30a3a`; Riggs `09e09a0b3129` /
+`6f9523c88828`; Miles `9d4e15683704` / `4bd361ca989a`. Backend
+pytest 44/44 (unchanged — repo-root additions only). Backend route
+count still **76**. Zero Runway calls fired.
+Earlier: PR DM — Extend Dialogue Scene Without Losing Existing
+Lines. PR DL bumped the default to 6 but the
 plan route was still destructive (wipe + reseed), so campaigns
 that had a 3-line scene planned before PR DL couldn't grow without
 losing existing work. PR DM adds an opt-in **extend** mode: new

@@ -1,6 +1,65 @@
 # START NEXT SESSION — AdSpark Studio
 
-**Last touched:** 2026-05-10 (PR DM — Extend dialogue
+**Last touched:** 2026-05-10 (PR DN — Seed submission
+demo content for Character OS. Brief came in labeled
+"PR DM" but the DM letter was already taken by the
+dialogue-extend slice committed at `2280117`; shipping
+this under the next free letter **DN** to keep the PR
+ledger collision-free. Pure content-seeding slice;
+zero app-feature changes; only two new files added
+to the repo. New
+`scripts/seed-submission-demo-content.py` (~430 LoC)
+is an idempotent seeder that locates the three
+hackathon spokespeople by name (Donny Sparks / Riggs
+Rally / Miles Monroe) via `GET /api/characters`, then
+for each one POSTs a knowledge source via
+`/api/characters/{id}/knowledge`, a campaign via
+`/api/campaigns` + `/api/campaigns/{id}/attach-character`,
+and an ad variant via `/api/campaigns/{id}/ad-variant`.
+Idempotency keys: knowledge by `title` (case-
+sensitive), campaign by `business`, variant by
+`title`. Re-runs print `skipped · id=...` for every
+slot so the operator can verify no duplicates landed.
+CLI: `--base-url` + `--dry-run` (prints
+would-create / skip decisions without writing).
+Submission narrative locked: Donny = creative
+campaign lead / product hype; Riggs = chaotic
+builder / dev workflow / context-kit explainer;
+Miles = business strategist / value proposition.
+Each ad variant script fits under the 300-char
+`avatar_videos` cap (script has a `SCRIPT_MAX_CHARS`
+guard that raises on overflow). First run on the live
+real-mode backend created **9 items** (3 knowledge
+sources + 3 campaigns + 3 variants); second run
+reported 9/9 skipped with stable ids. Campaign + variant
+ids captured: Donny → campaign `0a52aef38809`,
+variant `c46edda30a3a`; Riggs → campaign
+`09e09a0b3129`, variant `6f9523c88828`; Miles →
+campaign `9d4e15683704`, variant `4bd361ca989a`. New
+`docs/SUBMISSION_VIDEO_PLAN.md` — 7-step recording
+flow: (1) cold open with the 6-line Hackathon Office
+Scene Dialogue; (2) Donny spokesperson ad — creative
+angle; (3) Riggs spokesperson ad — build story /
+context-kit explanation; (4) Miles spokesperson ad —
+business value; (5) create a new spokesperson live to
+demonstrate flexibility; (6) one realtime grounded
+question to Donny ("Are Character OS and context-kit
+the same thing?") OR one short realtime question per
+spokesperson; (7) end on the Videos + Conversations
+sub-tabs showing saved media + transcripts. Plan
+includes camera/audio sanity checklist (defers to
+`docs/DEMO_CHECKLIST.md` §0) + a known-risks table
+covering Runway flakes, realtime stalls, 5-min cap,
+dialogue stitch wall time, and portrait failure on
+the live-created spokesperson. Backend pytest **44/44**
+(unchanged — script + doc are repo-root additions, no
+app code touched). Drift OK. Hygiene clean. Backend
+route count still **76**. Zero Runway calls fired by
+this PR — the seeded campaigns + variants are pure
+text fixtures; the operator still clicks Render in
+the workspace per their credit budget. PR letter
+note: brief said DM but committed as DN to avoid
+collision with already-shipped DM. Earlier: PR DM — Extend dialogue
 scene without losing existing lines. Operator
 complaint after PR DL shipped: campaigns that had a
 3-line scene planned **before** PR DL bumped the
