@@ -984,9 +984,9 @@ def test_grounding_document_carries_pr_dg_approved_phrasings():
 
 
 def _plan_and_render_dialogue(client: TestClient, campaign_id: str, char_id: str):
-    """Helper: plan three dialogue lines, save each with the same
-    character + a unique text, render each, return the resulting
-    Campaign dict.
+    """Helper: plan N dialogue lines (N = backend default; PR DL =
+    6), save each with the same character + a unique text, render
+    each, return the resulting Campaign dict.
 
     Requires the character to have a ready Runway avatar at the
     LIBRARY level (not just a campaign-level host avatar) — the plan
@@ -994,16 +994,18 @@ def _plan_and_render_dialogue(client: TestClient, campaign_id: str, char_id: str
     the character-level avatar before planning so the route accepts
     the character as a valid speaker.
     """
+    from app.services.dialogue_service import _DEFAULT_LINE_COUNT
+
     r = client.post(f"/api/characters/{char_id}/create-avatar", json={})
     assert r.status_code == 200, r.text
-    # Plan — backend seeds three idle lines, auto-assigns the
-    # character now that it has a ready avatar.
+    # Plan — backend seeds N idle lines, auto-assigns the character
+    # now that it has a ready avatar.
     r = client.post(f"/api/campaigns/{campaign_id}/dialogue/plan", json={})
     assert r.status_code == 200, r.text
     lines = r.json()["dialogue_lines"]
-    assert len(lines) == 3
+    assert len(lines) == _DEFAULT_LINE_COUNT
     # Save each line with character + text; resets status to idle.
-    line_texts = ["Hook line text.", "Beat line text.", "Closer line text."]
+    line_texts = [f"Line {i + 1} text." for i in range(_DEFAULT_LINE_COUNT)]
     for line, text in zip(lines, line_texts):
         r = client.post(
             f"/api/campaigns/{campaign_id}/dialogue/line/{line['id']}",
@@ -1032,9 +1034,12 @@ def _plan_and_render_dialogue(client: TestClient, campaign_id: str, char_id: str
 
 
 def test_dialogue_stitch_appends_output_record(client: TestClient, tmp_path: Path):
-    """Stitching three dialogue lines must append an OutputRecord
-    with kind="dialogue_scene", cast_names, line_count. Re-stitching
-    must append a second record (append-only, no overwrite)."""
+    """Stitching N dialogue lines must append an OutputRecord with
+    kind="dialogue_scene", cast_names, line_count. Re-stitching must
+    append a second record (append-only, no overwrite). N tracks
+    dialogue_service._DEFAULT_LINE_COUNT (PR DL = 6)."""
+    from app.services.dialogue_service import _DEFAULT_LINE_COUNT
+
     char = _create_character(client, name="Donny Test")
     _generate_portrait(client, char["id"])
     cid = _create_campaign_with_avatar(client, char["id"])
@@ -1050,10 +1055,11 @@ def test_dialogue_stitch_appends_output_record(client: TestClient, tmp_path: Pat
     assert out["kind"] == "dialogue_scene"
     assert out["video_url"] == f"/api/campaigns/{cid}/output/{out['id']}"
     assert out["cache_filename"]
-    # Cast metadata captured (all three lines used the same character,
-    # so cast_names contains one unique entry).
+    # Cast metadata captured. The _plan_and_render_dialogue helper
+    # saves every line against the same single character, so
+    # cast_names contains exactly one unique entry regardless of N.
     assert out["cast_names"] == ["Donny Test"]
-    assert out["line_count"] == 3
+    assert out["line_count"] == _DEFAULT_LINE_COUNT
     assert out["parent_output_id"] is None
 
     # File served via /output/{id}
@@ -1102,14 +1108,19 @@ def test_dialogue_reels_appends_output_record_with_parent(client: TestClient):
     reels_out = body["outputs"][0]  # newest-first
     assert reels_out["kind"] == "dialogue_scene_reels"
     assert reels_out["parent_output_id"] == stitch_out["id"]
+    from app.services.dialogue_service import _DEFAULT_LINE_COUNT
+
     assert reels_out["cast_names"] == ["Riggs Test"]
-    assert reels_out["line_count"] == 3
+    assert reels_out["line_count"] == _DEFAULT_LINE_COUNT
 
 
 def test_dialogue_metadata_dedup_cast_in_order(client: TestClient):
-    """Cast names dedup in line-appearance order. A Donny→Riggs→Donny
-    pattern surfaces as ["Donny", "Riggs"] (not ["Donny", "Riggs",
-    "Donny"] and not alphabetised)."""
+    """Cast names dedup in line-appearance order. A Donny→Riggs→Donny→…
+    pattern surfaces as ["Donny", "Riggs"] regardless of scene
+    length (not alphabetised, not duplicated when the same speaker
+    re-appears later in the rotation)."""
+    from app.services.dialogue_service import _DEFAULT_LINE_COUNT
+
     donny = _create_character(client, name="Donny Multi")
     _generate_portrait(client, donny["id"])
     riggs = _create_character(client, name="Riggs Multi")
@@ -1121,11 +1132,17 @@ def test_dialogue_metadata_dedup_cast_in_order(client: TestClient):
     client.post(f"/api/characters/{donny['id']}/create-avatar", json={})
     client.post(f"/api/characters/{riggs['id']}/create-avatar", json={})
 
-    # Plan three lines, then save with Donny / Riggs / Donny pattern.
+    # Plan N lines, then save with an alternating Donny / Riggs pattern.
+    # Donny lands first, Riggs second, then they cycle — dedup must
+    # still produce ["Donny", "Riggs"] (no trailing repeats).
     r = client.post(f"/api/campaigns/{cid}/dialogue/plan", json={})
     assert r.status_code == 200, r.text
     lines = r.json()["dialogue_lines"]
-    speakers = [donny["id"], riggs["id"], donny["id"]]
+    assert len(lines) == _DEFAULT_LINE_COUNT
+    speakers = [
+        (donny if i % 2 == 0 else riggs)["id"]
+        for i in range(_DEFAULT_LINE_COUNT)
+    ]
     for line, speaker_id in zip(lines, speakers):
         r = client.post(
             f"/api/campaigns/{cid}/dialogue/line/{line['id']}",
@@ -1144,6 +1161,96 @@ def test_dialogue_metadata_dedup_cast_in_order(client: TestClient):
     assert r.status_code == 200, r.text
     out = r.json()["outputs"][0]
     # Donny appears first, then Riggs. Dedup keeps the first
-    # appearance only — the trailing Donny does NOT re-enter.
+    # appearance only — every later Donny/Riggs lap through the
+    # rotation does NOT re-enter cast_names.
     assert out["cast_names"] == ["Donny Multi", "Riggs Multi"]
-    assert out["line_count"] == 3
+    assert out["line_count"] == _DEFAULT_LINE_COUNT
+
+
+# ---- PR DL — 6-line default + A/B/C speaker rotation -----------
+
+
+def test_dialogue_plan_seeds_six_lines_with_expected_labels(client: TestClient):
+    """Plan route seeds N=_DEFAULT_LINE_COUNT lines whose ids are
+    line-1..line-N. Per-line text comes from the deterministic
+    `_default_line_text` template; the test asserts the structural
+    contract (length + ids) without coupling to the prose strings
+    (those are operator-editable starting points)."""
+    from app.services.dialogue_service import (
+        _DEFAULT_LINE_COUNT,
+        _DEFAULT_LINE_LABELS,
+    )
+
+    # Sanity: the const + the labels tuple must stay in lockstep —
+    # the assert in the module already enforces it at import time
+    # but we re-check here so a future edit to one without the
+    # other trips this test directly.
+    assert len(_DEFAULT_LINE_LABELS) == _DEFAULT_LINE_COUNT
+    assert _DEFAULT_LINE_COUNT == 6
+    assert _DEFAULT_LINE_LABELS == (
+        "Hook", "Setup", "Beat 1", "Beat 2", "Twist", "Closer",
+    )
+
+    char = _create_character(client, name="Solo Speaker")
+    _generate_portrait(client, char["id"])
+    cid = _create_campaign_with_avatar(client, char["id"])
+    client.post(f"/api/characters/{char['id']}/create-avatar", json={})
+
+    r = client.post(f"/api/campaigns/{cid}/dialogue/plan", json={})
+    assert r.status_code == 200, r.text
+    lines = r.json()["dialogue_lines"]
+    assert len(lines) == _DEFAULT_LINE_COUNT
+    for i, line in enumerate(lines, start=1):
+        assert line["id"] == f"line-{i}"
+        # Each seeded line has non-empty text — even when no
+        # commercial_script exists, _default_line_text returns the
+        # office-style fallback per label.
+        assert line["text"], f"line {line['id']} should have seeded text"
+        # All lines should be assigned the same speaker when only
+        # one character is ready (monologue fallback).
+        assert line["character_id"] == char["id"]
+
+
+def test_dialogue_plan_rotates_three_speakers_a_b_c(client: TestClient):
+    """PR DL — when 3+ ready characters exist, the plan seeds the
+    speaker rotation as A/B/C/A/B/C across the 6 lines. Validates
+    the new cast-of-up-to-3 logic without relying on any specific
+    character.template / personality / voice_preset shape — just
+    the cycle pattern."""
+    a = _create_character(client, name="Speaker A")
+    _generate_portrait(client, a["id"])
+    b = _create_character(client, name="Speaker B")
+    _generate_portrait(client, b["id"])
+    c = _create_character(client, name="Speaker C")
+    _generate_portrait(client, c["id"])
+
+    cid = _create_campaign_with_avatar(client, a["id"])
+    client.post(f"/api/characters/{a['id']}/create-avatar", json={})
+    client.post(f"/api/characters/{b['id']}/create-avatar", json={})
+    client.post(f"/api/characters/{c['id']}/create-avatar", json={})
+
+    r = client.post(f"/api/campaigns/{cid}/dialogue/plan", json={})
+    assert r.status_code == 200, r.text
+    lines = r.json()["dialogue_lines"]
+    assert len(lines) == 6
+    # A is the campaign-attached character (`_create_campaign_with_avatar`
+    # attaches the first arg) so it's the primary. B + C come from
+    # the rest of the ready pool. The order of B vs C inside the
+    # remaining ready list is not stable (filesystem mtime), so we
+    # only assert: (i) the rotation cycles a fixed cast of 3 every
+    # 3 lines and (ii) line 1 == primary == A.
+    cast = [
+        lines[0]["character_id"],
+        lines[1]["character_id"],
+        lines[2]["character_id"],
+    ]
+    assert lines[0]["character_id"] == a["id"], "primary lands at line 1"
+    assert len(set(cast)) == 3, (
+        f"first three lines should each have a distinct speaker, got {cast}"
+    )
+    # Lines 4-6 must repeat the same cast in the same order.
+    for i, expected in enumerate(cast, start=3):
+        assert lines[i]["character_id"] == expected, (
+            f"line {i + 1} should reuse cast[{i - 3}] ({expected}), "
+            f"got {lines[i]['character_id']}"
+        )

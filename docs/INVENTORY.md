@@ -1,7 +1,28 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after **PR DK — Conversations Sub-Tab**. Pure
+context-kit refresh after **PR DL — Dialogue Scene Default Bumped
+to 6 Lines**. `dialogue_service._DEFAULT_LINE_COUNT` was 3 with
+labels `Hook / Beat / Closer` and an A/B/A speaker rotation. PR DL
+bumps to **6** with labels `Hook / Setup / Beat 1 / Beat 2 / Twist
+/ Closer` and a cast-of-up-to-3 rotation that cycles
+`cast[i % len(cast)]` across the lines — A/B/C/A/B/C with three
+ready characters, A/B/A/B/A/B with two, monologue with one. Module-
+level `assert` locks the constant + labels tuple in lockstep so a
+future bump touches one anchor. `_default_line_text` extended with
+fallback prose for Setup / Beat 1 / Beat 2 / Twist so a freshly-
+planned scene still seeds 6 readable lines. `HACKATHON_DEMO_LINES`
+in `DialogueLane.jsx` extended to 6 entries (user-spec Donny →
+Riggs → Miles, twice through). Demo preset banner copy updated.
+Stitch disabled-reason already dynamic via `lineCount` so it shows
+`(N/6 rendered)` automatically. Existing PR DJ pytests rewired to
+read `_DEFAULT_LINE_COUNT` from the module instead of hard-coding
+3; two new pytests pin the 6-line + 3-speaker rotation contract.
+Pytest **41/41**. Mock dialogue probe confirmed 6 lines with
+A/B/C/A/B/C rotation end-to-end. Vite build 543.46 KB initial /
+145.98 KB gzip. Backend route count still **76**. Zero Runway calls
+fired.
+Earlier: PR DK — Conversations Sub-Tab. Pure
 UI organization pass; zero backend changes; reuses PR AJ
 transcript persistence on every Campaign. The Videos tab (renamed
 from Outputs in PR DJ) now wraps a new `<VideosTab>` with a two-

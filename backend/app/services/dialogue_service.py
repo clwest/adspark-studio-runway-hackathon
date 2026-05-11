@@ -45,7 +45,23 @@ _MAX_LINE_BYTES = 100 * 1024 * 1024
 _MAX_LINE_CHARS = 300
 _POLL_INTERVAL = 5.0
 _POLL_DEADLINE = 360.0
-_DEFAULT_LINE_COUNT = 3
+# PR DL — six-line scene default. The original 3-line default
+# (Hook / Beat / Closer) was tight enough that office-style skits
+# felt clipped; 6 lines (Hook / Setup / Beat 1 / Beat 2 / Twist /
+# Closer) gives room for a proper back-and-forth between three
+# spokespeople. Stitch + per-line generate paths are length-agnostic;
+# the constant + the labels + the speaker rotation are the only
+# moving parts.
+_DEFAULT_LINE_COUNT = 6
+_DEFAULT_LINE_LABELS: tuple[str, ...] = (
+    "Hook",
+    "Setup",
+    "Beat 1",
+    "Beat 2",
+    "Twist",
+    "Closer",
+)
+assert len(_DEFAULT_LINE_LABELS) == _DEFAULT_LINE_COUNT
 
 
 # ---- result dataclass -----------------------------------------------
@@ -166,6 +182,12 @@ def _truncate_line(text: str, limit: int = _MAX_LINE_CHARS) -> str:
 def _default_line_text(campaign: Campaign, label: str, beat: str) -> str:
     """Office-style template per beat. Used when no script-derived
     sentence is available for a beat or the script is too short.
+
+    PR DL — extended for 6-line scenes. The fallback strings stay
+    silly + brand-aware so an operator who hasn't authored lines yet
+    still ends up with a renderable skit that hints at the next
+    edits. Label mapping intentionally tolerant: any unknown beat
+    label falls through to the generic Beat copy.
     """
     biz = (campaign.business or "this brand").strip()
     product = (campaign.product or biz).strip()
@@ -174,12 +196,27 @@ def _default_line_text(campaign: Campaign, label: str, beat: str) -> str:
             beat
             or f"We built {product} at 3AM because sleep started asking too many questions."
         )
-    if label == "Beat":
+    if label == "Setup":
+        return _truncate_line(
+            beat
+            or f"Long story short: {biz} needed a spokesperson. We brought three."
+        )
+    if label in ("Beat", "Beat 1"):
         return _truncate_line(
             beat
             or f"That explains the budget spreadsheet labeled vibes."
         )
-    # Closer
+    if label == "Beat 2":
+        return _truncate_line(
+            beat
+            or f"Also the calendar invite titled 'urgent fun'."
+        )
+    if label == "Twist":
+        return _truncate_line(
+            beat
+            or f"Then somebody asked who actually owns the brand voice."
+        )
+    # Closer (and any unknown label)
     return _truncate_line(
         beat
         or f"Drink smarter. Build harder. Tell {biz} we sent you."
@@ -189,10 +226,18 @@ def _default_line_text(campaign: Campaign, label: str, beat: str) -> str:
 def plan_lines(
     campaign: Campaign, settings: Settings,
 ) -> tuple[list[DialogueLine], Optional[str]]:
-    """Build the deterministic 3-line dialogue plan from the saved
-    campaign + attached character + a second ready character (if any).
-    Returns ``(lines, error_message)``. ``error_message`` is non-None
-    when the campaign has no usable characters at all (caller emits 409).
+    """Build the deterministic dialogue plan from the saved campaign
+    + attached character + up to two more ready characters. Returns
+    ``(lines, error_message)``. ``error_message`` is non-None when
+    the campaign has no usable characters at all (caller emits 409).
+
+    PR DL — scene length is ``_DEFAULT_LINE_COUNT`` (6 today).
+    Speaker rotation walks a small cast of up to 3 distinct ready
+    characters and cycles A → B → C → A → B → C across the labels;
+    with two ready characters it degrades to A/B/A/B/A/B, with one
+    it degrades to a monologue (all primary). The plan is purely a
+    starting point — operators reshape every line + speaker in
+    Step 3 of the lane.
     """
     ready = _ready_characters(settings)
     if not ready:
@@ -202,23 +247,35 @@ def plan_lines(
             "Studio), then re-plan the dialogue scene."
         )
 
+    # Cast: primary first (campaign-attached character if any, else
+    # the first ready character), then up to 2 more distinct ready
+    # characters. Capped at 3 so the A/B/C rotation across N lines
+    # stays predictable.
     primary = _attached_character(campaign, settings) or ready[0]
-    # Pick a different character for the middle beat; fall back to the
-    # primary if only one character is ready (V1 still works — the user
-    # gets a one-character monologue split into 3 lines).
-    secondary = next(
-        (c for c in ready if c["id"] != primary["id"]),
-        primary,
+    cast: list[dict] = [primary]
+    seen_ids = {primary["id"]}
+    for c in ready:
+        if c["id"] in seen_ids:
+            continue
+        cast.append(c)
+        seen_ids.add(c["id"])
+        if len(cast) >= 3:
+            break
+
+    speakers = tuple(
+        cast[i % len(cast)] for i in range(_DEFAULT_LINE_COUNT)
     )
 
-    beats = _split_script_sentences(campaign.commercial_script or "", _DEFAULT_LINE_COUNT)
+    beats = _split_script_sentences(
+        campaign.commercial_script or "", _DEFAULT_LINE_COUNT,
+    )
     while len(beats) < _DEFAULT_LINE_COUNT:
         beats.append("")
 
-    labels = ("Hook", "Beat", "Closer")
-    speakers = (primary, secondary, primary)
     lines: list[DialogueLine] = []
-    for idx, (label, speaker, beat) in enumerate(zip(labels, speakers, beats), start=1):
+    for idx, (label, speaker, beat) in enumerate(
+        zip(_DEFAULT_LINE_LABELS, speakers, beats), start=1,
+    ):
         line_id = f"line-{idx}"
         text = _default_line_text(campaign, label, beat)
         lines.append(

@@ -834,14 +834,31 @@ const HACKATHON_DEMO_LINES = [
       'The result is Character OS: persistent AI spokespeople that learn ' +
       'the brand, create campaigns, and show up again.',
   },
+  // PR DL — backend bumped to 6 lines (Hook / Setup / Beat 1 / Beat 2
+  // / Twist / Closer). Demo preset extends with three more lines so
+  // the office-style skit reads as a full A/B/C/A/B/C exchange.
+  {
+    slot: 3,
+    speaker: 'Donny',
+    text:
+      'And somehow, we also got videos, conversations, dialogue scenes, ' +
+      'and a media library out of it.',
+  },
+  {
+    slot: 4,
+    speaker: 'Riggs',
+    text:
+      'I’m still not convinced the raccoon was supposed to be in charge ' +
+      'of quality assurance.',
+  },
+  {
+    slot: 5,
+    speaker: 'Miles',
+    text:
+      'That’s the point. Character OS turns brand characters into ' +
+      'reusable creative infrastructure.',
+  },
 ]
-
-// Backend constraint: dialogue_service._DEFAULT_LINE_COUNT = 3 with
-// labels Hook/Beat/Closer. The PR DH brief listed a fourth Donny
-// closer ("So yes, we are the demo. And apparently also the dev
-// team."); that line is unused at the UI layer until a follow-up PR
-// bumps the backend line count. Kept here as a reference comment so
-// the demo copy isn't lost.
 
 function findCharByName(chars, name) {
   const target = String(name || '').trim().toLowerCase()
@@ -959,9 +976,9 @@ function DialogueDemoPreset({
     >
       <p className="text-[10px] text-amber-200 leading-snug">
         <span className="font-semibold">Hackathon Office Scene</span>{' '}
-        — drops in the three-line office-style skit (Donny → Riggs →
-        Miles) and auto-assigns speakers. Backend caps a scene at 3
-        lines; rendering each line still burns one Runway credit.
+        — drops in the six-line office-style skit (Donny → Riggs →
+        Miles, twice through) and auto-assigns speakers. Each
+        rendered line still burns one Runway credit.
       </p>
       <div className="flex items-center gap-2 flex-wrap">
         <button

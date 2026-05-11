@@ -1,6 +1,59 @@
 # START NEXT SESSION — AdSpark Studio
 
-**Last touched:** 2026-05-10 (PR DK — Add
+**Last touched:** 2026-05-10 (PR DL — Bump Dialogue
+Scene default from 3 lines to 6. Tight, targeted slice
+following the audit at the end of PR DK: the 3-line
+default lived as a single backend constant
+(`dialogue_service._DEFAULT_LINE_COUNT = 3`) plus a
+3-tuple of labels (`Hook / Beat / Closer`) plus a
+3-tuple speaker rotation (`primary, secondary,
+primary`). ffmpeg concat + per-line generate + the
+storage helpers are all length-agnostic, so the bump
+is small. New shape: **`_DEFAULT_LINE_COUNT = 6`**,
+labels = `("Hook", "Setup", "Beat 1", "Beat 2",
+"Twist", "Closer")` (assert at module level locks the
+two in sync), speaker rotation = build a cast of up to
+3 distinct ready characters then cycle
+`cast[i % len(cast)]` across the N lines. With 3+
+ready characters that's A/B/C/A/B/C; with 2 it
+degrades to A/B/A/B/A/B; with 1 it stays a monologue.
+`_default_line_text` extended with new fallback prose
+for Setup / Beat 1 / Beat 2 / Twist (Hook + Closer
+unchanged) so a freshly-planned scene still seeds 6
+readable starting points. `HACKATHON_DEMO_LINES` in
+`DialogueLane.jsx` extended to 6 entries with the
+user-spec Donny → Riggs → Miles, twice through skit;
+the demo preset banner copy updated from "three-line"
+to "six-line" + Donny → Riggs → Miles "twice
+through". Stitch disabled-reason copy was already
+dynamic from `lineCount` (PR DH) so it shows `(N/6
+rendered)` automatically. Three existing dialogue
+pytests (PR DJ) updated to read `_DEFAULT_LINE_COUNT`
+from `dialogue_service` rather than hard-coding 3 —
+they assert the contract against whatever the module
+const is, so future bumps don't break the tests. Two
+new pytests pin PR DL specifically:
+`test_dialogue_plan_seeds_six_lines_with_expected_labels`
+asserts the const + labels tuple stays in lockstep
+and the plan route seeds exactly 6 lines with line-
+1..line-6 ids when only one cast member exists
+(monologue fallback);
+`test_dialogue_plan_rotates_three_speakers_a_b_c`
+plans against 3 ready characters and asserts the
+first three lines have three distinct speakers AND
+lines 4-6 repeat that same cast in the same order
+(true A/B/C/A/B/C). Pytest **41/41** (39 prior + 2
+new PR DL). Mock dialogue probe end-to-end confirmed
+6 lines, A/B/C rotation across the seeded cast, new
+Setup/Beat 1/Beat 2/Twist fallback prose all firing.
+Vite build **543.46 KB initial / 145.98 KB gzip**
+(+0.35 KB / +0.15 KB from the longer demo preset).
+Mock smoke 3/3. Drift OK. Hygiene clean. Backend
+route count still **76**. No real Runway calls fired.
+Operator credit math at 50,000 hackathon credits: a
+6-line dialogue scene burns ~6 avatar_videos tasks
+(≈$0.30-$0.60 per scene) — effectively unlimited at
+the current allocation. Earlier: PR DK — Add
 Conversations as a Videos sub-tab. Pure UI
 organization pass; zero backend changes; reuses the
 PR AJ transcript persistence already on every Campaign
