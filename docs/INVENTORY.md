@@ -1,7 +1,29 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after **PR DO — Long Spokesperson Ad Pipeline**.
+context-kit refresh after **PR DP — Realtime Conversations Reframed
+As Team Interviews**. Pure copy / seed slice. Donny / Riggs / Miles
+each get a team-member persona — Donny = creative campaign lead,
+Riggs = chaotic builder / context-kit explainer, Miles = business
+strategist. Seed script extension (~430 LoC added to
+`scripts/seed-submission-demo-content.py`) idempotently patches
+four realtime levers per spokesperson: (1) `character.personality`
+first-person ~280-char team voice, (2) `character.catchphrases`
+3-4 lines, (3) `campaign.commercial_script` ~280-char team-
+interview opener (becomes realtime startScript first sentence),
+(4) per-campaign team-interview grounding document uploaded via
+PR DD raw realtime-document route (~2500-3500 chars covering role
+/ Character OS / business use / context-kit guardrail / tone).
+Direct CharacterStore access for personality + catchphrases
+(matches seed-demo-spokespeople.py pattern). Live seed run
+patched 12/12 items; idempotency proven on re-run. Grounding doc
+ids: Donny `35ae86dd-...`, Riggs `2e6bbc94-...`, Miles
+`c50aa82c-...`. `docs/SUBMISSION_VIDEO_PLAN.md` step 6 + DEMO
+CHECKLIST §3 rewrote with the new interview flow + role-tuned
+questions per spokesperson. Zero app code touched. Backend route
+count still **77**. Pytest 53/53 unchanged. No Runway calls fired
+by this PR.
+Earlier: PR DO — Long Spokesperson Ad Pipeline.
 Runway's `avatar_videos` caps `speech.text` at 300 chars (≈10-15s
 of audio); PR DO packages a multi-chunk render-and-stitch pipeline
 as a first-class spokesperson workflow so operators can build 30-

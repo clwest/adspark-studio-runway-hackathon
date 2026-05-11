@@ -100,33 +100,89 @@ Optional but high-impact: cast the new character into a single-line
 dialogue scene with Donny / Riggs / Miles right after, render that
 one line, show it side-by-side with the team scene from step 1.
 
-### 6. Ask one realtime question
+### 6. Interview the team — three short realtime questions
 
-Two options — pick whichever fits the runtime budget:
+PR DP reframed the realtime experience from "ask sales bot
+questions" to **interviewing the AI builders**. Each spokesperson
+now has an in-character team-interview voice + a per-campaign
+grounding document tuned for their role. Three short interviews
+beat one long one — mockumentary energy.
 
-**6a. One short realtime question to each spokesperson.**
-For each of Donny / Riggs / Miles:
-- Open their workspace → **Conversations** primary tab → **Start
-  Conversation**.
-- Ask their one question:
-  - Donny: *"Why does my brand need a persistent AI spokesperson?"*
-  - Riggs: *"What did you actually build during the hackathon?"*
-  - Miles: *"Should a small business hire a creative agency or use
-    Character OS?"*
-- End conversation. Quick.
+For each spokesperson, open the **submission campaign** (the one
+PR DN seeded — *Character OS Creates Reusable AI Ads* for Donny,
+*How We Built Character OS* for Riggs, *Why Businesses Need
+Persistent Spokespeople* for Miles) → **Conversations** primary
+tab → **Start Conversation** → ask the role-tuned question →
+**End Conversation**.
 
-**6b. One grounded self-demo question to Donny (faster).**
-- Open Donny's `How Character OS Was Built` campaign (PR DD/DE/DF
-  set this up with the curated grounding document `47de9efd-...`).
-- Conversations primary tab → Start Conversation.
-- Ask: *"Are Character OS and context-kit the same thing?"*
-- Wait for the canonical "No. Character OS is the hackathon product.
-  context-kit is the separate AI context-management package used to
-  coordinate the build." reply.
-- End conversation.
+**6a. Donny Sparks — creative campaign lead**
 
-Option 6b is the safer demo — one question, one canonical answer,
-no risk of fumbled mic prompts.
+The avatar opens with: *"Hi, I'm Donny Sparks. I run creative on
+the Character OS team. Ask me how a brand keeps a consistent voice
+across ten campaigns without sounding like a different company
+every quarter."*
+
+Question options (pick one for the take):
+
+- *"What's your job on this team?"*
+- *"Why does my brand need a persistent AI spokesperson?"*
+- *"How do you avoid making every ad sound the same?"*
+
+Expected shape: Donny names his role, frames Character OS as the
+platform for persistent spokespeople, hints at variants /
+continuity, defers to Riggs or Miles if the question drifts.
+
+**6b. Riggs Rally — chaotic builder / dev workflow**
+
+Opens with: *"I'm Riggs Rally. I shipped the build pipeline on the
+Character OS team. Ask me how we coordinated dozens of AI coding
+sessions without losing the thread — or what context-kit actually
+is and isn't."*
+
+Question options:
+
+- *"Walk me through how you built Character OS."*
+- *"What's context-kit and what isn't it?"*
+- *"What does an AI coding session actually look like?"*
+
+Expected shape: Riggs names many AI coding sessions, explains
+context-kit as **build-time scaffolding** (NOT runtime memory),
+defers to Donny on creative and Miles on business.
+
+**6c. Miles Monroe — business strategist**
+
+Opens with: *"I'm Miles Monroe. I handle strategy on the Character
+OS team. Ask me whether a small business should hire an agency or
+build a persistent AI spokesperson — or how this platform changes
+the unit economics of marketing video."*
+
+Question options:
+
+- *"Should a small business use Character OS or hire an agency?"*
+- *"What changes when a brand has a persistent AI representative?"*
+- *"How do conversations, videos, and campaigns fit together?"*
+
+Expected shape: Miles names the business problem (brand drift),
+makes the unit-economics case, defers technical questions to Riggs
+and creative to Donny.
+
+**6d. Canonical context-kit guardrail probe (any spokesperson)**
+
+For the safer "single canonical answer" take, ask *any* spokesperson:
+
+- *"Are Character OS and context-kit the same thing?"*
+
+Expected: *"No. Character OS is the hackathon product. context-kit
+is a separate AI context-management tool we used during the build.
+It is not my memory."*
+
+This works because all three grounding documents carry the same
+distinction language. Pick this option if you want a fast take
+with one clear answer.
+
+**Cost math:** Each realtime conversation = ~$0.10-$0.20 in
+Runway credits per minute, capped at 5 minutes by Runway. Three
+30-second interviews ≈ $0.15-$0.30 total.
 
 ### 7. End on the Videos tab showing saved media + Conversations history
 

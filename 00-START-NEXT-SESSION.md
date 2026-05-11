@@ -1,7 +1,64 @@
 # START NEXT SESSION — AdSpark Studio
 
-**Last touched:** 2026-05-10 (PR DO — Long Spokesperson
-Ad pipeline. Runway's `avatar_videos` caps a single
+**Last touched:** 2026-05-10 (PR DP — Reframe Realtime
+Conversations as Team Interviews. Pure copy / seed
+slice — zero backend, frontend, or realtime
+infrastructure changes. Per the brief: "Update only
+conversation/personality/startScript/grounding copy
+and demo docs." The three submission spokespeople
+(Donny / Riggs / Miles) used to open realtime calls
+with the generic "You are the brand mascot for X"
+broker default — sales-bot tone, no team awareness.
+PR DP reframes each one as a team member being
+interviewed: Donny = creative campaign lead, Riggs =
+chaotic builder / context-kit explainer, Miles =
+business strategist. Four idempotent seed-script
+extensions patch the highest-leverage realtime
+levers: (1) `character.personality` — ~280-char
+first-person team-voice strings injected into the
+broker's personality string via
+`_build_session_overrides` and `_grounded_personality`;
+(2) `character.catchphrases` — 3-4 lines per
+character (broker doesn't currently inject these but
+they live on the record for future use + UI display);
+(3) `campaign.commercial_script` — team-interview
+openers (~280 chars) that become the realtime
+startScript first sentence so the avatar's opening
+line is "Hi, I'm Donny Sparks. I run creative on the
+Character OS team..." instead of the generic
+fallback; (4) per-campaign team-interview grounding
+documents uploaded via the PR DD raw realtime-
+document attach route — each ~2500-3500 chars
+covering "what I do on the team / what Character OS
+is / how a business uses it on a website / how the
+pieces fit together / the context-kit guardrail /
+tone". Direct `CharacterStore` access for
+personality + catchphrases (matches the established
+`seed-demo-spokespeople.py` pattern; no new HTTP
+route needed). Live seed run patched all 12 items
+(3 chars × {personality, catchphrases, script,
+grounding}); second run reports 12/12 skipped with
+stable grounding doc ids: Donny
+`35ae86dd-a624-4761-9909-7efbcd34f02c`, Riggs
+`2e6bbc94-6547-4fbe-a570-2efb3071c503`, Miles
+`c50aa82c-80e3-4bc9-ae3c-e14a51681489`.
+`docs/SUBMISSION_VIDEO_PLAN.md` step 6 rewrote from
+"ask sales bot questions" to a three-spokesperson
+interview flow with role-tuned question sets per
+character + a canonical-distinction probe fallback.
+`docs/DEMO_CHECKLIST.md` §3 rewrote the realtime
+walk-through to point at each character's submission
+campaign with the expected interview opener line +
+suggested questions. Cost math: 3 × 30-second
+interview calls ≈ $0.15-$0.30 in Runway credits.
+Pytest 53/53 (unchanged — no app code touched).
+Drift OK, hygiene clean. Backend route count still
+**77**. No Runway calls fired by the PR itself. The
+operator's next realtime probe on Donny's
+`0a52aef38809` should open with "Hi, I'm Donny
+Sparks. I run creative on the Character OS team..."
+and stay in interview voice. Earlier: PR DO — Long
+Spokesperson Ad pipeline. Runway's `avatar_videos` caps a single
 render at 300 chars (≈10-15s of audio); operator
 asked for 30-60s ads to fit a proper "intro → role →
 pitch → closer" structure. PR DO chains multiple

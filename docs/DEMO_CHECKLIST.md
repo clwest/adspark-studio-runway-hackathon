@@ -69,18 +69,35 @@ Open Donny → **Campaigns** tab.
 
 ## 3. Conversation (Pillar 2)
 
-Stay on Donny → **Conversations** tab.
+PR DP reframed Conversations as **team interviews** — Donny is the
+creative lead, Riggs is the chaotic builder, Miles is the
+strategist. Each one has a tuned grounding doc on their submission
+campaign + a team-interview personality.
+
+Stay on Donny → open the **Character OS Creates Reusable AI Ads**
+campaign → **Conversations** tab.
 
 - [ ] The pre-call checklist is visible. Read the bullets once.
-- [ ] Click **Start Conversation** → click **Allow** on the mic
-      permission prompt.
-- [ ] Avatar starts speaking the brand-aware opening within ~2 s.
-- [ ] Ask one starter chip question (click to copy, then read it
-      aloud after the avatar finishes).
-- [ ] Avatar responds in character within ~2 s of silence.
-- [ ] Click **End Conversation** → the panel returns to idle.
+- [ ] Click **Start Conversation** → **Allow** on the mic prompt.
+- [ ] Donny opens with: *"Hi, I'm Donny Sparks. I run creative on
+      the Character OS team. Ask me how a brand keeps a consistent
+      voice across ten campaigns..."*
+- [ ] Ask one interview question:
+      - *"What's your job on this team?"*
+      - *"Why does my brand need a persistent AI spokesperson?"*
+      - *"How do you avoid making every ad sound the same?"*
+- [ ] Donny answers in-character within ~2s of silence. He should
+      defer to Riggs (technical) or Miles (business) when the
+      question drifts off-creative.
+- [ ] **End Conversation** → panel returns to idle.
 
-If the avatar stalls: end + retry (the session restarts fresh).
+Repeat for Riggs (campaign: *How We Built Character OS*, ask
+*"What's context-kit and what isn't it?"*) and Miles (campaign:
+*Why Businesses Need Persistent Spokespeople*, ask *"Should a
+small business use Character OS or hire an agency?"*).
+
+If any avatar stalls: end + retry. Mic feedback was the historical
+cause — headphones-required.
 
 ---
 
