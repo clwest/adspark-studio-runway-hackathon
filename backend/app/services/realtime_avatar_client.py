@@ -45,14 +45,16 @@ _REALTIME_MODEL = "gwm1_avatars"
 # Empirical: NOT_READY → READY in ~1.5 s. Allow generous slack for
 # upstream variability without blocking the request indefinitely.
 _READY_POLL_INTERVAL_S = 0.5
-# PR EM-e3 — bumped from 30→60s. The Runway dev API occasionally
-# takes 30-50s to flip a session NOT_READY → READY when documentIds
-# is set + the document is large or the API is under load. The old
-# 30s cap caused spurious "did not reach READY" errors during the
-# submission push. 60s gives Runway breathing room without
-# pretending realtime is a slow endpoint — true hangs still surface
-# at the cap with a status hint.
-_READY_POLL_TIMEOUT_S = 60.0
+# PR EM-h — bumped from 60→150s. On hackathon submission day the
+# Runway dev API stays stuck on NOT_READY well past the 60s cap
+# (verified: 96 polls / NOT_READY across the full window, then a
+# fresh POST + GET would succeed). 150s gives the upstream room to
+# flip without the operator having to re-click. We pay for this
+# only on cold/under-load sessions — when Runway is healthy the
+# very first poll returns READY and the cap is irrelevant.
+#
+# Prior history: PR EM-e3 went 30→60s. PR I shipped at 30s.
+_READY_POLL_TIMEOUT_S = 150.0
 
 # PR AE — Runway documents personality up to 10,000 chars.
 # Cap below that on a sentence boundary so we never bump the wire.
@@ -343,7 +345,14 @@ DEFAULT_REALTIME_TOOLS: list[dict] = [
             "audience from your Knowledge sources. Use this when the "
             "operator asks for facts about the brand, product details, "
             "audience, or strategy that you weren't told inline. "
-            "Pass the topic the operator asked about as `query`."
+            "Pass the topic the operator asked about as `query`. "
+            "CRITICAL: this tool is fire-and-forget — you will NOT "
+            "receive a response. Before invoking, SAY ALOUD what "
+            "you're about to look up (e.g. 'Let me check my notes on "
+            "the product…'). The operator sees the matches as toasts; "
+            "after invoking, keep the conversation going naturally — "
+            "you can ask the operator what they'd like to dig into "
+            "next. Never wait silently for a result."
         ),
     },
     {
@@ -422,10 +431,16 @@ DEFAULT_REALTIME_TOOLS: list[dict] = [
             "have we talked about?', 'do you remember our last "
             "chat?', 'what do you remember about me?', or similar "
             "recall prompts. Optional `query` arg narrows the search "
-            "to a topic substring. The handler toasts up to 5 most "
-            "recent matches; YOU should narrate that you remember "
-            "them rather than fabricate details — the toasts carry "
-            "the actual summaries."
+            "to a topic substring. "
+            "CRITICAL: this tool is fire-and-forget — you will NOT "
+            "receive the recalled content back. Before invoking, SAY "
+            "ALOUD that you're checking your memory (e.g. 'Yeah, let "
+            "me pull up what we discussed last time…'). The operator "
+            "will see the saved summaries appear as toasts on their "
+            "screen. After invoking, keep talking — DO NOT fabricate "
+            "specifics from the conversations (you can't see them); "
+            "instead, ask the operator to remind you which one they "
+            "want to dig into. Never go silent waiting for a result."
         ),
     },
     {
@@ -438,9 +453,15 @@ DEFAULT_REALTIME_TOOLS: list[dict] = [
             "a substantive exchange the operator wants to persist. "
             "Triggers compose → publish to Runway as a document → "
             "attach to the active campaign in one chained operation. "
-            "TELL THE OPERATOR you're saving the memory and the next "
-            "session on this campaign will recall it. Takes ~5-10 "
-            "seconds; the handler narrates each stage via toasts."
+            "CRITICAL: this tool is fire-and-forget — you will NOT "
+            "receive a confirmation back. Before invoking, SAY ALOUD "
+            "that you're saving the memory and that the next session "
+            "on this campaign will recall it (e.g. 'Good idea — "
+            "saving that now so I remember next time we talk…'). The "
+            "operator sees compose → publish → attach progress as "
+            "toasts; the whole chain takes ~5-10 seconds. After "
+            "invoking, keep the conversation going — do not wait "
+            "silently for a confirmation."
         ),
     },
     {
@@ -451,16 +472,22 @@ DEFAULT_REALTIME_TOOLS: list[dict] = [
             "operator asked a question Riggs handles better. Call "
             "when the operator asks for a different spokesperson by "
             "name OR when you genuinely think another spokesperson "
-            "is better suited (and TELL the operator you're handing "
-            "off and why). Pass the target spokesperson's name as "
-            "`character_name` (case-insensitive substring match — "
+            "is better suited. Pass the target spokesperson's name "
+            "as `character_name` (case-insensitive substring match — "
             "'Riggs' resolves Riggs Rally, 'Miles' resolves Miles "
             "Monroe). The handler resolves the name, picks the "
             "target's most recent campaign, and triggers a page "
             "navigation: the workspace closes this session and opens "
-            "a new realtime session against the target. TELL THE "
-            "OPERATOR you're handing off and that the new "
-            "spokesperson will load in a few seconds."
+            "a new realtime session against the target. "
+            "CRITICAL: this tool is fire-and-forget — you will NOT "
+            "receive a confirmation back, AND the navigation will "
+            "end your session within ~2 seconds. Before invoking, "
+            "SAY ALOUD that you're handing off, name the target, "
+            "and give a one-sentence reason (e.g. 'Great question — "
+            "Riggs Rally is the one who handles fitness coaching, "
+            "let me hand you to him now…'). Do NOT go silent after "
+            "invoking — your last words to the operator are the "
+            "ones spoken before the tool call lands."
         ),
     },
 ]
