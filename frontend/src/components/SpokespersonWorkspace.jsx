@@ -839,6 +839,50 @@ export default function SpokespersonWorkspace() {
                           edit →
                         </span>
                       )}
+                      {/* PR EG — Delete affordance per campaign row.
+                          Backend DELETE /api/campaigns/{id} has
+                          existed since PR I, but the UI never
+                          exposed it — operator could create test
+                          campaigns but couldn't clean them up.
+                          stopPropagation prevents the row's
+                          click-to-select from firing when the
+                          operator clicks Delete. Hard-confirm via
+                          window.confirm so the row can't be
+                          deleted accidentally. */}
+                      <button
+                        type="button"
+                        onClick={async (e) => {
+                          e.stopPropagation()
+                          const label = c.business || c.product || c.id
+                          const ok = window.confirm(
+                            `Delete campaign "${label}"?\n\n` +
+                              'This removes the campaign record + every ' +
+                              'cached MP4 (Spokesperson Ad, host clip, ' +
+                              'reels, voiced commercial, storyboard, ' +
+                              'dialogue scene). Runway-side avatar / ' +
+                              'voice resources are NOT touched.',
+                          )
+                          if (!ok) return
+                          try {
+                            await api.deleteCampaign(c.id)
+                            setCampaigns((prev) =>
+                              prev.filter((x) => x.id !== c.id),
+                            )
+                            if (selectedCampaignId === c.id) {
+                              setSelectedCampaignId(null)
+                            }
+                          } catch (err) {
+                            const detail = err?.message ? String(err.message) : 'unknown'
+                            setErrMsg(`Delete failed: ${detail}`)
+                          }
+                        }}
+                        data-testid="spokesperson-workspace-campaigns-delete"
+                        title="Delete this campaign + every cached MP4. Runway-side resources stay reachable from your account."
+                        aria-label={`Delete campaign ${c.business || c.id}`}
+                        className="text-[10px] rounded px-1.5 py-0.5 font-mono shrink-0 text-zinc-500 hover:text-rose-300 hover:bg-rose-500/10 transition-colors"
+                      >
+                        ✕
+                      </button>
                     </li>
                   )
                 })}
