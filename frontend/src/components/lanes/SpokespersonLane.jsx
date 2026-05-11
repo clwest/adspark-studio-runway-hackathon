@@ -1382,19 +1382,25 @@ function VariantChipRow({
 }
 
 function VariantScriptEditor({ campaignId, variant, onUpsertAdVariant }) {
-  const [editing, setEditing] = useState(false)
+  // PR EI — auto-enter edit mode when the variant has no script yet.
+  // The previous flow forced the operator to click "Edit ad" / "+ Add
+  // script" before a textarea appeared — 2 extra clicks just to start
+  // writing. Empty variants now land directly on the editor.
+  const [editing, setEditing] = useState(!variant.script)
   const [draftTitle, setDraftTitle] = useState(variant.title)
   const [draftScript, setDraftScript] = useState(variant.script || '')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
-  // Re-sync on variant switch.
+  // Re-sync on variant switch. Land back in edit mode for empty
+  // variants so a chip-row click on a blank Ad always shows the
+  // textarea, never a "no script yet" placeholder.
   useEffect(() => {
     setDraftTitle(variant.title)
     setDraftScript(variant.script || '')
-    setEditing(false)
+    setEditing(!variant.script)
     setError('')
-  }, [variant.id])
+  }, [variant.id, variant.script])
 
   const canSave = !busy && draftTitle.trim().length > 0
   const handleSave = async () => {
@@ -1586,16 +1592,17 @@ function NoVariantsState({
   return (
     <div
       data-testid="spokesperson-lane-variants-empty"
-      className="space-y-1.5"
+      className="space-y-2"
     >
-      <p className="text-[11px] text-zinc-400 leading-snug">
-        No ad variants yet for this campaign. Each variant carries its
-        own title + script; campaign brief stays stable across them.
-      </p>
       {legacyScript ? (
         <>
+          <p className="text-[11px] text-zinc-400 leading-snug">
+            No ad variants yet — campaign has a legacy script saved
+            on the brief itself. Convert it to a variant to keep
+            editing, or start a fresh blank ad.
+          </p>
           <p className="text-[10px] text-amber-200 leading-snug">
-            This campaign has a legacy saved script:
+            Legacy saved script:
           </p>
           <pre className="whitespace-pre-wrap break-words text-[10px] text-zinc-300 font-mono leading-snug max-h-[5rem] overflow-y-auto rounded bg-black/30 ring-1 ring-zinc-800 p-1.5">
             {scriptPreview}
@@ -1622,15 +1629,35 @@ function NoVariantsState({
           </div>
         </>
       ) : (
-        <button
-          type="button"
-          onClick={handleCreateBlank}
-          disabled={busy}
-          data-testid="spokesperson-lane-variants-new"
-          className="text-[10px] rounded px-2 py-1 font-mono bg-pink-500/30 hover:bg-pink-500/45 text-pink-100 ring-1 ring-pink-400/40 transition-colors disabled:opacity-60"
+        // PR EI — Beefier empty state CTA. Previous tiny "+ New Ad"
+        // button got read as "nothing here" by the operator. New
+        // copy spells out what Step 2 IS for + the button is full
+        // width + has clear next-step language.
+        <div
+          data-testid="spokesperson-lane-variants-onboarding"
+          className="rounded-lg ring-1 ring-pink-400/20 bg-pink-500/[0.04] p-3 space-y-2"
         >
-          {busy ? 'Creating…' : '+ New Ad'}
-        </button>
+          <div className="space-y-0.5">
+            <p className="text-[12px] text-zinc-100 font-medium leading-snug">
+              Write your first ad script
+            </p>
+            <p className="text-[10px] text-zinc-400 leading-snug">
+              Each campaign can hold multiple ad variants (different
+              hooks, energies, audiences). Click below to start your
+              first variant — you&apos;ll get the script editor
+              immediately.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleCreateBlank}
+            disabled={busy}
+            data-testid="spokesperson-lane-variants-new"
+            className="w-full text-[12px] rounded-md px-3 py-2 font-semibold bg-pink-500/80 hover:bg-pink-500 text-zinc-100 transition-colors disabled:opacity-60"
+          >
+            {busy ? 'Creating…' : '✏️  Start writing Ad 1'}
+          </button>
+        </div>
       )}
       {error && (
         <p
