@@ -334,13 +334,24 @@ export async function dispatchRealtimeToolEvent(event, deps) {
       // fire-and-forget), but the operator can see exactly what was
       // recalled and the avatar's narration lands as truthful
       // because the toasts are visible.
+      //
+      // PR EM-e2 — fall back to campaign.character_id when the
+      // character prop hasn't loaded yet. The realtime session can
+      // fire tools before CampaignGallery's async character lookup
+      // completes; the campaign always has the character_id, so
+      // use that as the source of truth.
       const query = String((args && args.query) || '').trim().toLowerCase()
-      if (!character?.id) {
-        announce?.('Could not recall — no active character.', 'error')
+      const characterId = character?.id || campaign?.character_id
+      const characterName = character?.name || 'Avatar'
+      if (!characterId) {
+        announce?.(
+          'Could not recall — no active character bound to this session.',
+          'error',
+        )
         return
       }
       try {
-        const resp = await api.listCharacterMemory(character.id, {
+        const resp = await api.listCharacterMemory(characterId, {
           sourceType: 'transcript',
         })
         let entries = resp.entries || []
@@ -354,14 +365,15 @@ export async function dispatchRealtimeToolEvent(event, deps) {
         if (entries.length === 0) {
           announce?.(
             query
-              ? `💭 ${character.name} doesn't recall any conversations about "${query}" yet.`
-              : `💭 ${character.name} doesn't have any saved conversations to recall yet.`,
+              ? `💭 ${characterName} doesn't recall any conversations about "${query}" yet.`
+              : `💭 ${characterName} doesn't have any saved conversations to recall yet. ` +
+                `Try "save what we talked about" later to start the memory loop.`,
             'info',
           )
           return
         }
         announce?.(
-          `💭 ${character.name} recalls ${entries.length} ` +
+          `💭 ${characterName} recalls ${entries.length} ` +
             `conversation${entries.length === 1 ? '' : 's'}` +
             (query ? ` about "${query}"` : '') +
             `:`,
@@ -398,8 +410,16 @@ export async function dispatchRealtimeToolEvent(event, deps) {
       // success the active campaign now carries the memory document
       // and the NEXT realtime session on this campaign attaches it
       // as RAG via documentIds.
-      if (!character?.id) {
-        announce?.('Could not save — no active character.', 'error')
+      //
+      // PR EM-e2 — fall back to campaign.character_id when the
+      // character prop hasn't loaded yet (same race as recall_recent).
+      const characterId = character?.id || campaign?.character_id
+      const characterName = character?.name || 'Avatar'
+      if (!characterId) {
+        announce?.(
+          'Could not save — no active character bound to this session.',
+          'error',
+        )
         return
       }
       if (!campaign?.id) {
@@ -410,13 +430,13 @@ export async function dispatchRealtimeToolEvent(event, deps) {
         return
       }
       announce?.(
-        `🧠 ${character.name} is composing memory from this conversation…`,
+        `🧠 ${characterName} is composing memory from this conversation…`,
         'info',
       )
       let documentId = null
       let bodyChars = 0
       try {
-        const composed = await api.composeCharacterMemory(character.id, {
+        const composed = await api.composeCharacterMemory(characterId, {
           publish: true,
         })
         if (!composed?.document_id) {
@@ -438,7 +458,7 @@ export async function dispatchRealtimeToolEvent(event, deps) {
         return
       }
       try {
-        const attached = await api.attachCharacterMemory(character.id, {
+        const attached = await api.attachCharacterMemory(characterId, {
           campaignId: campaign.id,
           documentId,
         })
