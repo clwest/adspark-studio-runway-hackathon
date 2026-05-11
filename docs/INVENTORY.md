@@ -1,8 +1,32 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after **PR DJ — Persistent Creative
-Workspaces**. Three-part slice: (1) dialogue stitch + dialogue-
+context-kit refresh after **PR DK — Conversations Sub-Tab**. Pure
+UI organization pass; zero backend changes; reuses PR AJ
+transcript persistence on every Campaign. The Videos tab (renamed
+from Outputs in PR DJ) now wraps a new `<VideosTab>` with a two-
+pill sub-tab toggle: **Videos** (existing `<OutputsGallery>`) and
+**Conversations** (new `<ConversationsHistory>`). Each pill
+carries a count chip — Videos counts every output (history +
+legacy single-field fallback); Conversations counts campaigns with
+saved `realtime_transcript_turns`. ConversationsHistory renders
+one card per campaign with campaign + spokesperson name, fetched-
+at relative time, mock badge when applicable, inline preview of up
+to 4 turns (avatar pink / user sky), "+N more turns" disclosure,
+Copy Markdown + Download TXT buttons (reuses PR AL
+`transcriptExport.js` helpers), "+N prior fetches" chip when the
+audit-trail history has more than the current entry. Sub-tab
+state is local React state (defaults to Videos). Existing tab id
+(`outputs`) and section testid (`spokesperson-workspace-outputs`)
+preserved so no Playwright test breaks; new testids
+`videos-tab`, `videos-tab-subtabs`, `videos-tab-subtab-videos`,
+`videos-tab-subtab-conversations`, `conversations-history`,
+`conversation-card`, `conversation-turn-preview`,
+`conversation-copy-markdown`, `conversation-download-txt`,
+`conversations-empty`. Vite build 543.11 KB initial / 145.83 KB
+gzip. Mock smoke 3/3. Pytest 39/39. Backend route count still
+**76**. Zero Runway calls fired.
+Earlier: PR DJ — Persistent Creative Workspaces. Three-part slice: (1) dialogue stitch + dialogue-
 scene reels routes now mirror PR CY's append-only pattern —
 generate per-output id, copy canonical file to per-output
 historical filename in `data/finished/`, append `OutputRecord`

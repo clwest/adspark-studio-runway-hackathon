@@ -1,6 +1,58 @@
 # START NEXT SESSION — AdSpark Studio
 
-**Last touched:** 2026-05-10 (PR DJ — Convert
+**Last touched:** 2026-05-10 (PR DK — Add
+Conversations as a Videos sub-tab. Pure UI
+organization pass; zero backend changes; reuses the
+PR AJ transcript persistence already on every Campaign
+record. The Videos tab pane (renamed from Outputs in
+PR DJ) now mounts a new `<VideosTab>` wrapper that
+provides a two-pill sub-tab toggle: **Videos** (the
+existing `<OutputsGallery>` unchanged) and
+**Conversations** (the new
+`<ConversationsHistory>`). Each pill carries a count
+chip — `Videos N` walks every campaign's `outputs[]`
+plus the legacy single-field fallback, `Conversations
+M` filters to campaigns with at least one persisted
+`realtime_transcript_turns` entry where status is not
+`no_session`. New
+`frontend/src/components/VideosTab.jsx` (~140 LoC)
+owns the local sub-tab state (defaults to Videos so
+first-paint matches pre-PR-DK behaviour) and the
+count calculation via `useMemo`. New
+`frontend/src/components/ConversationsHistory.jsx`
+(~225 LoC) walks `linkedCampaigns` for the PR AJ field
+set (`realtime_transcript_status`,
+`realtime_transcript_turns`,
+`realtime_transcript_fetched_at`,
+`realtime_transcript_mock_mode`,
+`realtime_transcript_history`) and renders one
+`<ConversationCard>` per campaign with a saved
+transcript: campaign name + product · spokesperson
+name (from the active workspace character) ·
+relative-time fetched-at · mock badge when applicable
+· `saved` emerald status pill · inline preview of up
+to 4 turns (avatar pink / user sky / system zinc) ·
+"+N more turns" disclosure · Copy Markdown +
+Download TXT buttons that reuse the existing PR AL
+`transcriptExport.js` helpers (`buildTranscriptMarkdown`,
+`buildTranscriptText`, `copyToClipboard`,
+`downloadTextFile`, `transcriptFilename`) · "+N prior
+fetches" chip when `realtime_transcript_history` has
+more than the current entry. Empty state when no
+campaign has a fetched transcript points the operator
+at the Conversations primary tab where realtime
+sessions are opened. SpokespersonWorkspace.jsx
+swapped the direct `<OutputsGallery>` mount for
+`<VideosTab linkedCampaigns={linkedCampaigns}
+character={character} />` so the existing tab id
+(`outputs`) and section testid stay stable. Vite
+build **543.11 KB initial / 145.83 KB gzip** (+8.18
+KB / +1.61 KB vs PR DJ from the two new components).
+Mock smoke **3/3** in ~1m. Backend pytest 39/39
+(unchanged — frontend-only PR). Drift OK. Hygiene
+clean. Backend route count still **76**. No real
+Runway calls fired. Donny's `d00dc42fe5cb` self-demo
+campaign preserved through smoke cycle. Earlier: PR DJ — Convert
 Campaigns Into Persistent Creative Workspaces. Three-
 part slice: (1) Dialogue Outputs Persistence — PR CY
 shipped append-only OutputRecord history for

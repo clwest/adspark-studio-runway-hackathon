@@ -10,7 +10,7 @@ import {
 import CampaignLanes from './CampaignLanes.jsx'
 import CharacterCard from './CharacterCard.jsx'
 import KnowledgePanel from './KnowledgePanel.jsx'
-import OutputsGallery from './OutputsGallery.jsx'
+import VideosTab from './VideosTab.jsx'
 import RealtimeSpokesperson from './RealtimeSpokesperson.jsx'
 
 const TABS = [
@@ -849,7 +849,11 @@ export default function SpokespersonWorkspace() {
           data-testid="spokesperson-workspace-outputs"
           className="space-y-3"
         >
-          <OutputsGallery linkedCampaigns={linkedCampaigns} />
+          {/* PR DK — Videos tab gets sub-tabs: [Videos | Conversations] */}
+          <VideosTab
+            linkedCampaigns={linkedCampaigns}
+            character={character}
+          />
         </section>
       )}
 
