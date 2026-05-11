@@ -23,12 +23,19 @@ the stitched MP4 lands in the Videos tab — and the Videos tab
 auto-opens so the operator watches it arrive. ~3 minutes wall
 clock from voice command to playable video.
 
-Six tools live in the realtime catalog (`recall_knowledge`,
-`render_spokesperson_ad`, `auto_write_and_render_ad`,
-`render_long_spokesperson_ad`, `auto_write_and_render_long_ad`,
-`show_videos_tab`). The avatar's LLM picks based on operator
-intent — verbatim script vs. high-level brief, short vs. long.
-Stage-specific toasts narrate every wait.
+Nine tools live in the realtime catalog (verified
+`DEFAULT_REALTIME_TOOLS` count, 2026-05-11). Five render the four
+ad shapes (short/long × verbatim/auto-write) plus a UI navigate;
+two are memory-aware (`recall_recent_conversations`,
+`attach_memory_to_campaign`, both PR EM-e); one is knowledge recall
+(`recall_knowledge`); one is avatar-to-avatar handoff
+(`handoff_to_character`, PR EM-g). The avatar's LLM picks based on
+operator intent — verbatim script vs. high-level brief, short vs.
+long, recall vs. persist vs. handoff. Stage-specific toasts narrate
+every wait. PR EM-h tightened the 4 fire-and-forget tool
+descriptions to force the avatar to narrate **before** invoking,
+since Runway's `client_event` path is one-way and the avatar gets
+no result back.
 
 ## Local-first infrastructure
 
@@ -49,7 +56,7 @@ laptop**:
 Only video generation actually leaves the laptop — Runway's
 `avatar_videos` / `realtime_sessions` / `voices` / `documents`.
 
-## Cross-session memory (PR EM-a foundation)
+## Cross-session memory (PR EM-a foundation, EM-b → EM-e plumbing)
 
 `backend/app/services/memory/` is the durable infrastructure for
 making spokespeople actually accumulate experience across sessions
@@ -57,16 +64,22 @@ rather than restart fresh each time. Three pluggable layers
 (`MemoryStore`, `MemorySource`, `MemoryComposer`) plus a single
 `MemoryOrchestrator` API.
 
-Phase 1 (shipped): file-backed `JsonMemoryStore`, Phase 1 sources
-mirror the existing Character `knowledge_sources` + summarise past
-realtime conversation transcripts (PR BC + PR AJ inputs), Markdown
-composer renders the accumulated memory into a Runway document
-body within budget. 16 tests, all green.
+**Phase 1 (PR EM-a, shipped):** file-backed `JsonMemoryStore`,
+sources mirror the existing Character `knowledge_sources` +
+summarise past realtime conversation transcripts (PR BC + PR AJ
+inputs), Markdown composer renders the accumulated memory into a
+Runway document body within budget. 16 tests, all green.
 
-Phase 2 (next): routes + Memory tab on the Identity card + an
-auto-ingest hook that fires when a realtime session ends.
+**Phase 2 (PR EM-b → EM-e, shipped):** 5 memory routes
+(`GET /memory`, `POST /memory/ingest`, `DELETE /memory/{entry_id}`,
+`POST /memory/compose`, `POST /memory/attach`); Memory tab on the
+Spokesperson Workspace with budget bar, compose preview, publish +
+attach buttons; auto-ingest hook fires after every
+`POST /realtime-transcript`; two realtime tools
+(`recall_recent_conversations`, `attach_memory_to_campaign`) let
+the avatar surface or persist memory via voice command.
 
-Phase 3 (post-submission): swap `JsonMemoryStore` for
+**Phase 3 (post-submission):** swap `JsonMemoryStore` for
 `PgVectorMemoryStore` — one new class, same interface, same
 entries. Same shape lets `ExternalFeedSource` plug in real-time
 data from operator's other apps without backend changes.

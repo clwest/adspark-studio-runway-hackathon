@@ -1050,7 +1050,12 @@ files regardless of mock/real flags.
 *optional* PR-F knobs — defaults are `vincent` and a curated
 Unsplash portrait URL.
 
-## Endpoints (69 application + FastAPI built-ins)
+## Endpoints (84 application + FastAPI built-ins)
+
+Measured 2026-05-11 post-PR EM-h via
+`python -c "from app.main import app; print(len(app.routes))"`.
+The 5 memory routes (PR EM-b → EM-d) live on
+`backend/app/routers/characters.py` lines 1083+.
 
 ```
 GET    /health
@@ -1118,6 +1123,11 @@ POST   /api/characters/{id}/refresh-avatar-voice           (PR AV — read-only:
 POST   /api/characters/{id}/refresh-voice-preview          (PR AX — re-fetch cloned voice previewUrl via GET /v1/voices/{voice_id})
 GET    /api/characters/{id}/portrait
 DELETE /api/characters/{id}
+GET    /api/characters/{id}/memory                          (PR EM-b — list entries; filters source_type, campaign_id)
+POST   /api/characters/{id}/memory/ingest                   (PR EM-b — fire every registered MemorySource, return per-source counts)
+DELETE /api/characters/{id}/memory/{entry_id}               (PR EM-b — operator cleanup)
+POST   /api/characters/{id}/memory/compose                  (PR EM-b — preview composed Markdown body; publish=true uploads to Runway as a document)
+POST   /api/characters/{id}/memory/attach                   (PR EM-d — attach a published document_id to a campaign so its next realtime session reads it as RAG)
 plus /openapi.json, /docs, /docs/oauth2-redirect, /redoc
 ```
 

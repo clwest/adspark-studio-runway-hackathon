@@ -1,20 +1,36 @@
 # START NEXT SESSION — Character OS
 
-**Submission push in progress (2026-05-11).** Operator's words:
-*"We are about to attempt something never tried by one man and an
-AI coding agent."* 18 PRs (DS → EK-2) closed the demo loop;
-6 more (EL family + EM-a) produced the submission video AND laid
-the foundation for cross-session memory. **Talk to your spokesperson
-→ LLM writes the script → real video lands in Videos tab. All on
-local infrastructure except Runway video generation.**
+**Submission push in progress (2026-05-11).** 18 PRs (DS → EK-2)
+closed the demo loop; 6 more (EL + EM-a) produced the submission
+video and laid the cross-session memory foundation; **9 more
+(EM-b → EM-h)** wired memory into the live product surface, added
+avatar-to-avatar handoff, polished the realtime conversation surface,
+and hardened the realtime broker against hackathon-day Runway
+congestion. **Talk to your spokesperson → it remembers prior
+conversations, can hand off to another spokesperson by voice, and
+the live call now lives in a Zoom-style overlay.**
 
 📘 **Full handoffs for this push:**
+- [`SESSION_104_MEMORY_PHASE_2_AND_HANDOFF_PR_EM_B_TO_EM_H.md`](docs/handoffs/SESSION_104_MEMORY_PHASE_2_AND_HANDOFF_PR_EM_B_TO_EM_H.md)
+  — Memory pipeline plumbing (PR EM-b → EM-e), conversation UX +
+  handoff (PR EM-f → EM-h)
 - [`SESSION_103_SUBMISSION_VIDEO_AND_MEMORY_FOUNDATION_PR_EL_EM.md`](docs/handoffs/SESSION_103_SUBMISSION_VIDEO_AND_MEMORY_FOUNDATION_PR_EL_EM.md)
   — Submission video production pipeline (PR EL family, 4 commits)
   + cross-session memory foundation (PR EM-a)
 - [`SESSION_102_LOCAL_LLM_REALTIME_AGENT_PR_DS_TO_EK.md`](docs/handoffs/SESSION_102_LOCAL_LLM_REALTIME_AGENT_PR_DS_TO_EK.md)
   — The submission push proper, PR DS through EK-2 (the agentic
   loop + DaVinci + Ollama + Auto-write)
+
+**Current measured state (verified 2026-05-11 post-PR EM-h):**
+
+```
+backend:  84 application routes  (was 79 at SESSION 103)
+realtime: 9 tools advertised     (was 6 at SESSION 103)
+memory:   5 routes (list/ingest/delete/compose/attach) + Memory tab
+          live on SpokespersonWorkspace
+realtime READY cap: 150s         (was 30s at SESSION 102, 60s at EM-e3)
+frontend: 590.87 kB / 158.05 kB gzip
+```
 
 **Submission video (assembled in DaVinci tomorrow AM):** 10 cinematic
 b-roll cuts + 5 talking-head beat MP4s + 2 live demo screen
