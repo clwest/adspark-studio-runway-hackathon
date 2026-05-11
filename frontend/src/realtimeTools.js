@@ -546,8 +546,46 @@ export async function dispatchRealtimeToolEvent(event, deps) {
         )
         return
       }
+      // PR EM-i — capture the LIVE conversation before composing.
+      // Previously the chain went straight to compose, which only
+      // sees memory entries already in the JsonMemoryStore — so the
+      // current conversation never landed in the published document.
+      // Now we (1) try to fetch the transcript for this campaign's
+      // active runway_conversation_id, (2) run ingest synchronously
+      // so the new transcript becomes a memory entry, THEN compose.
+      // Step 1 is best-effort: Runway may not return mid-session
+      // transcripts, in which case we fall through to "save what's
+      // already in the store" — strictly no worse than the prior
+      // behaviour.
       announce?.(
-        `🧠 ${characterName} is composing memory from this conversation…`,
+        `🧠 ${characterName} is capturing this conversation…`,
+        'info',
+      )
+      try {
+        await api.fetchRealtimeTranscript(campaign.id, {})
+      } catch (err) {
+        // 409 (no session) / 404 (conversation not ready) / mid-call
+        // 4xx are all OK to swallow — ingest will still run and pick
+        // up whatever the store already has. Log to console for
+        // diagnostic but don't toast: the operator doesn't need to
+        // see a noisy "transcript not ready yet" intermediate state.
+        // eslint-disable-next-line no-console
+        console.warn(
+          '[attach_memory_to_campaign] transcript fetch failed (continuing):',
+          err?.message || err,
+        )
+      }
+      try {
+        await api.ingestCharacterMemory(characterId, {
+          campaignId: campaign.id,
+        })
+      } catch (err) {
+        const msg = err?.message ? String(err.message) : 'unknown error'
+        announce?.(`Memory ingest failed: ${msg}`, 'error')
+        return
+      }
+      announce?.(
+        `🧠 Composing the updated memory document…`,
         'info',
       )
       let documentId = null
