@@ -131,7 +131,15 @@ export default function CharacterCard({
   onRefreshVoicePreview,
 }) {
   const c = character
+  // PR DS — cache-bust the portrait img so a regenerated file (same
+  // path on disk) actually displays in the browser. Keyed off
+  // ``updated_at`` (refreshed by the backend on every portrait write)
+  // so the URL changes only when the underlying file changes.
   const portraitUrl = c.portrait_url
+    ? `${c.portrait_url}${c.portrait_url.includes('?') ? '&' : '?'}v=${
+        c.updated_at ? encodeURIComponent(c.updated_at) : 'static'
+      }`
+    : c.portrait_url
   const avatarStatus = c.runway_avatar_status
   const avatarReady = ['ready', 'mock'].includes(avatarStatus || '')
   const avatarMock = avatarStatus === 'mock'
@@ -1329,6 +1337,24 @@ export default function CharacterCard({
             className="rounded bg-pink-500/80 hover:bg-pink-500 text-zinc-100 text-[10px] px-2 py-1 disabled:opacity-50"
           >
             {busyAction === 'portrait' ? 'Generating…' : 'Generate Portrait'}
+          </button>
+        )}
+        {/* PR DS — Regenerate Portrait: rerolls the still image only.
+            Same backend route as the initial generate; overwrites the
+            existing file at the same path. Cache-bust query param on
+            ``portraitUrl`` above ensures the new file actually shows.
+            Zinc/secondary styling so it doesn't compete with the
+            primary "Use Character" / "Create Avatar" actions. */}
+        {hasPortrait && onGeneratePortrait && (
+          <button
+            type="button"
+            data-testid="character-card-regenerate-portrait"
+            onClick={() => onGeneratePortrait(c)}
+            disabled={busyAction === 'portrait' || Boolean(busyAction)}
+            title="Reroll the portrait image. Does not touch the avatar or voice."
+            className="rounded border border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 text-[10px] px-2 py-1 disabled:opacity-50"
+          >
+            {busyAction === 'portrait' ? 'Regenerating…' : '↺ Regenerate Portrait'}
           </button>
         )}
         {hasPortrait && !avatarReady && onCreateAvatar && (
