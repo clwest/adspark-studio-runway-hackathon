@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { api } from '../api'
 import {
@@ -111,6 +111,29 @@ export default function CampaignLanes({
     clearActiveMode()
     setActiveModeState(null)
   }
+
+  // PR EG-3 — Reset active mode when the operator switches to a
+  // different campaign. Without this the active mode was sticky
+  // across campaign switches, so clicking from a Dialogue Scene
+  // campaign to a Spokesperson Ad campaign left the Dialogue lane
+  // mounted on a campaign that had no dialogue lines. Operator
+  // expectation (verified by Chris's bug report): each campaign
+  // click should land on the mode picker so the operator picks
+  // what to do with this campaign.
+  //
+  // Guarded so the initial mount transition (null → first selected
+  // campaign via auto-select-newest) doesn't clear a mode the
+  // operator just freshly picked. Only fires when BOTH the previous
+  // and current ids are non-null and different.
+  const prevSelectedRef = useRef(selectedCampaignId)
+  useEffect(() => {
+    const prev = prevSelectedRef.current
+    if (prev && selectedCampaignId && prev !== selectedCampaignId) {
+      clearActiveMode()
+      setActiveModeState(null)
+    }
+    prevSelectedRef.current = selectedCampaignId
+  }, [selectedCampaignId])
 
   // PR CE — every successful handler hands the updated
   // Campaign to the parent so the workspace's local slice stays
