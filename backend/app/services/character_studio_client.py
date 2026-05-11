@@ -697,12 +697,16 @@ def _create_avatar_real(
     """Returns (avatar_id, processed_thumbnail_url). Raises on failure.
 
     PR AN — when ``custom_voice_id`` is set, the avatar binds to the
-    cloned voice (`voice: {type: "custom", voiceId: ...}`) instead of
+    cloned voice (`voice: {type: "custom", id: ...}`) instead of
     the runway-live-preset. Falls back to the preset binding when no
     custom voice has been cloned for the Character yet.
+
+    PR DV — Runway's voice block schema now requires ``id`` (not
+    ``voiceId``) under ``type:"custom"``. Mirror of the PATCH fix
+    in ``voice_clone_client.apply_voice_to_avatar``.
     """
     if custom_voice_id:
-        voice_block: dict = {"type": "custom", "voiceId": custom_voice_id}
+        voice_block: dict = {"type": "custom", "id": custom_voice_id}
     else:
         voice_block = {"type": "runway-live-preset", "presetId": voice_preset}
     body = {
@@ -718,7 +722,7 @@ def _create_avatar_real(
         "personality_len=%d referenceImage_bytes=%d",
         name,
         voice_block.get("type"),
-        bool(voice_block.get("voiceId") or voice_block.get("presetId")),
+        bool(voice_block.get("id") or voice_block.get("presetId")),
         len(body["personality"]),
         len(portrait_data_uri),
     )

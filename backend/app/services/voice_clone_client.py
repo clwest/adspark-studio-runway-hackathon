@@ -500,7 +500,15 @@ def apply_voice_to_avatar(
         return VoiceApplyResult(status="mock_patched")
 
     url = f"{settings.runway_api_base}/v1/avatars/{avatar_id}"
-    body = {"voice": {"type": "custom", "voiceId": voice_id}}
+    # PR DV — Runway tightened the voice block schema. The
+    # discriminated-union now requires `id` (not `voiceId`) under
+    # `{type:"custom"}`. Real-mode clone surfaced:
+    #   PATCH rc=400: {"path":["voice",".id"],"expected":"string",
+    #                  "received":"undefined", ...}
+    # The previous shape `{"type": "custom", "voiceId": ...}` was the
+    # contract documented in PR AQ + RUNWAY_AVATAR_API_DEEP_REVIEW.md
+    # §3.1; Runway accepted it then, rejects it now.
+    body = {"voice": {"type": "custom", "id": voice_id}}
     headers = {
         "Authorization": f"Bearer {settings.runway_api_key}",
         "X-Runway-Version": settings.runway_api_version,
