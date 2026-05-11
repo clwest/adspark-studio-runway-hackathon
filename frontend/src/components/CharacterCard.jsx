@@ -1367,6 +1367,27 @@ export default function CharacterCard({
             {busyAction === 'avatar' ? 'Creating Avatar…' : avatarFailed ? 'Retry Avatar' : 'Create Runway Avatar'}
           </button>
         )}
+        {/* PR DU — Rebuild Avatar: rebind the Runway avatar to the
+            current (possibly-regenerated) portrait. Without this, a
+            Regenerate Portrait + render produces the OLD face because
+            videos lip-sync against the original avatar, which was
+            built from the old portrait. Reuses the existing
+            ``onCreateAvatar`` callback — the backend route overwrites
+            ``runway_avatar_id`` with the fresh binding; the old
+            avatar stays on the Runway account but is no longer
+            referenced by AdSpark. Zinc/secondary styling. */}
+        {hasPortrait && avatarReady && onCreateAvatar && (
+          <button
+            type="button"
+            data-testid="character-card-rebuild-avatar"
+            onClick={() => onCreateAvatar(c)}
+            disabled={busyAction === 'avatar' || Boolean(busyAction)}
+            title="Rebuild the Runway avatar from the current portrait. Required after Regenerate Portrait."
+            className="rounded border border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 text-[10px] px-2 py-1 disabled:opacity-50"
+          >
+            {busyAction === 'avatar' ? 'Rebuilding…' : '↻ Rebuild Avatar'}
+          </button>
+        )}
         {avatarReady && onAttach && !attachedHere && (
           <button
             type="button"
