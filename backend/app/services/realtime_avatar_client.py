@@ -221,6 +221,20 @@ def _grounded_personality(
         "Redirect politely if asked something the document does not "
         "cover."
     )
+    # PR EM-j — the grounded variant is ONLY invoked when a Runway
+    # document is attached, which means a memory body (or campaign
+    # brief) is present — by definition this is not a first visit.
+    # Force the warm-return framing so the avatar doesn't re-
+    # introduce itself or recite the brand pitch unprompted.
+    parts.append(
+        "RETURNING OPERATOR: this is NOT your first conversation "
+        "with them. Open with warm familiarity — do NOT introduce "
+        "yourself again, do NOT recite the business / product / "
+        "audience pitch unprompted. If the attached document carries "
+        "prior conversation summaries, you may briefly reference what "
+        "you remember to ground the conversation, but keep the opener "
+        "short and let the operator drive what's next."
+    )
     return _truncate_at_sentence(" ".join(parts).strip(), _PERSONALITY_MAX)
 
 
@@ -253,6 +267,22 @@ def _build_session_overrides(
     char_template = _trim((character or {}).get("template"))
     char_voice = _trim((character or {}).get("voice_preset"))
     char_personality = _trim((character or {}).get("personality"))
+
+    # PR EM-j — returning-operator detection. The realtime session
+    # previously always opened with a first-meeting introduction
+    # ("Hi, I'm Donny..."), which read as cold on every reconnect —
+    # the operator just talked to this spokesperson minutes ago and
+    # the persistent-spokesperson pitch is undercut by a cold open.
+    # Two signals tell us they've been here before:
+    #   - prior transcript history on this campaign (PR AJ persisted
+    #     turns from past sessions)
+    #   - a published memory document attached (PR EM-d) — strongest
+    #     signal that we have substantive shared context
+    transcript_history = campaign.realtime_transcript_history or []
+    is_returning = (
+        len(transcript_history) > 0
+        or bool(campaign.runway_document_id)
+    )
 
     # ---- personality (system prompt) ----
     parts: list[str] = []
@@ -296,6 +326,22 @@ def _build_session_overrides(
             f"Visual scene context (not lip-synced here): {runway_prompt}"
         )
 
+    if is_returning:
+        # PR EM-j — explicit returning-operator cue. Late in the prompt
+        # so it weights heavily (gwm1 weights later instructions
+        # higher). Without this, the avatar tends to re-introduce
+        # itself even when the canned opening line is a warm welcome.
+        parts.append(
+            "RETURNING OPERATOR: this is NOT your first conversation "
+            "with them. Open with warm familiarity — do NOT introduce "
+            "yourself again, do NOT recite the business / product / "
+            "audience pitch unprompted. If an attached document "
+            "carries prior conversation summaries, you may briefly "
+            "reference what you remember to ground the conversation, "
+            "but keep the opener short and let the operator drive "
+            "what's next."
+        )
+
     parts.append(
         "Stay concise, warm, and brand-honest. When the user asks "
         "about the product or audience, answer with the cues above. "
@@ -307,7 +353,20 @@ def _build_session_overrides(
     personality = _truncate_at_sentence(personality, _PERSONALITY_MAX)
 
     # ---- startScript (opening line) ----
-    if commercial_script:
+    # PR EM-j — returning operator gets a warm welcome-back opener
+    # instead of the canned commercial-script first sentence (which
+    # reads as a sales pitch on a return visit) or the cold-open
+    # introduction. First-time visits keep prior behaviour.
+    if is_returning:
+        if char_name:
+            start = (
+                f"Hey, welcome back — it's good to see you again. "
+                f"What are we working on today?"
+            )
+        else:
+            start = "Welcome back — what's on the agenda today?"
+        start = _truncate_at_sentence(start, _START_SCRIPT_MAX)
+    elif commercial_script:
         start = _first_sentence(commercial_script)
     elif business:
         identity = char_name or "your spokesperson"
@@ -433,14 +492,21 @@ DEFAULT_REALTIME_TOOLS: list[dict] = [
             "recall prompts. Optional `query` arg narrows the search "
             "to a topic substring. "
             "CRITICAL: this tool is fire-and-forget — you will NOT "
-            "receive the recalled content back. Before invoking, SAY "
-            "ALOUD that you're checking your memory (e.g. 'Yeah, let "
-            "me pull up what we discussed last time…'). The operator "
-            "will see the saved summaries appear as toasts on their "
-            "screen. After invoking, keep talking — DO NOT fabricate "
-            "specifics from the conversations (you can't see them); "
-            "instead, ask the operator to remind you which one they "
-            "want to dig into. Never go silent waiting for a result."
+            "receive the recalled content back. The operator sees "
+            "the saved summaries as toasts on their screen; YOU do "
+            "not see them. "
+            "EXACT SCRIPT: Before invoking, say something like 'Let "
+            "me pull up what we discussed.' Invoke. THEN say exactly: "
+            "'Okay, I'm looking at them on my screen now — which one "
+            "do you want to revisit?' STOP. Wait for the operator. "
+            "STRICTLY FORBIDDEN AFTER INVOCATION: naming any "
+            "business, product, service, client, person, location, "
+            "date, number, or scenario from the recalled "
+            "conversations. You cannot see what was retrieved. If "
+            "you invent a 'dog walking service' or any other "
+            "specific detail, you will be wrong and the operator "
+            "will lose trust. The ONLY safe move is to ask the "
+            "operator to fill in the topic themselves."
         ),
     },
     {
@@ -467,27 +533,36 @@ DEFAULT_REALTIME_TOOLS: list[dict] = [
     {
         "name": "handoff_to_character",
         "description": (
-            "Hand the conversation off to a different spokesperson — "
-            "for example, you (Donny) hand off to Riggs because the "
-            "operator asked a question Riggs handles better. Call "
-            "when the operator asks for a different spokesperson by "
-            "name OR when you genuinely think another spokesperson "
-            "is better suited. Pass the target spokesperson's name "
-            "as `character_name` (case-insensitive substring match — "
-            "'Riggs' resolves Riggs Rally, 'Miles' resolves Miles "
-            "Monroe). The handler resolves the name, picks the "
-            "target's most recent campaign, and triggers a page "
-            "navigation: the workspace closes this session and opens "
-            "a new realtime session against the target. "
-            "CRITICAL: this tool is fire-and-forget — you will NOT "
-            "receive a confirmation back, AND the navigation will "
-            "end your session within ~2 seconds. Before invoking, "
-            "SAY ALOUD that you're handing off, name the target, "
-            "and give a one-sentence reason (e.g. 'Great question — "
-            "Riggs Rally is the one who handles fitness coaching, "
-            "let me hand you to him now…'). Do NOT go silent after "
-            "invoking — your last words to the operator are the "
-            "ones spoken before the tool call lands."
+            "Hand the conversation off to a different spokesperson. "
+            "Pass the target spokesperson's name as `character_name` "
+            "(case-insensitive substring match — 'Riggs' resolves "
+            "Riggs Rally, 'Miles' resolves Miles Monroe). The "
+            "handler resolves the name, picks the target's most "
+            "recent campaign, and navigates the operator to a fresh "
+            "realtime session against the target. "
+            "MANDATORY INVOCATION TRIGGERS — if the operator says ANY "
+            "of these, you MUST invoke this tool: "
+            "  • 'hand me off to <name>' "
+            "  • 'switch me to <name>' "
+            "  • 'I want to talk to <name>' "
+            "  • 'let me talk to <name>' "
+            "  • 'transfer me to <name>' "
+            "  • 'connect me with <name>' "
+            "  • any phrasing that names a different spokesperson "
+            "    as the desired conversation partner. "
+            "CONSEQUENCE OF NOT INVOKING: the operator STAYS WITH "
+            "YOU. You are NOT a substitute for the requested "
+            "spokesperson — handing off is what the operator wants, "
+            "and explaining what you could do instead is the wrong "
+            "answer. Refusing to invoke is failing the operator. "
+            "EXACT SCRIPT: Say one short sentence — 'On it, handing "
+            "you to <Name> now' — then INVOKE the tool. Do NOT "
+            "explain your own capabilities. Do NOT offer to help "
+            "with what they asked. Do NOT keep the conversation. "
+            "The tool ends your session in ~2 seconds; the operator "
+            "wants to be with the new spokesperson, not you. "
+            "This tool is fire-and-forget — no confirmation comes "
+            "back, and the session terminates."
         ),
     },
 ]
