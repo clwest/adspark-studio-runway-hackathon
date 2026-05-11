@@ -184,13 +184,16 @@ def test_clean_prompt_fox_mascot_with_wardrobe():
         subject="an anthropomorphic fox business spokesperson with polished studio styling",
         style="stylized, editorial, studio light, muted palette; dark hoodie, backwards hat",
     )
+    # PR DT — singular framing line added after the subject. Locks
+    # gen4_image away from duplicate-subject hallucinations.
     assert prompt == (
         "Polished editorial portrait of an anthropomorphic fox business "
         "spokesperson with polished studio styling wearing a dark hoodie "
-        "and backwards hat. Calm confident expression. Stylized commercial "
-        "brand-character design with muted colors and soft studio lighting. "
-        "Head-and-shoulders composition on a clean neutral background. "
-        "Professional advertising character design."
+        "and backwards hat. Single solitary figure, one character only, "
+        "centered solo subject. Calm confident expression. Stylized "
+        "commercial brand-character design with muted colors and soft "
+        "studio lighting. Head-and-shoulders composition on a clean "
+        "neutral background. Professional advertising character design."
     ), prompt
 
 

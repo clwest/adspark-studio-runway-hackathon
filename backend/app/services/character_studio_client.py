@@ -155,6 +155,7 @@ _PROMPT_HARD_CAP = 700
 _SAFE_RETRY_TEMPLATES: dict[str, str] = {
     "mascot": (
         "Polished 3D brand mascot portrait of {subject}. "
+        "Single solitary figure, one character only. "
         "Adult brand-mascot character design with simple modern "
         "attire. Calm confident expression. Clean neutral studio "
         "background. Head and shoulders. Professional advertising "
@@ -162,26 +163,31 @@ _SAFE_RETRY_TEMPLATES: dict[str, str] = {
         "studio lighting."
     ),
     "founder": (
-        "Polished commercial portrait of {subject}. Photorealistic "
-        "professional founder with simple modern attire. Calm "
-        "confident expression. Clean neutral studio background. "
-        "Head and shoulders. Professional advertising character "
-        "design. Balanced facial proportions. Soft studio lighting."
+        "Polished commercial portrait of {subject}. "
+        "Single solitary figure, one character only. "
+        "Photorealistic professional founder with simple modern "
+        "attire. Calm confident expression. Clean neutral studio "
+        "background. Head and shoulders. Professional advertising "
+        "character design. Balanced facial proportions. Soft "
+        "studio lighting."
     ),
     "coach": (
-        "Polished commercial portrait of {subject}. Photorealistic "
-        "professional coach with simple modern attire. Calm "
-        "confident expression. Clean neutral studio background. "
-        "Head and shoulders. Professional advertising character "
-        "design. Balanced facial proportions. Soft studio lighting."
+        "Polished commercial portrait of {subject}. "
+        "Single solitary figure, one character only. "
+        "Photorealistic professional coach with simple modern "
+        "attire. Calm confident expression. Clean neutral studio "
+        "background. Head and shoulders. Professional advertising "
+        "character design. Balanced facial proportions. Soft "
+        "studio lighting."
     ),
     "local_guide": (
-        "Polished commercial portrait of {subject}. Photorealistic "
-        "professional local-business spokesperson with simple "
-        "modern attire. Calm confident expression. Clean neutral "
-        "studio background. Head and shoulders. Professional "
-        "advertising character design. Balanced facial proportions. "
-        "Soft studio lighting."
+        "Polished commercial portrait of {subject}. "
+        "Single solitary figure, one character only. "
+        "Photorealistic professional local-business spokesperson "
+        "with simple modern attire. Calm confident expression. "
+        "Clean neutral studio background. Head and shoulders. "
+        "Professional advertising character design. Balanced facial "
+        "proportions. Soft studio lighting."
     ),
 }
 
@@ -325,6 +331,13 @@ def _compose_clean_prompt(
 
     lines: list[str] = [
         f"Polished {anchor} portrait of {subject_text}{wardrobe_clause}.",
+        # PR DT — singular framing. gen4_image is stochastic and
+        # without an explicit "one character" cue it occasionally
+        # produces duplicate / mirrored subjects (the Riggs Rally
+        # regenerate that returned two raccoons was the trigger).
+        # Placed second so the singular signal lands close to the
+        # subject token where the model weighs it most.
+        "Single solitary figure, one character only, centered solo subject.",
         f"{expression_cue}.",
     ]
     if aesthetic:

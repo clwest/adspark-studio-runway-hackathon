@@ -153,6 +153,11 @@ export function buildCharacterPortraitPrompt({
 
   const lines = [
     `Polished ${anchor} portrait of ${subjectText}${wardrobeClause}.`,
+    // PR DT — singular framing. Mirrors the backend composer; keeps
+    // the textarea preview in sync with what gen4_image actually
+    // receives. Drives gen4_image away from duplicate-subject
+    // hallucinations (Riggs regenerate returning two raccoons).
+    'Single solitary figure, one character only, centered solo subject.',
     `${expressionCue}.`,
   ]
   if (aesthetic) lines.push(`${_capitalizeFirst(aesthetic)}.`)
