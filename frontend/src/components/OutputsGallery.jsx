@@ -56,6 +56,13 @@ const KIND_META = {
     orientation: 'vertical',
     description: '720×1280 captioned export of the Dialogue Scene.',
   },
+  // PR DO — long-form spokesperson ad. Stitched concat of multiple
+  // avatar_videos chunks for 30-60s runtime.
+  long_spokesperson_ad: {
+    label: 'Long Spokesperson Ad',
+    orientation: 'horizontal',
+    description: 'Multi-chunk talking-avatar ad stitched into one MP4.',
+  },
 }
 
 // Legacy single-field fallback for campaigns that don't yet have an
@@ -122,6 +129,13 @@ function buildCardsForCampaign(campaign) {
           ? o.cast_names
           : null,
         lineCount: Number.isFinite(o.line_count) ? o.line_count : null,
+        // PR DO — long-form spokesperson ad metadata so the card
+        // surfaces "4 clips · ~42s estimated runtime" alongside
+        // the script preview.
+        chunkCount: Number.isFinite(o.chunk_count) ? o.chunk_count : null,
+        durationEstimate: Number.isFinite(o.duration_estimate)
+          ? o.duration_estimate
+          : null,
       }
     })
   }
@@ -321,6 +335,27 @@ function OutputCard({ card }) {
               <span>
                 {card.lineCount} line{card.lineCount === 1 ? '' : 's'}
               </span>
+            )}
+          </p>
+        )}
+        {(card.chunkCount != null || card.durationEstimate != null) && (
+          <p
+            data-testid="output-card-long-ad-meta"
+            className="text-[10px] text-rose-300 font-mono leading-snug"
+            title={
+              card.chunkCount != null
+                ? `Stitched from ${card.chunkCount} avatar_videos chunks`
+                : ''
+            }
+          >
+            {card.chunkCount != null && (
+              <span>
+                {card.chunkCount} clip{card.chunkCount === 1 ? '' : 's'}
+              </span>
+            )}
+            {card.chunkCount != null && card.durationEstimate != null && ' · '}
+            {card.durationEstimate != null && (
+              <span>~{card.durationEstimate}s runtime</span>
             )}
           </p>
         )}

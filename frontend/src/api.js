@@ -231,6 +231,16 @@ export const api = {
       `/api/campaigns/${encodeURIComponent(campaignId)}/dialogue/generate-line/${encodeURIComponent(lineId)}`,
       { method: 'POST' },
     ),
+  // PR DO — Long Spokesperson Ad. POSTs the multi-chunk render
+  // pipeline. Body: { script (1-1500 chars), variant_id? }. Returns
+  // the updated Campaign with one new OutputRecord
+  // (kind=long_spokesperson_ad). One avatar_videos task per chunk
+  // — typically 3-6 chunks for a 30-60s ad.
+  generateLongSpokespersonAd: (campaignId, body) =>
+    jsonFetch(
+      `/api/campaigns/${encodeURIComponent(campaignId)}/long-spokesperson-ad`,
+      { method: 'POST', body: JSON.stringify(body) },
+    ),
   stitchDialogue: (campaignId) =>
     jsonFetch(
       `/api/campaigns/${encodeURIComponent(campaignId)}/dialogue/stitch`,

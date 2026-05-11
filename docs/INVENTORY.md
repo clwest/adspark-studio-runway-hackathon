@@ -1,8 +1,39 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after **PR DN — Submission Demo Content
-Seeder**. Brief landed labeled "PR DM" but DM was already taken;
+context-kit refresh after **PR DO — Long Spokesperson Ad Pipeline**.
+Runway's `avatar_videos` caps `speech.text` at 300 chars (≈10-15s
+of audio); PR DO packages a multi-chunk render-and-stitch pipeline
+as a first-class spokesperson workflow so operators can build 30-
+60s "intro → role → pitch → closer" ads without falling back to
+Dialogue Scene. New `backend/app/services/long_ad_service.py`
+(~390 LoC) provides `chunk_script` (sentence-boundary-greedy ≤280-
+char chunks with clause/word fallback ladders), `estimate_runtime`
+(15 cps), `generate_long_ad` (per-chunk avatar_videos with mock-
+mode ffmpeg-lavfi placeholders), and `stitch_chunks` (ffmpeg
+filter_complex concat matching the PR AF dialogue shape but writes
+to a caller-supplied target). New route
+`POST /api/campaigns/{id}/long-spokesperson-ad` (body
+`{script ≤1500, variant_id?}`) chunks → renders → stitches → cleans
+up per-chunk files → appends one `OutputRecord` with
+`kind="long_spokesperson_ad"` + `chunk_count` + `duration_estimate`
++ variant linkage. `OutputKind` gains a new value; `OutputRecord`
+gains three optional fields (`chunk_count`, `duration_estimate`,
+`stitched_from_output_ids`). `AdVariant.long_script: Optional[str]
+(≤1500)` with sticky semantics — None preserves, empty clears.
+Frontend `SpokespersonLane.jsx` Step 3 adds a sibling "Render Long
+Ad" button + inline textarea pre-populated from the selected
+variant's long_script, live chunk + runtime estimate.
+`OutputsGallery.jsx` gains KIND_META entry + new
+`output-card-long-ad-meta` sub-line ("N clips · ~Xs runtime").
+`seed-submission-demo-content.py` extended with ~950-1200 char
+`long_script` per spokesperson; live seed run patched all three
+demo variants without clobbering. Six new chunking unit tests +
+three route integration tests pin the contract. Pytest **53/53**.
+Mock smoke 3/3. Vite build 549.63 KB initial / 147.42 KB gzip.
+Backend route count **76 → 77**. Zero Runway calls fired by this
+PR — operator triggers renders per their 50k-credit budget.
+Earlier: PR DN — Submission Demo Content Seeder. Brief landed labeled "PR DM" but DM was already taken;
 shipped under DN to keep the PR ledger clean. Pure content-seeding
 slice. New `scripts/seed-submission-demo-content.py` (~430 LoC)
 locates Donny / Riggs / Miles by name + idempotently writes one

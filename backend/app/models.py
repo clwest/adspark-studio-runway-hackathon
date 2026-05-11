@@ -130,6 +130,11 @@ OutputKind = Literal[
     "storyboard_voiced",
     "dialogue_scene",
     "dialogue_scene_reels",
+    # PR DO — long-form spokesperson ad. Internally a stitched
+    # concat of multiple avatar_videos chunks (each ≤300 chars
+    # per Runway's `speech.text` cap), surfaced as ONE OutputRecord
+    # so the Videos gallery shows one card per long-form ad.
+    "long_spokesperson_ad",
 ]
 
 
@@ -166,6 +171,16 @@ class OutputRecord(BaseModel):
     # null.
     cast_names: Optional[list[str]] = None
     line_count: Optional[int] = None
+    # PR DO — long-form spokesperson ad metadata. `chunk_count` is the
+    # number of avatar_videos calls that were stitched together;
+    # `duration_estimate` is computed from chars-per-second so the
+    # Videos gallery can show "~42s estimated" before the operator
+    # plays the MP4. `stitched_from_output_ids` is reserved for a
+    # future per-chunk persistence story — chunks today live as
+    # ephemeral disk files only, so the list stays empty.
+    chunk_count: Optional[int] = None
+    duration_estimate: Optional[float] = None
+    stitched_from_output_ids: Optional[list[str]] = None
     created_at: datetime
 
 
@@ -181,6 +196,14 @@ class AdVariant(BaseModel):
     id: str  # 12-char hex generated server-side
     title: str = Field(..., min_length=1, max_length=80)
     script: str = Field(default="", max_length=2000)
+    # PR DO — optional long-form script for the multi-chunk Long
+    # Spokesperson Ad pipeline. Up to ~1500 chars (roughly 30-100s of
+    # speech) which the long-ad service chunks at sentence
+    # boundaries into ≤280-char pieces, renders each via
+    # avatar_videos, and stitches with ffmpeg into one MP4. Empty by
+    # default so the standard 300-char `script` field stays the
+    # source of truth for single-call renders.
+    long_script: Optional[str] = Field(default=None, max_length=1500)
     created_at: datetime
     updated_at: datetime
 
@@ -197,6 +220,10 @@ class AdVariantCreate(BaseModel):
     id: Optional[str] = None
     title: str = Field(..., min_length=1, max_length=80)
     script: str = Field(default="", max_length=2000)
+    # PR DO — optional long-form script. None preserves the existing
+    # variant's long_script unchanged (sticky semantics); pass an
+    # empty string to explicitly clear it.
+    long_script: Optional[str] = Field(default=None, max_length=1500)
 
 
 # ---- PR AF — Multi-Character Dialogue Scene Builder ---------------

@@ -56,6 +56,7 @@ from ..services.finisher_service import (
 )
 from ..services import storyboard_service as storyboard_service  # type: ignore[attr-defined]
 from ..services import dialogue_service as dialogue_service  # type: ignore[attr-defined]
+from ..services import long_ad_service as long_ad_service  # type: ignore[attr-defined]
 from ..services.storage import CampaignStore, VideoCache
 
 logger = logging.getLogger(__name__)
@@ -1781,16 +1782,23 @@ def post_ad_variant(
         "created_at": existing.created_at.isoformat() if existing else now,
         "updated_at": now,
     }
+    # PR DO — sticky long_script. None (omitted) preserves the
+    # existing variant's value; an explicit empty string clears it.
+    if body.long_script is not None:
+        variant["long_script"] = body.long_script.strip() or None
+    elif existing and existing.long_script:
+        variant["long_script"] = existing.long_script
     updated = store.upsert_ad_variant(campaign_id, variant)
     if not updated:
         raise HTTPException(status_code=404, detail="campaign not found")
     logger.info(
-        "campaign %s ad_variant %s id=%s title=%r script_len=%d",
+        "campaign %s ad_variant %s id=%s title=%r script_len=%d long_len=%d",
         campaign_id,
         "updated" if existing else "created",
         variant["id"],
         variant["title"][:40],
         len(variant["script"]),
+        len(variant.get("long_script") or ""),
     )
     return updated
 
@@ -1930,6 +1938,11 @@ def _append_output_record(
     # `dialogue_scene` / `dialogue_scene_reels` kinds.
     cast_names: Optional[list[str]] = None,
     line_count: Optional[int] = None,
+    # PR DO — long-form spokesperson ad metadata; populated only
+    # for `long_spokesperson_ad` kind.
+    chunk_count: Optional[int] = None,
+    duration_estimate: Optional[float] = None,
+    stitched_from_output_ids: Optional[list[str]] = None,
 ) -> None:
     entry = {
         "id": output_id,
@@ -1946,6 +1959,10 @@ def _append_output_record(
         # PR DJ — dialogue-scene linkage.
         "cast_names": cast_names,
         "line_count": line_count,
+        # PR DO — long-form spokesperson ad linkage.
+        "chunk_count": chunk_count,
+        "duration_estimate": duration_estimate,
+        "stitched_from_output_ids": stitched_from_output_ids,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     try:
@@ -2008,6 +2025,11 @@ def get_campaign_output(
         "storyboard_voiced",
         "dialogue_scene",
         "dialogue_scene_reels",
+        # PR DO — long-form spokesperson ad final stitched MP4 lives
+        # under data/finished/ alongside the other ffmpeg-built
+        # finals (per-chunk MP4s live separately under data/long_ad/
+        # and are deleted after the stitch).
+        "long_spokesperson_ad",
     }:
         cache_dir = settings.data_path / "finished"
     elif match.kind in {"cinematic_video"}:
@@ -2199,6 +2221,148 @@ def post_spokesperson_ad(
         settings=settings,
         store=store,
     )
+
+
+# ---- PR DO — Long Spokesperson Ad (multi-chunk stitched) ---------
+#
+# Operator authors up to ~1500 chars of script. Runway's `avatar_videos`
+# caps a single render at 300 chars, so the service chunks the script
+# at sentence boundaries into ≤280-char pieces, fires one avatar_videos
+# per chunk, and stitches the resulting MP4s into one final video via
+# ffmpeg concat. The final stitched MP4 is the only OutputRecord
+# surfaced in the Videos gallery; per-chunk files live ephemerally
+# under data/long_ad/ and are deleted after a successful stitch.
+
+
+class LongSpokespersonAdBody(BaseModel):
+    """Body for `POST /api/campaigns/{id}/long-spokesperson-ad`.
+
+    `script` is the operator's long-form text (up to 1500 chars).
+    `variant_id` optionally links the render to an existing
+    `AdVariant`; when set, the variant's `long_script` is
+    write-through-updated to the submitted script so re-renders
+    don't require retyping.
+    """
+
+    script: str = Field(..., min_length=1, max_length=1500)
+    variant_id: Optional[str] = Field(default=None)
+
+
+@router.post("/{campaign_id}/long-spokesperson-ad", response_model=Campaign)
+def post_long_spokesperson_ad(
+    campaign_id: str,
+    body: LongSpokespersonAdBody,
+    settings: Settings = Depends(get_settings),
+    store: CampaignStore = Depends(_store),
+) -> Campaign:
+    """PR DO — render a long-form spokesperson ad by chunking the
+    script + running one `avatar_videos` per chunk + stitching the
+    chunks into a single MP4 via ffmpeg concat. Appends one
+    OutputRecord (kind=`long_spokesperson_ad`) to the campaign so
+    the Videos gallery surfaces the stitched ad as a single card.
+
+    Real-mode cost: N `avatar_videos` tasks where N = chunk count
+    (typically 3–6 chunks for a 30–60s ad). Mock-mode produces
+    ffmpeg-lavfi placeholder chunks.
+    """
+    record = store.get(campaign_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="campaign not found")
+
+    avatar_id = host_active_avatar_id(record, settings)
+    avatar_status = host_active_avatar_status(record, settings)
+    if not avatar_id or avatar_status not in {"ready", "mock"}:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "A ready Runway Avatar is required before rendering a "
+                "long spokesperson ad."
+            ),
+        )
+
+    # Resolve the variant linkage. When variant_id is provided we
+    # also write the submitted script back to `variant.long_script`
+    # so the operator can re-render without retyping.
+    variant_title: Optional[str] = None
+    variant_id_arg = body.variant_id or None
+    if variant_id_arg:
+        variant = next(
+            (v for v in (record.ad_variants or []) if v.id == variant_id_arg),
+            None,
+        )
+        if variant is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"variant {variant_id_arg!r} not found",
+            )
+        variant_title = variant.title
+        # Write-through: persist the submitted script as the
+        # variant's long_script so re-renders pre-populate.
+        persisted_variant = {
+            "id": variant.id,
+            "title": variant.title,
+            "script": variant.script,
+            "long_script": body.script.strip(),
+            "created_at": variant.created_at.isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        store.upsert_ad_variant(campaign_id, persisted_variant)
+
+    # Generate the per-chunk MP4s.
+    output_id = _new_output_id()
+    result = long_ad_service.generate_long_ad(
+        avatar_id=avatar_id,
+        script=body.script.strip(),
+        campaign_id=campaign_id,
+        output_id=output_id,
+        settings=settings,
+    )
+    if result.status == "unavailable":
+        raise HTTPException(status_code=503, detail=result.error or "unavailable")
+    if result.status != "ok":
+        raise HTTPException(status_code=502, detail=result.error or "long ad render failed")
+
+    # Stitch the chunks into one MP4 under data/finished/.
+    finished_dir = settings.data_path / "finished"
+    finished_dir.mkdir(parents=True, exist_ok=True)
+    target = finished_dir / f"{campaign_id}-long-{output_id}.mp4"
+    ok, err = long_ad_service.stitch_chunks(
+        result.chunk_paths, target,
+    )
+    if not ok:
+        # Clean up partial chunks on failure.
+        long_ad_service.cleanup_chunks(result.chunk_paths)
+        raise HTTPException(status_code=502, detail=err or "stitch failed")
+
+    # Best-effort: delete per-chunk MP4s now that the stitched
+    # output is saved.
+    long_ad_service.cleanup_chunks(result.chunk_paths)
+
+    # Append OutputRecord. cache_filename matches the file we just
+    # wrote; the existing /output/{id} route maps
+    # `long_spokesperson_ad` → data/finished/.
+    _append_output_record(
+        store,
+        campaign_id,
+        output_id=output_id,
+        kind="long_spokesperson_ad",
+        cache_filename=target.name,
+        script=body.script.strip(),
+        task_id=",".join(result.task_ids) if result.task_ids else None,
+        mock_mode=result.mock_mode,
+        variant_id=variant_id_arg,
+        variant_title=variant_title,
+        chunk_count=result.chunk_count,
+        duration_estimate=result.duration_estimate,
+    )
+
+    updated = store.get(campaign_id) or record
+    logger.info(
+        "long-ad campaign=%s output=%s chunks=%d est_runtime=%ss mock=%s",
+        campaign_id, output_id, result.chunk_count,
+        result.duration_estimate, result.mock_mode,
+    )
+    return updated
 
 
 @router.get("/{campaign_id}/spokesperson-ad")

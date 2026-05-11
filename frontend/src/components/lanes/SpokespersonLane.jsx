@@ -37,6 +37,7 @@ export default function SpokespersonLane({
   // existing /spokesperson-ad route. The lane shows credit-burn
   // warning copy on the button.
   onGenerateSpokesperson = null,
+  onGenerateLongSpokesperson = null,
   // PR BQ — Inline brief editor save handler. POSTs to the new
   // /brief route; no Runway calls. Step 1 mounts <LaneBriefEditor>
   // when the focused campaign exists.
@@ -215,6 +216,75 @@ export default function SpokespersonLane({
       setHorizontalError(`${e?.message || e}`)
     } finally {
       setHorizontalBusy(false)
+    }
+  }
+
+  // PR DO — Long Spokesperson Ad state + handlers. Multi-chunk
+  // render pipeline; backend chunks the script + fires one
+  // avatar_videos per chunk + ffmpeg-concats into one MP4 in the
+  // Videos tab.
+  const LONG_SCRIPT_MAX = 1500
+  const LONG_CHUNK_TARGET = 280
+  const CHARS_PER_SECOND = 15
+  const selectedVariant = (focused?.ad_variants || []).find(
+    (v) => v.id === selectedVariantId,
+  )
+  const [longAdExpanded, setLongAdExpanded] = useState(false)
+  const [longAdScript, setLongAdScript] = useState(
+    selectedVariant?.long_script || '',
+  )
+  const [longAdBusy, setLongAdBusy] = useState(false)
+  const [longAdError, setLongAdError] = useState('')
+  useEffect(() => {
+    // When the operator switches variants, swap the textarea
+    // content to the new variant's long_script. Existing edits in
+    // the textarea are discarded so the UI never carries stale
+    // text across variants.
+    setLongAdScript(selectedVariant?.long_script || '')
+    setLongAdError('')
+  }, [selectedVariantId, selectedVariant?.long_script])
+  const longCharCount = longAdScript.length
+  const longChunkEstimate = longAdScript
+    ? Math.max(1, Math.ceil(longCharCount / LONG_CHUNK_TARGET))
+    : 0
+  const longDurationEstimate = longAdScript
+    ? Math.max(1, Math.round(longCharCount / CHARS_PER_SECOND))
+    : 0
+  const longAdCanFire = Boolean(
+    onGenerateLongSpokesperson &&
+      hasCampaign &&
+      horizontalHasUsableAvatar &&
+      longAdScript.trim().length > 0 &&
+      longCharCount <= LONG_SCRIPT_MAX &&
+      !longAdBusy,
+  )
+  const longAdLabel = longAdBusy
+    ? `Rendering long ad (~${longChunkEstimate} chunks)…`
+    : 'Render Long Ad'
+  const longAdDisabledReason = !hasCampaign
+    ? 'Requires campaign brief — save the brief in Step 1 first.'
+    : !horizontalHasUsableAvatar
+    ? 'Requires avatar — generate or attach a Runway avatar to the campaign first.'
+    : !longAdScript.trim()
+    ? 'Type a long-form script in the textarea below first.'
+    : longCharCount > LONG_SCRIPT_MAX
+    ? `Script is ${longCharCount}/${LONG_SCRIPT_MAX} chars — trim before rendering.`
+    : !onGenerateLongSpokesperson
+    ? 'Wire onGenerateLongSpokesperson before this can fire.'
+    : ''
+  const handleGenerateLongAd = async () => {
+    if (!longAdCanFire) return
+    setLongAdError('')
+    setLongAdBusy(true)
+    try {
+      await onGenerateLongSpokesperson(focused.id, {
+        script: longAdScript.trim(),
+        variantId: selectedVariantId || undefined,
+      })
+    } catch (e) {
+      setLongAdError(`${e?.message || e}`)
+    } finally {
+      setLongAdBusy(false)
     }
   }
 
@@ -410,6 +480,102 @@ export default function SpokespersonLane({
                 ⚠️ Re-rendering creates a new billable video. Prior
                 renders are preserved in the Videos tab.
               </p>
+            )}
+            {/* PR DO — Long Spokesperson Ad. Standalone button +
+                collapsible textarea below. Backend chunks the
+                script at sentence boundaries, fires one
+                avatar_videos per chunk, and ffmpeg-concats into
+                one Videos card. Targets 30-60s ad runs. */}
+            <button
+              type="button"
+              onClick={longAdCanFire ? handleGenerateLongAd : () => setLongAdExpanded((v) => !v)}
+              disabled={longAdBusy}
+              data-testid="spokesperson-lane-long-ad"
+              data-render-target="long-ad"
+              data-burns-credits="true"
+              data-expanded={longAdExpanded ? 'true' : 'false'}
+              data-busy={longAdBusy ? 'true' : 'false'}
+              title={
+                longAdCanFire
+                  ? `⚠️ POST /v1/avatar_videos × ${longChunkEstimate} — burns ${longChunkEstimate} credits. Stitched into one MP4 via ffmpeg.`
+                  : longAdDisabledReason || 'Toggle the long-form script editor below.'
+              }
+              className={
+                'w-full flex items-center justify-between gap-2 text-[11px] rounded px-2 py-1 font-mono transition-colors ' +
+                (longAdCanFire
+                  ? 'ring-1 ring-rose-400/50 bg-rose-500/30 hover:bg-rose-500/45 text-rose-100'
+                  : longAdBusy
+                  ? 'ring-1 ring-rose-400/30 bg-rose-500/20 text-rose-200 cursor-wait'
+                  : 'ring-1 ring-zinc-700 bg-zinc-800/40 text-zinc-300 cursor-pointer hover:ring-rose-400/30')
+              }
+            >
+              <span className="truncate">{longAdLabel}</span>
+              <span className="text-[9px] text-zinc-200/70">
+                {longAdBusy
+                  ? `rendering ${longChunkEstimate} chunks…`
+                  : longChunkEstimate > 0
+                  ? `${longChunkEstimate} clips · ~${longDurationEstimate}s`
+                  : longAdExpanded
+                  ? 'type below ↓'
+                  : 'click to expand'}
+              </span>
+            </button>
+            {longAdExpanded && (
+              <div
+                data-testid="spokesperson-lane-long-ad-editor"
+                className="rounded ring-1 ring-zinc-800 bg-zinc-950/60 p-2 space-y-1.5"
+              >
+                <p className="text-[10px] text-zinc-400 leading-snug">
+                  Long-form script (≤{LONG_SCRIPT_MAX} chars). Backend
+                  splits at sentence boundaries into ~{LONG_CHUNK_TARGET}-char
+                  chunks, renders each via avatar_videos, then
+                  stitches into one MP4. One Runway credit per chunk.
+                </p>
+                <textarea
+                  value={longAdScript}
+                  onChange={(e) => setLongAdScript(e.target.value)}
+                  placeholder={
+                    "Hi, I'm Donny. Most AI ads feel like one-off " +
+                    "experiments. Character OS gives your brand " +
+                    "persistent spokespeople, reusable campaigns, saved " +
+                    "videos, and ad variants you can keep building on…"
+                  }
+                  rows={6}
+                  maxLength={LONG_SCRIPT_MAX}
+                  disabled={longAdBusy}
+                  data-testid="spokesperson-lane-long-ad-textarea"
+                  className="w-full rounded bg-zinc-950 ring-1 ring-zinc-800 px-1.5 py-1 text-[10px] leading-snug font-mono focus:ring-rose-400 outline-none disabled:opacity-60"
+                />
+                <div className="flex items-center justify-between gap-2 flex-wrap text-[9px] text-zinc-500 font-mono">
+                  <span>
+                    {longCharCount}/{LONG_SCRIPT_MAX} chars
+                  </span>
+                  <span data-testid="spokesperson-lane-long-ad-estimate">
+                    {longChunkEstimate > 0
+                      ? `${longChunkEstimate} clip${longChunkEstimate === 1 ? '' : 's'} · estimated ${longDurationEstimate}s runtime`
+                      : 'type a script to see the chunk + runtime estimate'}
+                  </span>
+                </div>
+                {longAdError && (
+                  <p
+                    data-testid="spokesperson-lane-long-ad-error"
+                    className="text-[10px] text-rose-300 leading-snug"
+                    title={longAdError}
+                  >
+                    {longAdError}
+                  </p>
+                )}
+                {selectedVariant && (
+                  <p className="text-[9px] text-zinc-500 leading-snug">
+                    Linked to variant{' '}
+                    <span className="text-pink-300 font-mono">
+                      {selectedVariant.title}
+                    </span>{' '}
+                    — on render the script is saved as the variant's
+                    long_script so a future re-render pre-populates.
+                  </p>
+                )}
+              </div>
             )}
             {/* PR BN — Reels button is now wired. Enabled only
                 when a focused campaign has a cached spokesperson

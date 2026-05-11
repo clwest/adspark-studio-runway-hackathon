@@ -1,6 +1,71 @@
 # START NEXT SESSION — AdSpark Studio
 
-**Last touched:** 2026-05-10 (PR DN — Seed submission
+**Last touched:** 2026-05-10 (PR DO — Long Spokesperson
+Ad pipeline. Runway's `avatar_videos` caps a single
+render at 300 chars (≈10-15s of audio); operator
+asked for 30-60s ads to fit a proper "intro → role →
+pitch → closer" structure. PR DO chains multiple
+avatar_videos calls into one stitched MP4 packaged as
+a first-class spokesperson workflow (no need to fall
+back to Dialogue Scene mode). New
+`backend/app/services/long_ad_service.py` (~390 LoC,
+stdlib + httpx) provides `chunk_script` (sentence-
+boundary-greedy ≤280-char chunks with clause/word
+fallback ladders for pathological inputs),
+`estimate_runtime` (15 cps), `generate_long_ad`
+(per-chunk avatar_videos render + per-chunk MP4 cache
+under `data/long_ad/`), and `stitch_chunks` (ffmpeg
+filter_complex concat matching the PR AF dialogue
+stitch shape, but writes to a caller-supplied target
+path). New route `POST /api/campaigns/{id}/long-spokesperson-ad`
+(body: `{script ≤1500, variant_id?}`) wires the
+pipeline + appends one OutputRecord with
+`kind="long_spokesperson_ad"` + `chunk_count` +
+`duration_estimate` + variant linkage. Per-chunk MP4s
+are cleaned up post-stitch — only the final stitched
+ad lands as an OutputRecord. New OutputKind value +
+three new optional OutputRecord fields (chunk_count,
+duration_estimate, stitched_from_output_ids — the
+last reserved for a future per-chunk audit story).
+New `AdVariant.long_script: Optional[str] (≤1500)`
+field with sticky semantics in the upsert route
+(None preserves; empty string clears). Frontend
+`SpokespersonLane.jsx` Step 3 gains a sibling
+"Render Long Ad" button next to the existing "Render
+new Spokesperson Ad". Click expands an inline
+textarea pre-populated from the selected variant's
+long_script (auto-syncs on variant switch) with a
+live chunk + runtime estimate ("4 clips · ~63s"),
+1500-char cap, and a rose-themed render button.
+`OutputsGallery.jsx` adds a KIND_META entry for
+`long_spokesperson_ad` + a new
+`output-card-long-ad-meta` sub-line surfacing
+"N clips · ~Xs runtime". `seed-submission-demo-content.py`
+extended with ~950-1200 char `long_script` per
+spokesperson (Donny / Riggs / Miles) — patches
+existing variants in place when missing without
+clobbering operator edits. Seed re-run against the
+live backend successfully patched all three; second
+run reports 9/9 skipped (idempotency preserved). Six
+new pytests pin the contract: chunk-script simple
+pack, greedy multi-chunk, clause fallback, word
+fallback, blank-input no-op, runtime estimation;
+plus three integration tests for the route end-to-
+end: full pipeline (chunks + stitch + OutputRecord +
+file serving + chunk cleanup), oversize-script 422
+rejection at Pydantic body, variant_id write-through
+persists long_script. Pytest **53/53** (44 prior + 9
+new PR DO). Mock smoke 3/3. Vite build **549.63 KB
+initial / 147.42 KB gzip** (+4.93 KB / +1.05 KB from
+the new state + textarea + estimate computation).
+Backend route count **76 → 77** (+1 for
+`/long-spokesperson-ad`). Drift OK, hygiene clean.
+Live seed run patched long_scripts onto Donny / Riggs
+/ Miles variants — operator's "Render Long Ad"
+textarea will now pre-populate with the seeded prose
+on workspace open. No real Runway calls fired by
+this PR — render is operator-triggered per their
+credit budget. Earlier: PR DN — Seed submission
 demo content for Character OS. Brief came in labeled
 "PR DM" but the DM letter was already taken by the
 dialogue-extend slice committed at `2280117`; shipping

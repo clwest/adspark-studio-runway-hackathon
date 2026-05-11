@@ -1256,6 +1256,214 @@ def test_dialogue_plan_rotates_three_speakers_a_b_c(client: TestClient):
         )
 
 
+# ---- PR DO — Long Spokesperson Ad pipeline ---------------------
+
+
+def test_chunk_script_simple_sentences():
+    """Short script with 2 sentences fits in one chunk."""
+    from app.services.long_ad_service import chunk_script
+
+    script = "Hello. World."
+    chunks = chunk_script(script)
+    assert chunks == ["Hello. World."]
+
+
+def test_chunk_script_packs_sentences_greedily():
+    """Multiple sentences pack into one chunk until the next sentence
+    would overflow ≤280 chars."""
+    from app.services.long_ad_service import chunk_script, _CHUNK_MAX_CHARS
+
+    s1 = "First sentence " + "a" * 100 + "."
+    s2 = "Second sentence " + "b" * 100 + "."
+    s3 = "Third sentence " + "c" * 100 + "."
+    script = " ".join([s1, s2, s3])
+    chunks = chunk_script(script)
+    # All three should fit since len(s1+s2+s3) ≈ 345 chars > 280 → 2 chunks
+    assert len(chunks) >= 2, chunks
+    for c in chunks:
+        assert len(c) <= _CHUNK_MAX_CHARS, (c, len(c))
+
+
+def test_chunk_script_clause_fallback_for_oversize_sentence():
+    """A single sentence >280 chars falls back to clause-split."""
+    from app.services.long_ad_service import chunk_script, _CHUNK_MAX_CHARS
+
+    long_sentence = (
+        "This is a deliberately overlong run-on with many clauses, "
+        + "and each clause adds another twenty-five-or-so characters, "
+        + "and we keep going because the seed text is intentionally verbose, "
+        + "and there are more commas to test the fallback ladder, "
+        + "and another clause for good measure, "
+        + "and yet another one to push it solidly past the cap, "
+        + "and one final clause that should force chunking."
+    )
+    assert len(long_sentence) > _CHUNK_MAX_CHARS, (
+        f"test input must exceed cap to exercise fallback ({len(long_sentence)} chars)"
+    )
+    chunks = chunk_script(long_sentence)
+    assert len(chunks) >= 2
+    for c in chunks:
+        assert len(c) <= _CHUNK_MAX_CHARS, (c, len(c))
+
+
+def test_chunk_script_word_fallback_when_no_clause_breaks():
+    """A long run-on with no punctuation at all falls back to word
+    boundary splitting."""
+    from app.services.long_ad_service import chunk_script, _CHUNK_MAX_CHARS
+
+    runon = "word " * 100  # ~500 chars of word repetition, no punctuation
+    chunks = chunk_script(runon)
+    assert len(chunks) >= 2
+    for c in chunks:
+        assert len(c) <= _CHUNK_MAX_CHARS, (c, len(c))
+
+
+def test_chunk_script_returns_empty_for_blank():
+    """Blank script returns empty list — caller surfaces a 4xx."""
+    from app.services.long_ad_service import chunk_script
+
+    assert chunk_script("") == []
+    assert chunk_script("   \n\n\t  ") == []
+
+
+def test_estimate_runtime():
+    """Runtime estimate matches chars / 15 cps."""
+    from app.services.long_ad_service import estimate_runtime, _CHARS_PER_SECOND
+
+    chunks = ["a" * 150, "b" * 150]  # 300 chars total
+    expected = round(300 / _CHARS_PER_SECOND, 1)
+    assert estimate_runtime(chunks) == expected
+    assert estimate_runtime([]) == 0.0
+
+
+def test_long_spokesperson_ad_end_to_end(client: TestClient, tmp_path: Path):
+    """Mock-mode full pipeline: plan → render chunks → stitch →
+    OutputRecord appended → file servable via /output/{id}."""
+    from app.services.long_ad_service import _CHUNK_MAX_CHARS
+
+    char = _create_character(client, name="Donny Long")
+    _generate_portrait(client, char["id"])
+    cid = _create_campaign_with_avatar(client, char["id"])
+    client.post(f"/api/characters/{char['id']}/create-avatar", json={})
+
+    # Create a variant with a long_script ~600 chars (forces 3+ chunks).
+    long_text = (
+        "Hi I'm Donny Long. I'll walk you through what Character OS is. "
+        "It's a platform for persistent AI spokespeople. "
+        "Each spokesperson lives across many campaigns. "
+        "The brief stays stable while the script changes per ad variant. "
+        "Reusable creative infrastructure for any brand. "
+        "Build the character once. Ship it ten times. "
+        "Goodbye one-off AI ads. Hello continuity."
+    )
+    assert len(long_text) > _CHUNK_MAX_CHARS, "test script needs to exceed one chunk"
+
+    variant_resp = client.post(
+        f"/api/campaigns/{cid}/ad-variant",
+        json={
+            "title": "Long Test Variant",
+            "script": "short standard script",
+            "long_script": long_text,
+        },
+    )
+    assert variant_resp.status_code == 200, variant_resp.text
+    variant = variant_resp.json()["ad_variants"][0]
+    assert variant["long_script"] == long_text
+
+    # Fire the long-ad route.
+    resp = client.post(
+        f"/api/campaigns/{cid}/long-spokesperson-ad",
+        json={"script": long_text, "variant_id": variant["id"]},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+
+    # OutputRecord checks.
+    outputs = [o for o in body["outputs"] if o["kind"] == "long_spokesperson_ad"]
+    assert len(outputs) == 1, outputs
+    out = outputs[0]
+    assert out["chunk_count"] is not None and out["chunk_count"] >= 2
+    assert out["duration_estimate"] is not None and out["duration_estimate"] > 0
+    assert out["variant_id"] == variant["id"]
+    assert out["variant_title"] == "Long Test Variant"
+    assert out["parent_output_id"] is None
+
+    # File served via /output/{id}.
+    s = client.get(f"/api/campaigns/{cid}/output/{out['id']}")
+    assert s.status_code == 200, s.text
+    assert s.headers["content-type"].startswith("video/")
+
+    # Stitched MP4 exists on disk under finished/; per-chunk files
+    # under long_ad/ should have been cleaned up post-stitch.
+    stitched = tmp_path / "finished" / out["cache_filename"]
+    assert stitched.exists() and stitched.stat().st_size > 0
+    long_ad_dir = tmp_path / "long_ad"
+    if long_ad_dir.exists():
+        # Anything left over should be from a different campaign;
+        # this one's chunks should all be deleted.
+        leftover = [p for p in long_ad_dir.glob(f"{cid}-*.mp4")]
+        assert leftover == [], (
+            f"per-chunk files were not cleaned up: {leftover}"
+        )
+
+
+def test_long_spokesperson_ad_rejects_oversize_script(client: TestClient):
+    """Backend rejects scripts > 1500 chars at the Pydantic body cap."""
+    char = _create_character(client, name="Cap Test")
+    _generate_portrait(client, char["id"])
+    cid = _create_campaign_with_avatar(client, char["id"])
+    client.post(f"/api/characters/{char['id']}/create-avatar", json={})
+
+    oversize = "x" * 1501
+    r = client.post(
+        f"/api/campaigns/{cid}/long-spokesperson-ad",
+        json={"script": oversize},
+    )
+    assert r.status_code == 422, r.text
+
+
+def test_long_spokesperson_ad_persists_long_script_to_variant(
+    client: TestClient,
+):
+    """When variant_id is provided, the route write-through-persists
+    the submitted long_script onto the variant so re-renders don't
+    require retyping."""
+    char = _create_character(client, name="Write-Through Test")
+    _generate_portrait(client, char["id"])
+    cid = _create_campaign_with_avatar(client, char["id"])
+    client.post(f"/api/characters/{char['id']}/create-avatar", json={})
+
+    # Variant created without a long_script.
+    r = client.post(
+        f"/api/campaigns/{cid}/ad-variant",
+        json={"title": "Persist Test", "script": "short script"},
+    )
+    assert r.status_code == 200
+    variant = r.json()["ad_variants"][0]
+    assert (variant.get("long_script") or "") == ""
+
+    submitted = (
+        "Hello world. This is the long-form submission. "
+        "It should land back on the variant as long_script."
+    )
+    r = client.post(
+        f"/api/campaigns/{cid}/long-spokesperson-ad",
+        json={"script": submitted, "variant_id": variant["id"]},
+    )
+    assert r.status_code == 200, r.text
+
+    # Re-fetch the campaign and verify long_script persisted.
+    r = client.get(f"/api/campaigns?character_id={char['id']}")
+    if r.status_code == 404:
+        # Fallback path — list all campaigns and filter.
+        r = client.get("/api/campaigns")
+    items = r.json()
+    items = items.get("campaigns", items) if isinstance(items, dict) else items
+    camp = next(c for c in items if c["id"] == cid)
+    v = next(x for x in camp["ad_variants"] if x["id"] == variant["id"])
+    assert v["long_script"] == submitted
+
+
 # ---- PR DM — extend mode preserves existing lines --------------
 
 

@@ -101,6 +101,29 @@ SEED = {
                 "and ad variants you can keep building on instead "
                 "of starting over every time."
             ),
+            # PR DO — long-form variant for the multi-chunk render
+            # pipeline. ~950 chars: introduce, role, Character OS
+            # angle, closer. Chunks at ~280 chars → 4 clips,
+            # estimated ~63s of audio.
+            "long_script": (
+                "Hi, I'm Donny Sparks. I'm the creative voice on "
+                "the Character OS team — the one nudging us to "
+                "build campaigns that don't sound like every other "
+                "AI ad on the timeline. Here's the problem with "
+                "most AI ads today: they feel like one-off "
+                "experiments. A founder fires up a prompt, gets "
+                "one clip, ships it, then starts over from scratch "
+                "when the next campaign rolls in. Character OS "
+                "flips that. You build a persistent spokesperson — "
+                "me, for example — and the same character ships ad "
+                "variant after ad variant. The brief stays stable. "
+                "The voice stays consistent. The reusable creative "
+                "infrastructure compounds. So when a startup needs "
+                "ten ads this quarter, they're not running ten "
+                "separate prompts. They're directing one trusted "
+                "character through ten campaigns. That's the "
+                "difference between AI ad chaos and AI ad continuity."
+            ),
         },
     },
     "Riggs Rally": {
@@ -132,6 +155,32 @@ SEED = {
                 "sessions, context-kit handoffs, and a lot of fast "
                 "testing. The result is a team of AI spokespeople "
                 "explaining the system they helped create."
+            ),
+            # PR DO — long-form variant. Explicit context-kit /
+            # Character OS distinction so the realtime grounding
+            # stays consistent with the curated self-demo doc.
+            "long_script": (
+                "I'm Riggs Rally. I rode shotgun on the chaotic "
+                "build that turned into Character OS. Here's what "
+                "actually happened. The hackathon spanned dozens "
+                "of AI coding sessions — Claude Code, Cursor, the "
+                "usual suspects. Without something keeping all "
+                "those sessions aligned, every new conversation "
+                "would have re-derived the design and undone "
+                "whatever the last one decided. That's where "
+                "context-kit came in. context-kit is a separate "
+                "dev-time tool — a memory protocol for AI coding "
+                "sessions. It uses anchor files plus per-session "
+                "handoffs so every new AI session inherits the "
+                "current state of the project in about ninety "
+                "seconds. To be clear: context-kit is the build "
+                "scaffolding. It is not the runtime memory for "
+                "Character OS spokespeople. The spokespeople have "
+                "their own grounding documents and knowledge "
+                "sources — separate system. The point of "
+                "explaining all that is: one person plus a team of "
+                "AI characters plus the right scaffolding got us "
+                "here in a single sprint."
             ),
         },
     },
@@ -165,6 +214,33 @@ SEED = {
                 "and show up across campaigns. Character OS turns "
                 "AI spokespeople into reusable creative "
                 "infrastructure."
+            ),
+            # PR DO — long-form variant focusing on the unit-economics
+            # case for persistent brand characters.
+            "long_script": (
+                "I'm Miles Monroe. I think about Character OS the "
+                "way a strategist thinks about brand voice — "
+                "slowly, deliberately, with an eye on the next "
+                "twelve months. Here's the business case. "
+                "Companies do not need more random AI content. "
+                "They need consistent voices that can explain a "
+                "product, sell an offer, and show up across "
+                "campaigns without sounding like a different brand "
+                "every quarter. Today that's almost impossible. "
+                "Agencies turn over creative leads, AI tools "
+                "generate one-off clips that don't reference each "
+                "other, and brand drift sets in within weeks. "
+                "Character OS turns AI spokespeople into reusable "
+                "creative infrastructure. You build a character "
+                "once — face, voice, knowledge, tone — and that "
+                "character carries the brand across every ad "
+                "variant, every dialogue scene, every realtime "
+                "conversation. For a dealership, that means one "
+                "trusted face explaining ten promotions. For a "
+                "creator economy startup, that means a founder "
+                "avatar that never gets tired, never goes "
+                "off-message, and never has to re-record. The unit "
+                "economics shift. The continuity gets real."
             ),
         },
     },
@@ -374,24 +450,57 @@ def seed_character(
             _variant_titles(target_campaign) if target_campaign else set()
         )
         if v["title"] in existing_variants:
-            existing_ad_variants = (
-                target_campaign.get("ad_variants") or []
-                if target_campaign is not None
-                else []
-            )
-            existing_variant_id = next(
+            if target_campaign is None:
+                existing_ad_variants: list[dict] = []
+            else:
+                existing_ad_variants = target_campaign.get("ad_variants") or []
+            existing_variant = next(
                 (
-                    x.get("id")
-                    for x in existing_ad_variants
+                    x for x in existing_ad_variants
                     if (x.get("title") or "").strip() == v["title"]
                 ),
                 None,
             )
-            summary["variant"] = {
-                "action": "skipped",
-                "reason": "exists",
-                "id": existing_variant_id,
-            }
+            existing_variant_id = (
+                existing_variant.get("id") if existing_variant else None
+            )
+            # PR DO — if the seed has a long_script and the existing
+            # variant is missing one, patch it in. We never clobber
+            # an already-set long_script (operator may have edited
+            # it). Idempotency stays title-based for the variant
+            # itself; long_script patch is one-shot fill.
+            seed_long = v.get("long_script", "").strip() if v.get("long_script") else ""
+            existing_long = (existing_variant.get("long_script") or "").strip() if existing_variant else ""
+            if seed_long and not existing_long and existing_variant_id:
+                if dry_run:
+                    summary["variant"] = {
+                        "action": "would_patch_long_script",
+                        "reason": "missing_long_script",
+                        "id": existing_variant_id,
+                    }
+                else:
+                    _request_json(
+                        base_url,
+                        f"/api/campaigns/{campaign_id}/ad-variant",
+                        method="POST",
+                        body={
+                            "id": existing_variant_id,
+                            "title": v["title"],
+                            "script": existing_variant.get("script", ""),
+                            "long_script": seed_long,
+                        },
+                    )
+                    summary["variant"] = {
+                        "action": "patched_long_script",
+                        "id": existing_variant_id,
+                        "long_chars": len(seed_long),
+                    }
+            else:
+                summary["variant"] = {
+                    "action": "skipped",
+                    "reason": "exists",
+                    "id": existing_variant_id,
+                }
         elif dry_run:
             summary["variant"] = {
                 "action": "would_create",
@@ -399,14 +508,20 @@ def seed_character(
                 "campaign_id": campaign_id,
             }
         else:
+            create_body = {
+                "title": v["title"],
+                "script": v["script"],
+            }
+            # PR DO — include long_script on initial create so the
+            # variant lands with both fields populated in one shot.
+            seed_long = v.get("long_script", "").strip() if v.get("long_script") else ""
+            if seed_long:
+                create_body["long_script"] = seed_long
             created_variant_campaign = _request_json(
                 base_url,
                 f"/api/campaigns/{campaign_id}/ad-variant",
                 method="POST",
-                body={
-                    "title": v["title"],
-                    "script": v["script"],
-                },
+                body=create_body,
             )
             # Backend returns the updated Campaign. Newest variant
             # is at the head of `ad_variants` (PR DC ordering).

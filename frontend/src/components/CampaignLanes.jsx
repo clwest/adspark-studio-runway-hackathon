@@ -138,6 +138,20 @@ export default function CampaignLanes({
     if (options.variantId) body.variant_id = options.variantId
     return propagate(await api.generateSpokespersonAd(campaignId, body))
   }
+  // PR DO — Long Spokesperson Ad. Backend chunks the script,
+  // renders each chunk via avatar_videos, and stitches into one
+  // MP4. One OutputRecord (kind=long_spokesperson_ad) appended.
+  const handleGenerateLongSpokespersonAd = async (
+    campaignId, { script, variantId } = {},
+  ) => {
+    if (!campaignId) throw new Error('campaign id required')
+    if (!script || !String(script).trim()) {
+      throw new Error('long ad script is required')
+    }
+    const body = { script: String(script).trim() }
+    if (variantId) body.variant_id = variantId
+    return propagate(await api.generateLongSpokespersonAd(campaignId, body))
+  }
   const handleUpsertAdVariant = async (campaignId, payload) => {
     if (!campaignId) throw new Error('campaign id required')
     return propagate(await api.upsertAdVariant(campaignId, payload))
@@ -396,6 +410,7 @@ export default function CampaignLanes({
           linkedCampaigns={linkedCampaigns}
           onBuildReels={handleBuildSpokespersonReels}
           onGenerateSpokesperson={handleGenerateSpokespersonAd}
+          onGenerateLongSpokesperson={handleGenerateLongSpokespersonAd}
           onUpdateBrief={handleUpdateBrief}
           onCreateCampaign={handleCreateCampaign}
           onSaveScript={handleSaveScript}
