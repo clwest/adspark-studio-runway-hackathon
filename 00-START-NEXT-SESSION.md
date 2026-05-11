@@ -1,14 +1,38 @@
 # START NEXT SESSION — Character OS
 
-**Submission push complete (2026-05-11).** Operator's words:
+**Submission push in progress (2026-05-11).** Operator's words:
 *"We are about to attempt something never tried by one man and an
-AI coding agent."* 18 PRs landed in one marathon session (DS → EK-2)
-to close the demo loop. **Talk to your spokesperson → LLM writes the
-script → real video lands in Videos tab. All on local infrastructure
-except Runway video generation.**
+AI coding agent."* 18 PRs (DS → EK-2) closed the demo loop;
+6 more (EL family + EM-a) produced the submission video AND laid
+the foundation for cross-session memory. **Talk to your spokesperson
+→ LLM writes the script → real video lands in Videos tab. All on
+local infrastructure except Runway video generation.**
 
-📘 **Full handoff for this submission push:**
-[`docs/handoffs/SESSION_102_LOCAL_LLM_REALTIME_AGENT_PR_DS_TO_EK.md`](docs/handoffs/SESSION_102_LOCAL_LLM_REALTIME_AGENT_PR_DS_TO_EK.md)
+📘 **Full handoffs for this push:**
+- [`SESSION_103_SUBMISSION_VIDEO_AND_MEMORY_FOUNDATION_PR_EL_EM.md`](docs/handoffs/SESSION_103_SUBMISSION_VIDEO_AND_MEMORY_FOUNDATION_PR_EL_EM.md)
+  — Submission video production pipeline (PR EL family, 4 commits)
+  + cross-session memory foundation (PR EM-a)
+- [`SESSION_102_LOCAL_LLM_REALTIME_AGENT_PR_DS_TO_EK.md`](docs/handoffs/SESSION_102_LOCAL_LLM_REALTIME_AGENT_PR_DS_TO_EK.md)
+  — The submission push proper, PR DS through EK-2 (the agentic
+  loop + DaVinci + Ollama + Auto-write)
+
+**Submission video (assembled in DaVinci tomorrow AM):** 10 cinematic
+b-roll cuts + 5 talking-head beat MP4s + 2 live demo screen
+recordings, all under `backend/data/submission_video/`. Beat
+scripts were Llama-drafted in 3 variants each (15 total), audited
+for factual accuracy, then 3 of them re-rolled for the "on this
+laptop" repetition + "in one night" → "in one hackathon weekend"
+correction. Full per-beat outline + DaVinci assembly guide in
+SESSION 103.
+
+**Cross-session memory foundation (PR EM-a, ready for Phase 2):**
+Pluggable architecture lives in `backend/app/services/memory/`.
+Three layers + one orchestrator. JsonMemoryStore today;
+PgVectorMemoryStore later (one new class). OperatorNoteSource +
+TranscriptMemorySource ingest from existing data; ExternalFeedSource
+is the wire-in shape for operator's other apps. 16 tests, 72/72
+suite green. Phase 2 (routes + Memory tab in the UI + auto-ingest
+after realtime sessions end) is the next slice.
 
 **Headline capabilities now live:**
 

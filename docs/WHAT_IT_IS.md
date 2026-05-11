@@ -49,6 +49,28 @@ laptop**:
 Only video generation actually leaves the laptop — Runway's
 `avatar_videos` / `realtime_sessions` / `voices` / `documents`.
 
+## Cross-session memory (PR EM-a foundation)
+
+`backend/app/services/memory/` is the durable infrastructure for
+making spokespeople actually accumulate experience across sessions
+rather than restart fresh each time. Three pluggable layers
+(`MemoryStore`, `MemorySource`, `MemoryComposer`) plus a single
+`MemoryOrchestrator` API.
+
+Phase 1 (shipped): file-backed `JsonMemoryStore`, Phase 1 sources
+mirror the existing Character `knowledge_sources` + summarise past
+realtime conversation transcripts (PR BC + PR AJ inputs), Markdown
+composer renders the accumulated memory into a Runway document
+body within budget. 16 tests, all green.
+
+Phase 2 (next): routes + Memory tab on the Identity card + an
+auto-ingest hook that fires when a realtime session ends.
+
+Phase 3 (post-submission): swap `JsonMemoryStore` for
+`PgVectorMemoryStore` — one new class, same interface, same
+entries. Same shape lets `ExternalFeedSource` plug in real-time
+data from operator's other apps without backend changes.
+
 ## The frontend reset (PR CA)
 
 The homepage at `/` is now the **Spokesperson Library**: a tile
