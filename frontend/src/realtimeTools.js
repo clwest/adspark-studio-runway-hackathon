@@ -29,6 +29,9 @@ export const REALTIME_TOOL_NAMES = Object.freeze({
   RENDER_LONG_SPOKESPERSON_AD: 'render_long_spokesperson_ad',
   AUTO_WRITE_AND_RENDER_LONG_AD: 'auto_write_and_render_long_ad',
   SHOW_VIDEOS_TAB: 'show_videos_tab',
+  // PR EM-e — memory-aware tools
+  RECALL_RECENT_CONVERSATIONS: 'recall_recent_conversations',
+  ATTACH_MEMORY_TO_CAMPAIGN: 'attach_memory_to_campaign',
 })
 
 // Custom window-event names SpokespersonWorkspace listens for to
@@ -319,6 +322,147 @@ export async function dispatchRealtimeToolEvent(event, deps) {
         `📺 ${character?.name || 'Avatar'} opened the Videos tab.`,
         'info',
       )
+      return
+    }
+
+    case REALTIME_TOOL_NAMES.RECALL_RECENT_CONVERSATIONS: {
+      // PR EM-e — operator asks "what have we talked about?". Pull
+      // the character's transcript-source memory entries (PR EM-a),
+      // optionally filtered by a topic query, and toast up to 5
+      // recent matches. The avatar narrates over the toasts — it
+      // can't directly receive the entry contents (client_event is
+      // fire-and-forget), but the operator can see exactly what was
+      // recalled and the avatar's narration lands as truthful
+      // because the toasts are visible.
+      const query = String((args && args.query) || '').trim().toLowerCase()
+      if (!character?.id) {
+        announce?.('Could not recall — no active character.', 'error')
+        return
+      }
+      try {
+        const resp = await api.listCharacterMemory(character.id, {
+          sourceType: 'transcript',
+        })
+        let entries = resp.entries || []
+        if (query) {
+          entries = entries.filter((e) => {
+            const hay = `${e.title} ${e.content}`.toLowerCase()
+            return hay.includes(query)
+          })
+        }
+        entries = entries.slice(0, 5)
+        if (entries.length === 0) {
+          announce?.(
+            query
+              ? `💭 ${character.name} doesn't recall any conversations about "${query}" yet.`
+              : `💭 ${character.name} doesn't have any saved conversations to recall yet.`,
+            'info',
+          )
+          return
+        }
+        announce?.(
+          `💭 ${character.name} recalls ${entries.length} ` +
+            `conversation${entries.length === 1 ? '' : 's'}` +
+            (query ? ` about "${query}"` : '') +
+            `:`,
+          'info',
+        )
+        // One toast per recalled entry so the operator can read the
+        // summary. Slight stagger so the toast surface doesn't
+        // collapse the entries into a single block.
+        for (let i = 0; i < entries.length; i++) {
+          const e = entries[i]
+          const preview = e.content.length > 200
+            ? e.content.slice(0, 200) + '…'
+            : e.content
+          setTimeout(
+            () =>
+              announce?.(
+                `  • ${preview}`,
+                'info',
+              ),
+            (i + 1) * 200,
+          )
+        }
+      } catch (err) {
+        const msg = err?.message ? String(err.message) : 'unknown error'
+        announce?.(`Recall failed: ${msg}`, 'error')
+      }
+      return
+    }
+
+    case REALTIME_TOOL_NAMES.ATTACH_MEMORY_TO_CAMPAIGN: {
+      // PR EM-e — operator says "save what we talked about". The
+      // handler chains compose → publish → attach in one stretch.
+      // Each stage toasts so the operator follows the wait; on
+      // success the active campaign now carries the memory document
+      // and the NEXT realtime session on this campaign attaches it
+      // as RAG via documentIds.
+      if (!character?.id) {
+        announce?.('Could not save — no active character.', 'error')
+        return
+      }
+      if (!campaign?.id) {
+        announce?.(
+          'Could not save — no active campaign to attach memory to.',
+          'error',
+        )
+        return
+      }
+      announce?.(
+        `🧠 ${character.name} is composing memory from this conversation…`,
+        'info',
+      )
+      let documentId = null
+      let bodyChars = 0
+      try {
+        const composed = await api.composeCharacterMemory(character.id, {
+          publish: true,
+        })
+        if (!composed?.document_id) {
+          announce?.(
+            `Memory publish returned no document_id: ${composed?.error || 'unknown'}`,
+            'error',
+          )
+          return
+        }
+        documentId = composed.document_id
+        bodyChars = composed.body_chars || 0
+        announce?.(
+          `✓ Published — ${bodyChars} chars, ${composed.included_count} entries. Attaching to "${campaign.business || campaign.id}"…`,
+          'success',
+        )
+      } catch (err) {
+        const msg = err?.message ? String(err.message) : 'unknown error'
+        announce?.(`Publish failed: ${msg}`, 'error')
+        return
+      }
+      try {
+        const attached = await api.attachCharacterMemory(character.id, {
+          campaignId: campaign.id,
+          documentId,
+        })
+        if (attached?.attached) {
+          announce?.(
+            `📎 Memory attached to "${attached.campaign_business || campaign.id}". ` +
+              `Next realtime session on this campaign will use it as RAG.`,
+            'success',
+          )
+        } else {
+          announce?.(
+            `⚠️ Attach didn\u2019t take. document_id ${documentId} still uploaded; ` +
+              `you can attach manually from the Memory tab.`,
+            'error',
+          )
+        }
+      } catch (err) {
+        const msg = err?.message ? String(err.message) : 'unknown error'
+        announce?.(
+          `Attach failed: ${msg}. document_id ${documentId} is still uploaded; ` +
+            `try again from the Memory tab.`,
+          'error',
+        )
+      }
       return
     }
 

@@ -406,6 +406,36 @@ DEFAULT_REALTIME_TOOLS: list[dict] = [
             "render_spokesperson_ad call so they can watch it land."
         ),
     },
+    {
+        "name": "recall_recent_conversations",
+        "description": (
+            "Surface the operator's prior conversations with this "
+            "spokesperson — the persisted memory entries from past "
+            "realtime sessions. Call when the operator asks 'what "
+            "have we talked about?', 'do you remember our last "
+            "chat?', 'what do you remember about me?', or similar "
+            "recall prompts. Optional `query` arg narrows the search "
+            "to a topic substring. The handler toasts up to 5 most "
+            "recent matches; YOU should narrate that you remember "
+            "them rather than fabricate details — the toasts carry "
+            "the actual summaries."
+        ),
+    },
+    {
+        "name": "attach_memory_to_campaign",
+        "description": (
+            "Save the current conversation + your accumulated memory "
+            "to the active campaign so you remember it next time. "
+            "Call when the operator says 'save what we talked about', "
+            "'remember this for next time', 'lock this in', or after "
+            "a substantive exchange the operator wants to persist. "
+            "Triggers compose → publish to Runway as a document → "
+            "attach to the active campaign in one chained operation. "
+            "TELL THE OPERATOR you're saving the memory and the next "
+            "session on this campaign will recall it. Takes ~5-10 "
+            "seconds; the handler narrates each stage via toasts."
+        ),
+    },
 ]
 
 
