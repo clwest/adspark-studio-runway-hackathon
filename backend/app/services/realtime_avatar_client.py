@@ -356,18 +356,45 @@ DEFAULT_REALTIME_TOOLS: list[dict] = [
         "name": "auto_write_and_render_ad",
         "description": (
             "Call when the operator gives you a TOPIC, ANGLE, or HIGH-"
-            "LEVEL BRIEF for an ad — NOT a verbatim script. Examples: "
-            "'make an ad explaining Character OS to Runway judges', "
-            "'create something punchy for indie founders', 'render an "
-            "ad about our growth strategy'. Pass the operator's brief "
-            "as `prompt` (free-form text). The frontend will: "
-            "(1) ask the local LLM to write a spoken ad script from "
-            "the operator's prompt + the campaign brief, then (2) "
-            "render a Spokesperson Ad video from that script. Total "
-            "time is ~45-60 seconds — TELL THE OPERATOR THE LLM IS "
-            "DRAFTING FIRST, THEN THE AVATAR IS RENDERING, so the "
-            "wait doesn't feel frozen. Mention you'll narrate progress "
-            "as it lands."
+            "LEVEL BRIEF for a SHORT ad (under ~15 seconds spoken) — "
+            "NOT a verbatim script and NOT explicitly long-form. "
+            "Examples: 'make an ad explaining Character OS to Runway "
+            "judges', 'create something punchy for indie founders'. "
+            "Pass the operator's brief as `prompt`. The frontend "
+            "will ask the local LLM to write a ~250-char spoken script, "
+            "then render a single Spokesperson Ad. Total ~45-60s — "
+            "TELL THE OPERATOR THE LLM IS DRAFTING FIRST, THEN THE "
+            "AVATAR IS RENDERING."
+        ),
+    },
+    {
+        "name": "render_long_spokesperson_ad",
+        "description": (
+            "Render a LONG-FORM Spokesperson Ad (30-60 seconds spoken, "
+            "multi-chunk stitched) when the operator HAS GIVEN YOU A "
+            "VERBATIM LONG SCRIPT. Pass the spoken script as `script` "
+            "(up to ~1500 chars). The frontend chunks the script at "
+            "sentence boundaries and renders each chunk as a separate "
+            "avatar_videos call, then stitches them. Total time scales "
+            "with chunk count — typically 2-4 minutes for a 45s ad. "
+            "TELL THE OPERATOR THE LONG RENDER TAKES SEVERAL MINUTES "
+            "so the wait doesn't feel frozen."
+        ),
+    },
+    {
+        "name": "auto_write_and_render_long_ad",
+        "description": (
+            "Call when the operator asks for a LONG-FORM ad (more than "
+            "~15 seconds spoken, multi-beat narrative) from a TOPIC or "
+            "HIGH-LEVEL BRIEF rather than a verbatim script. Triggers: "
+            "'long ad', 'longer ad', 'thirty second ad', 'minute-long "
+            "ad', '30-second spot', 'detailed ad'. Pass the operator's "
+            "brief as `prompt`. The frontend will ask the local LLM to "
+            "write a ~1200-char multi-beat script, then render the "
+            "multi-chunk Long Spokesperson Ad. Total ~3-5 minutes — "
+            "TELL THE OPERATOR LLAMA IS WRITING THE LONG SCRIPT FIRST, "
+            "THEN THE LONG AD PIPELINE RENDERS MULTIPLE CHUNKS, so the "
+            "wait doesn't feel frozen."
         ),
     },
     {

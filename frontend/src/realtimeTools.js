@@ -26,6 +26,8 @@ export const REALTIME_TOOL_NAMES = Object.freeze({
   RECALL_KNOWLEDGE: 'recall_knowledge',
   RENDER_SPOKESPERSON_AD: 'render_spokesperson_ad',
   AUTO_WRITE_AND_RENDER_AD: 'auto_write_and_render_ad',
+  RENDER_LONG_SPOKESPERSON_AD: 'render_long_spokesperson_ad',
+  AUTO_WRITE_AND_RENDER_LONG_AD: 'auto_write_and_render_long_ad',
   SHOW_VIDEOS_TAB: 'show_videos_tab',
 })
 
@@ -196,6 +198,115 @@ export async function dispatchRealtimeToolEvent(event, deps) {
           `Render failed (script was: "${writtenScript.slice(0, 60)}${
             writtenScript.length > 60 ? '…' : ''
           }"): ${msg}`,
+          'error',
+        )
+      }
+      return
+    }
+
+    case REALTIME_TOOL_NAMES.RENDER_LONG_SPOKESPERSON_AD: {
+      // PR EK — verbatim long-ad render. Operator gave the avatar a
+      // full long script; backend chunks + stitches.
+      const script = String((args && args.script) || '').trim()
+      if (!campaign?.id) {
+        announce?.('Could not render — no active campaign.', 'error')
+        return
+      }
+      if (!script) {
+        announce?.(
+          'Avatar asked to render Long Ad but provided no script.',
+          'error',
+        )
+        return
+      }
+      announce?.(
+        `🎬 Rendering Long Spokesperson Ad (${script.length} chars) with ` +
+          `${character?.name || 'the avatar'}… ~2-4 minutes (multi-chunk).`,
+        'info',
+      )
+      try {
+        await api.generateLongSpokespersonAd(campaign.id, { script })
+        announce?.(
+          '✅ Long Spokesperson Ad rendered — see Videos tab.',
+          'success',
+        )
+        window.dispatchEvent(new CustomEvent(REFRESH_CAMPAIGNS_EVENT))
+        window.dispatchEvent(new CustomEvent(SHOW_VIDEOS_EVENT))
+      } catch (err) {
+        const msg = err?.message ? String(err.message) : 'unknown error'
+        announce?.(`Long Ad render failed: ${msg}`, 'error')
+      }
+      return
+    }
+
+    case REALTIME_TOOL_NAMES.AUTO_WRITE_AND_RENDER_LONG_AD: {
+      // PR EK — Demo-stopper for long form. Chains:
+      //   1. POST /auto-write-script mode='long' (~10s)
+      //   2. POST /long-spokesperson-ad (chunks + N×avatar_videos)
+      // Total wall clock typically 2-5 minutes; toasts narrate
+      // both stages so the operator never wonders if it's stuck.
+      const prompt = String((args && args.prompt) || '').trim()
+      if (!campaign?.id) {
+        announce?.('Could not run — no active campaign.', 'error')
+        return
+      }
+      if (!prompt) {
+        announce?.(
+          'Avatar invoked long auto-write with no prompt — ignoring.',
+          'error',
+        )
+        return
+      }
+      announce?.(
+        `🤖 Llama is drafting a LONG ad about "${prompt.slice(0, 60)}${
+          prompt.length > 60 ? '…' : ''
+        }". ~10 seconds.`,
+        'info',
+      )
+      let writtenScript = ''
+      try {
+        const result = await api.autoWriteAdScript(campaign.id, {
+          mode: 'long',
+          spin: prompt,
+        })
+        writtenScript = String((result && result.script) || '').trim()
+        if (!writtenScript) {
+          announce?.(
+            'Llama returned an empty long script — try again.',
+            'error',
+          )
+          return
+        }
+        announce?.(
+          `✍️ Long script ready (${writtenScript.length} chars). ` +
+            `Chunking + rendering with ${character?.name || 'the avatar'}…`,
+          'success',
+        )
+      } catch (err) {
+        const msg = err?.message ? String(err.message) : 'unknown error'
+        announce?.(`Llama long-drafting failed: ${msg}`, 'error')
+        return
+      }
+      announce?.(
+        `🎬 Rendering Long Spokesperson Ad (multi-chunk stitch)… ` +
+          `Typically 2-4 minutes total.`,
+        'info',
+      )
+      try {
+        await api.generateLongSpokespersonAd(campaign.id, {
+          script: writtenScript,
+        })
+        announce?.(
+          '✅ Auto-written long ad rendered — see Videos tab.',
+          'success',
+        )
+        window.dispatchEvent(new CustomEvent(REFRESH_CAMPAIGNS_EVENT))
+        window.dispatchEvent(new CustomEvent(SHOW_VIDEOS_EVENT))
+      } catch (err) {
+        const msg = err?.message ? String(err.message) : 'unknown error'
+        announce?.(
+          `Long Ad render failed (script was ${writtenScript.length} ` +
+            `chars): ${msg}`,
           'error',
         )
       }
