@@ -3386,6 +3386,49 @@ class TranscriptFetchBody(BaseModel):
 # failure but never aborts the underlying transcript fetch flow.
 
 
+def _trigger_memory_ingest_background(
+    character_id: str,
+    campaign_id: str,
+    settings: Settings,
+) -> None:
+    """PR EM-c — fire-and-forget background ingest. Runs after the
+    transcript fetch route persists a new entry, so the
+    TranscriptMemorySource can pick up the freshly-appended history
+    row.
+
+    Threaded rather than asyncio because FastAPI's sync handlers
+    already run on a thread pool and the orchestrator's
+    JsonMemoryStore is thread-safe (uses a process-wide lock per
+    PR EM-a). Never raises into the request thread — failures land
+    in the log only.
+    """
+    import threading
+
+    def _run() -> None:
+        try:
+            from ..services.memory import get_orchestrator
+            orch = get_orchestrator(settings)
+            result = orch.ingest_from_all_sources(
+                character_id,
+                campaign_id=campaign_id,
+                settings=settings,
+            )
+            logger.info(
+                "memory auto-ingest character=%s campaign=%s added=%d errors=%d",
+                character_id, campaign_id,
+                result.get("added", 0),
+                len(result.get("errors") or []),
+            )
+        except Exception as exc:  # pragma: no cover — best-effort
+            logger.warning(
+                "memory auto-ingest crashed character=%s campaign=%s: %s",
+                character_id, campaign_id, exc,
+            )
+
+    t = threading.Thread(target=_run, daemon=True, name="memory-ingest")
+    t.start()
+
+
 def _append_transcript_history_safe(
     store: CampaignStore,
     campaign_id: str,
@@ -3578,6 +3621,23 @@ def post_fetch_realtime_transcript(
         mock_mode=result.mock_mode,
         error=None,
     )
+
+    # PR EM-c — Auto-ingest hook. Once a transcript lands successfully
+    # we fire the cross-session memory ingest in a background thread
+    # so the next realtime session has access to the prior session's
+    # summary. The orchestrator's TranscriptMemorySource reads from
+    # the campaign's realtime_transcript_history we JUST appended, so
+    # this is the right moment in the flow.
+    #
+    # Deliberately NOT publish — operator still controls when the
+    # composed memory hits Runway as a document (avoids silent upload
+    # failures + per-session Runway cost). The Memory tab's
+    # "🚀 Publish to Runway" button is the manual trigger.
+    if record.character_id and result.turns:
+        _trigger_memory_ingest_background(
+            record.character_id, campaign_id, settings,
+        )
+
     return post_history or updated or record
 
 
