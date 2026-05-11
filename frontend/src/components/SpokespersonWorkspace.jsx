@@ -12,6 +12,7 @@ import CharacterCard from './CharacterCard.jsx'
 import KnowledgePanel from './KnowledgePanel.jsx'
 import VideosTab from './VideosTab.jsx'
 import RealtimeSpokesperson from './RealtimeSpokesperson.jsx'
+import { ToastProvider } from './Toast.jsx'
 
 const TABS = [
   { id: 'identity', label: 'Identity' },
@@ -399,6 +400,7 @@ export default function SpokespersonWorkspace() {
   }
 
   return (
+    <ToastProvider>
     <main
       data-testid="spokesperson-workspace"
       data-spokesperson-id={character.id}
@@ -867,6 +869,7 @@ export default function SpokespersonWorkspace() {
         </p>
       )}
     </main>
+    </ToastProvider>
   )
 }
 

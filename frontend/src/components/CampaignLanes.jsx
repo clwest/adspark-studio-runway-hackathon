@@ -8,6 +8,7 @@ import {
   setActiveMode as persistActiveMode,
 } from '../uxFlag.js'
 import CampaignModeModal from './CampaignModeModal.jsx'
+import { useToast } from './Toast.jsx'
 import CinematicLane from './lanes/CinematicLane.jsx'
 import DialogueLane from './lanes/DialogueLane.jsx'
 import SpokespersonLane from './lanes/SpokespersonLane.jsx'
@@ -120,13 +121,32 @@ export default function CampaignLanes({
     return updated
   }
 
+  // PR DQ — toast surface for render-completion feedback. Each
+  // handler that completes a long-running operation (any render
+  // or stitch) pushes a positive toast so the operator sees the
+  // result land even when their eyes are on another tab.
+  const { push: pushToast } = useToast()
+  const announce = (message, kind = 'success') => {
+    try {
+      pushToast(message, { kind })
+    } catch {
+      // ToastProvider should always be mounted by the workspace,
+      // but if a future caller drops the provider we don't want a
+      // toast push to break the actual handler. Silent fallback.
+    }
+  }
+
   const handleBuildSpokespersonReels = async (campaignId) => {
     if (!campaignId) throw new Error('campaign id required')
-    return propagate(await api.buildSpokespersonReels(campaignId))
+    const updated = propagate(await api.buildSpokespersonReels(campaignId))
+    announce('Captioned Reel exported — see Videos tab.')
+    return updated
   }
   const handleBuildVoicedCinematic = async (campaignId) => {
     if (!campaignId) throw new Error('campaign id required')
-    return propagate(await api.buildCommercialWithVoice(campaignId))
+    const updated = propagate(await api.buildCommercialWithVoice(campaignId))
+    announce('Voiced Cinematic Ad built — see Videos tab.')
+    return updated
   }
   const handleGenerateSpokespersonAd = async (campaignId, options = {}) => {
     if (!campaignId) throw new Error('campaign id required')
@@ -136,7 +156,9 @@ export default function CampaignLanes({
     // `script_override` is also passed.
     const body = {}
     if (options.variantId) body.variant_id = options.variantId
-    return propagate(await api.generateSpokespersonAd(campaignId, body))
+    const updated = propagate(await api.generateSpokespersonAd(campaignId, body))
+    announce('Spokesperson Ad rendered — see Videos tab.')
+    return updated
   }
   // PR DO — Long Spokesperson Ad. Backend chunks the script,
   // renders each chunk via avatar_videos, and stitches into one
@@ -150,7 +172,20 @@ export default function CampaignLanes({
     }
     const body = { script: String(script).trim() }
     if (variantId) body.variant_id = variantId
-    return propagate(await api.generateLongSpokespersonAd(campaignId, body))
+    const updated = propagate(await api.generateLongSpokespersonAd(campaignId, body))
+    // Pull chunk_count + duration_estimate off the freshly appended
+    // OutputRecord so the toast announces real numbers instead of
+    // a generic "rendered" message.
+    const newest = Array.isArray(updated?.outputs)
+      ? updated.outputs.find((o) => o.kind === 'long_spokesperson_ad')
+      : null
+    const chunks = newest?.chunk_count
+    const seconds = newest?.duration_estimate
+    const detail = (chunks && seconds)
+      ? ` (${chunks} clips · ~${seconds}s)`
+      : ''
+    announce(`Long Spokesperson Ad rendered${detail} — see Videos tab.`)
+    return updated
   }
   const handleUpsertAdVariant = async (campaignId, payload) => {
     if (!campaignId) throw new Error('campaign id required')
@@ -158,7 +193,9 @@ export default function CampaignLanes({
   }
   const handleStitchStoryboard = async (campaignId) => {
     if (!campaignId) throw new Error('campaign id required')
-    return propagate(await api.stitchStoryboard(campaignId))
+    const updated = propagate(await api.stitchStoryboard(campaignId))
+    announce('Storyboard stitched — see Videos tab.')
+    return updated
   }
   const handlePlanDialogue = async (campaignId, mode = 'reset') => {
     if (!campaignId) throw new Error('campaign id required')
@@ -166,11 +203,15 @@ export default function CampaignLanes({
   }
   const handleStitchDialogue = async (campaignId) => {
     if (!campaignId) throw new Error('campaign id required')
-    return propagate(await api.stitchDialogue(campaignId))
+    const updated = propagate(await api.stitchDialogue(campaignId))
+    announce('Final Scene stitched — see Videos tab.')
+    return updated
   }
   const handleBuildDialogueReels = async (campaignId) => {
     if (!campaignId) throw new Error('campaign id required')
-    return propagate(await api.buildDialogueSceneReels(campaignId))
+    const updated = propagate(await api.buildDialogueSceneReels(campaignId))
+    announce('Captioned Reel exported — see Videos tab.')
+    return updated
   }
   // PR DA (Demo Pillars) — per-line save + generate. Backend
   // routes already exist (POST /dialogue/line/{line_id} +
@@ -183,7 +224,9 @@ export default function CampaignLanes({
   }
   const handleGenerateDialogueLine = async (campaignId, lineId) => {
     if (!campaignId || !lineId) throw new Error('campaign + line id required')
-    return propagate(await api.generateDialogueLine(campaignId, lineId))
+    const updated = propagate(await api.generateDialogueLine(campaignId, lineId))
+    announce(`Line ${String(lineId).replace(/^line-/, '')} rendered — see Videos tab.`)
+    return updated
   }
   const handleUpdateBrief = async (campaignId, body) => {
     if (!campaignId) throw new Error('campaign id required')

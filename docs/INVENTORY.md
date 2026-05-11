@@ -1,8 +1,49 @@
 # AdSpark Studio — Inventory
 
 Snapshot of what is real, mocked, and key-dependent as of the
-context-kit refresh after **PR DP — Realtime Conversations Reframed
-As Team Interviews**. Pure copy / seed slice. Donny / Riggs / Miles
+context-kit refresh after **PR DQ — Toast Surface + Form Clear**.
+Frontend-only UX polish. Render-completion events used to land
+silently — operator got no feedback when an ad/scene/reel
+finished. New `frontend/src/components/Toast.jsx` ships a Context-
+based top-right toast stack (success / error / info kinds, 4s
+auto-dismiss, click-to-dismiss, ARIA live region). `SpokespersonWorkspace`
+wraps its tree in `<ToastProvider>`; `CampaignLanes` calls
+`useToast().push(...)` from eight render-completion handlers
+(Spokesperson Ad, Long Ad, Spokesperson Reels, Voiced Cinematic,
+Storyboard Stitch, Dialogue Stitch, Dialogue Reels, Per-line
+Render). Long-ad toast surfaces real `chunk_count` +
+`duration_estimate` from the just-appended OutputRecord (e.g.
+"Long Spokesperson Ad rendered (4 clips · ~64s) — see Videos
+tab."). Per-line toast names the line number. `SpokespersonLane`
+Long Ad handler additionally collapses the textarea panel
+(`setLongAdExpanded(false)`) on success — script stays persisted
+on `variant.long_script` so re-render pre-populates. Vite build
+552.18 KB initial / 148.33 KB gzip. Mock smoke 3/3. Backend pytest
+53/53 (unchanged). Backend route count still **77**. Zero Runway
+calls fired.
+Earlier: PR DP — Realtime Conversations Reframed As Team
+Interviews.
+Frontend-only UX polish. Render-completion events used to land
+silently — operator got no feedback when an ad/scene/reel
+finished. New `frontend/src/components/Toast.jsx` ships a Context-
+based top-right toast stack (success / error / info kinds, 4s
+auto-dismiss, click-to-dismiss, ARIA live region). `SpokespersonWorkspace`
+wraps its tree in `<ToastProvider>`; `CampaignLanes` calls
+`useToast().push(...)` from eight render-completion handlers
+(Spokesperson Ad, Long Ad, Spokesperson Reels, Voiced Cinematic,
+Storyboard Stitch, Dialogue Stitch, Dialogue Reels, Per-line
+Render). Long-ad toast surfaces real `chunk_count` +
+`duration_estimate` from the just-appended OutputRecord (e.g.
+"Long Spokesperson Ad rendered (4 clips · ~64s) — see Videos
+tab."). Per-line toast names the line number. `SpokespersonLane`
+Long Ad handler additionally collapses the textarea panel
+(`setLongAdExpanded(false)`) on success — script stays persisted
+on `variant.long_script` so re-render pre-populates. Vite build
+552.18 KB initial / 148.33 KB gzip. Mock smoke 3/3. Backend pytest
+53/53 (unchanged). Backend route count still **77**. Zero Runway
+calls fired.
+Earlier: PR DP — Realtime Conversations Reframed As Team
+Interviews. Pure copy / seed slice. Donny / Riggs / Miles
 each get a team-member persona — Donny = creative campaign lead,
 Riggs = chaotic builder / context-kit explainer, Miles = business
 strategist. Seed script extension (~430 LoC added to

@@ -281,6 +281,12 @@ export default function SpokespersonLane({
         script: longAdScript.trim(),
         variantId: selectedVariantId || undefined,
       })
+      // PR DQ — collapse the textarea panel on success so the
+      // "next action" surface (Reels button, Videos tab) is
+      // unobscured. The script stays persisted on
+      // variant.long_script via backend write-through, so the
+      // textarea pre-populates on the next expand.
+      setLongAdExpanded(false)
     } catch (e) {
       setLongAdError(`${e?.message || e}`)
     } finally {

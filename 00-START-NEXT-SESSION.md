@@ -1,6 +1,114 @@
 # START NEXT SESSION — AdSpark Studio
 
-**Last touched:** 2026-05-10 (PR DP — Reframe Realtime
+**Last touched:** 2026-05-10 (PR DQ — Toast surface +
+form clear on render complete. Frontend-only UX
+polish. Render-completion events
+(Spokesperson Ad / Long Ad / per-line dialogue /
+dialogue stitch / dialogue reels / spokesperson reels
+/ voiced commercial / storyboard stitch) used to land
+silently — the campaign slice refreshed and the new
+card appeared in the Videos tab, but the operator
+got no announce-y feedback during a recording take.
+PR DQ adds a fixed top-right toast surface that
+catches every successful render and clears the Long
+Ad textarea panel on success. New
+`frontend/src/components/Toast.jsx` (~135 LoC):
+React Context provider with `useToast()` hook,
+top-right fixed stack, kind = `success` (emerald) /
+`error` (rose) / `info` (sky), 4-second auto-dismiss
+(6s for errors), click-to-dismiss, ARIA `aria-live`
+polite + `aria-atomic` so screen readers announce
+each toast. Up to N toasts stack; the 4s TTL keeps
+the stack thin in practice. `SpokespersonWorkspace.jsx`
+wraps its main content tree in `<ToastProvider>` so
+every lane below it can call `useToast()` without
+prop drilling. `CampaignLanes.jsx` updated: eight
+existing handlers (`handleGenerateSpokespersonAd`,
+`handleGenerateLongSpokespersonAd`,
+`handleBuildSpokespersonReels`,
+`handleBuildVoicedCinematic`, `handleStitchStoryboard`,
+`handleStitchDialogue`, `handleBuildDialogueReels`,
+`handleGenerateDialogueLine`) now call
+`pushToast(message, kind='success')` after a
+successful render. Long-ad toast pulls the just-
+appended OutputRecord's `chunk_count` +
+`duration_estimate` and announces "Long Spokesperson
+Ad rendered (4 clips · ~64s) — see Videos tab." for
+real precision instead of a generic message. Dialogue
+line toast names the line number ("Line 3 rendered
+— see Videos tab."). Defensive `try/catch` around
+`pushToast` so a misconfigured ToastProvider never
+breaks a successful render handler.
+`SpokespersonLane.jsx` Long Ad handler updated: on
+successful render, `setLongAdExpanded(false)`
+collapses the textarea panel back so the "next
+action" surface (Reels button, Videos tab link) is
+unobscured. The script stays persisted on
+`variant.long_script` via the existing backend
+write-through (PR DO), so re-rendering pre-populates
+the textarea on the next expand. Vite build **552.18
+KB initial / 148.33 KB gzip** (+2.55 KB / +0.91 KB
+from the Toast component + handler updates). Mock
+smoke 3/3 in ~42s. Backend pytest 53/53 (unchanged —
+no app code touched). Drift OK, hygiene clean.
+Backend route count still **77**. Zero Runway calls
+fired by this PR. The operator's next render of any
+kind will now flash a green toast top-right when it
+lands. Earlier: PR DP — Reframe Realtime
+Conversations as Team Interviews. Frontend-only UX
+polish. Render-completion events
+(Spokesperson Ad / Long Ad / per-line dialogue /
+dialogue stitch / dialogue reels / spokesperson reels
+/ voiced commercial / storyboard stitch) used to land
+silently — the campaign slice refreshed and the new
+card appeared in the Videos tab, but the operator
+got no announce-y feedback during a recording take.
+PR DQ adds a fixed top-right toast surface that
+catches every successful render and clears the Long
+Ad textarea panel on success. New
+`frontend/src/components/Toast.jsx` (~135 LoC):
+React Context provider with `useToast()` hook,
+top-right fixed stack, kind = `success` (emerald) /
+`error` (rose) / `info` (sky), 4-second auto-dismiss
+(6s for errors), click-to-dismiss, ARIA `aria-live`
+polite + `aria-atomic` so screen readers announce
+each toast. Up to N toasts stack; the 4s TTL keeps
+the stack thin in practice. `SpokespersonWorkspace.jsx`
+wraps its main content tree in `<ToastProvider>` so
+every lane below it can call `useToast()` without
+prop drilling. `CampaignLanes.jsx` updated: eight
+existing handlers (`handleGenerateSpokespersonAd`,
+`handleGenerateLongSpokespersonAd`,
+`handleBuildSpokespersonReels`,
+`handleBuildVoicedCinematic`, `handleStitchStoryboard`,
+`handleStitchDialogue`, `handleBuildDialogueReels`,
+`handleGenerateDialogueLine`) now call
+`pushToast(message, kind='success')` after a
+successful render. Long-ad toast pulls the just-
+appended OutputRecord's `chunk_count` +
+`duration_estimate` and announces "Long Spokesperson
+Ad rendered (4 clips · ~64s) — see Videos tab." for
+real precision instead of a generic message. Dialogue
+line toast names the line number ("Line 3 rendered
+— see Videos tab."). Defensive `try/catch` around
+`pushToast` so a misconfigured ToastProvider never
+breaks a successful render handler.
+`SpokespersonLane.jsx` Long Ad handler updated: on
+successful render, `setLongAdExpanded(false)`
+collapses the textarea panel back so the "next
+action" surface (Reels button, Videos tab link) is
+unobscured. The script stays persisted on
+`variant.long_script` via the existing backend
+write-through (PR DO), so re-rendering pre-populates
+the textarea on the next expand. Vite build **552.18
+KB initial / 148.33 KB gzip** (+2.55 KB / +0.91 KB
+from the Toast component + handler updates). Mock
+smoke 3/3 in ~42s. Backend pytest 53/53 (unchanged —
+no app code touched). Drift OK, hygiene clean.
+Backend route count still **77**. Zero Runway calls
+fired by this PR. The operator's next render of any
+kind will now flash a green toast top-right when it
+lands. Earlier: PR DP — Reframe Realtime
 Conversations as Team Interviews. Pure copy / seed
 slice — zero backend, frontend, or realtime
 infrastructure changes. Per the brief: "Update only
