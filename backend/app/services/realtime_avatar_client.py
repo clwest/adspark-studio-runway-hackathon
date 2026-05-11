@@ -316,7 +316,81 @@ def _build_session_overrides(
     return out
 
 
-def create_session(campaign: Campaign, settings: Settings) -> RealtimeSession:
+# PR EE — Realtime tool catalog. Tool entry wire shape verified by
+# `scripts/probe-realtime-tools.py` (returned 200 with shape
+# `{type:"client_event", name, description}` against gwm1_avatars).
+# The schema lives client-side in the SDK (`clientTool(name, {schema})`)
+# — Runway only needs name + description here to advertise the tool
+# to the avatar's LLM. When the avatar invokes a tool over WebRTC
+# the SDK delivers `{type:"client_event", tool:<name>, args:<object>}`
+# to a `useClientEvent` handler in the frontend.
+#
+# This is the canonical catalog. Keep names in sync with the
+# `clientTool()` definitions in `frontend/src/realtimeTools.js` —
+# the avatar can only invoke names that exist on both sides.
+DEFAULT_REALTIME_TOOLS: list[dict] = [
+    {
+        "name": "recall_knowledge",
+        "description": (
+            "Recall what you know about the campaign / product / "
+            "audience from your Knowledge sources. Use this when the "
+            "operator asks for facts about the brand, product details, "
+            "audience, or strategy that you weren't told inline. "
+            "Pass the topic the operator asked about as `query`."
+        ),
+    },
+    {
+        "name": "render_spokesperson_ad",
+        "description": (
+            "Render a NEW Spokesperson Ad video using the campaign's "
+            "current avatar. Call ONLY when the operator explicitly "
+            "asks to render / make / produce / create a new ad and "
+            "provides (or has just provided) a script. Pass the "
+            "spoken script as `script`. The render is asynchronous "
+            "— after invoking, tell the operator it's rendering and "
+            "approximately how long it will take (~30-45 seconds)."
+        ),
+    },
+    {
+        "name": "show_videos_tab",
+        "description": (
+            "Navigate the operator's UI to the Videos tab so they can "
+            "see rendered outputs. Call when the operator asks to see "
+            "their ads / videos / outputs, or right after a "
+            "render_spokesperson_ad call so they can watch it land."
+        ),
+    },
+]
+
+
+def _wire_tool_entries(tools: list[dict] | None) -> list[dict]:
+    """Wrap a list of ``{name, description}`` dicts in the Runway
+    realtime-session ``client_event`` discriminator. Returns ``[]``
+    when ``tools`` is None or empty so the caller can skip adding the
+    ``tools`` key entirely (cleaner request body on no-tools sessions).
+    """
+    if not tools:
+        return []
+    out: list[dict] = []
+    for t in tools:
+        name = (t.get("name") or "").strip()
+        description = (t.get("description") or "").strip()
+        if not name or not description:
+            continue
+        out.append({
+            "type": "client_event",
+            "name": name,
+            "description": description,
+        })
+    return out
+
+
+def create_session(
+    campaign: Campaign,
+    settings: Settings,
+    *,
+    tools: list[dict] | None = None,
+) -> RealtimeSession:
     """Create + poll a Runway realtime session for the campaign's host
     avatar. Returns the client-safe payload.
 
@@ -359,24 +433,47 @@ def create_session(campaign: Campaign, settings: Settings) -> RealtimeSession:
     if document_ids:
         overrides = {**overrides, "documentIds": document_ids}
 
+    # PR EE — Tool catalog. Tools are the newest experimental field;
+    # if Runway rejects, drop them FIRST before touching documentIds
+    # or persona overrides (which carry more campaign context).
+    tool_entries = _wire_tool_entries(tools)
+    if tool_entries:
+        overrides = {**overrides, "tools": tool_entries}
+
     body = {**base_body, **overrides}
     if grounded:
         logger.info(
             "realtime session grounded with document %s",
             campaign.runway_document_id,
         )
+    if tool_entries:
+        logger.info(
+            "realtime session advertising %d tool(s): %s",
+            len(tool_entries), [t["name"] for t in tool_entries],
+        )
     create_url = f"{settings.runway_api_base}/v1/realtime_sessions"
 
     with httpx.Client(timeout=20.0) as client:
         resp = client.post(create_url, headers=_runway_headers(settings), json=body)
-        # PR AE / PR AI — defensive fallbacks. We tier the retries so
-        # a transient 400 doesn't immediately drop campaign context:
-        # 1. If the body included documentIds (PR AI grounding) and
-        #    Runway rejects it, retry without documentIds but keep the
-        #    personality + startScript overrides so the avatar still
-        #    sees brand context.
-        # 2. If that retry still 400s (or we never had documentIds),
-        #    retry with the bare body — same fallback PR AE shipped.
+        # PR AE / PR AI / PR EE — tiered defensive fallbacks. A
+        # transient 400 on an experimental field shouldn't drop the
+        # whole session. Order: drop newest experimental fields first
+        # so campaign context (persona / grounding) survives longest.
+        # 1. If body included tools and 400 → retry without tools.
+        # 2. If body included documentIds and 400 → retry without docs.
+        # 3. If overrides still 400 → retry with bare base body.
+        if resp.status_code == 400 and tool_entries:
+            logger.warning(
+                "realtime session 400 with tools (%s); "
+                "retrying without tools",
+                _redact(resp.text),
+            )
+            no_tools = {k: v for k, v in body.items() if k != "tools"}
+            resp = client.post(
+                create_url, headers=_runway_headers(settings), json=no_tools,
+            )
+            # Re-bind body so the next fallback sees the stripped one.
+            body = no_tools
         if resp.status_code == 400 and document_ids:
             logger.warning(
                 "realtime session 400 with documentIds (%s); "

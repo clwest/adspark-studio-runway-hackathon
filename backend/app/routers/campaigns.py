@@ -41,6 +41,7 @@ from ..services.realtime_avatar_client import (
     RealtimeUnavailableError,
     create_session as realtime_create_session,
     delete_session as realtime_delete_session,
+    DEFAULT_REALTIME_TOOLS,
 )
 from ..services.transcript_client import (
     TranscriptResult,
@@ -3098,7 +3099,14 @@ def post_spokesperson_session(
             ),
         )
     try:
-        session = realtime_create_session(record, settings)
+        # PR EE — advertise the realtime tool catalog so the avatar's
+        # LLM can invoke `recall_knowledge` / `render_spokesperson_ad`
+        # / `show_videos_tab` via WebRTC `client_event` messages. The
+        # SDK's `useClientEvent` hooks on the frontend match names
+        # against the same catalog (see `frontend/src/realtimeTools.js`).
+        session = realtime_create_session(
+            record, settings, tools=DEFAULT_REALTIME_TOOLS,
+        )
     except RealtimeUnavailableError as exc:
         # Mock mode hits this path. Use 503 so the frontend can show
         # "available in real mode only" instead of attempting WebRTC.
