@@ -1,5 +1,19 @@
 # START NEXT SESSION — Character OS
 
+**Parked work — pick up when ready:**
+PR EA "single-pass Long Ad via `speech.type=audio`" is
+**plumbed but not wired**. Background: `build_avatar_video_body`
+in `long_ad_service.py` accepts an `audio_source` kwarg (PR DZ-b);
+Runway accepts `speech.type=audio` cleanly at 42s with no
+truncation (PR DY probe); `/v1/voices/preview` is NOT a TTS
+endpoint — it's an ElevenLabs voice-design audition shim
+(PR DZ-a probe, decisive 400). What remains: pick an external
+TTS source (recommend OpenAI `tts-1-hd`), add a `tts_voice`
+field per Character, wire the v2 orchestrator with a feature
+flag. Full plan + risks + rationale: **`docs/research/SPEECH_TYPE_AUDIO_FINDINGS.md`**.
+
+---
+
 **Last touched:** 2026-05-10 (PRs DS → DX, in order:
 **PR DS** — Regenerate Portrait button on the Identity
 card (`CharacterCard.jsx`) so the operator can reroll
